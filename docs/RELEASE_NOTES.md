@@ -19,6 +19,7 @@ This checkpoint covers the CrewFlow landing page and operations console through 
 - Manager action queue
 - Tenant, service, staff, and WhatsApp operations settings
 - WhatsApp readiness and delivery monitor
+- Tenant billing, activation, and platform admin controls
 
 ### Demo Login
 
@@ -40,5 +41,6 @@ curl -I http://localhost:3000/app
 ### Production Notes
 
 - Set `NEXT_PUBLIC_API_URL` to the public backend API URL.
+- Verify backend `/api/health/readiness` before launch.
 - Confirm the landing page and `/app` load after deploy.
 - Use the backend smoke script for end-to-end API readiness.

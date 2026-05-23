@@ -45,6 +45,15 @@ NEXT_PUBLIC_API_URL=http://localhost:3002/api
 
 For deployment, set `NEXT_PUBLIC_API_URL` to the public backend API URL.
 
+## Production Readiness
+
+Before handing the app to a real business, verify:
+
+- `NEXT_PUBLIC_API_URL` points to the deployed backend `/api` URL.
+- Backend `/api/health/readiness` returns `status: ok`.
+- Login, dashboard, leads, inbox, bookings, invoices, settings, billing, and admin pages load against the deployed API.
+- Landing page CTAs open the app without broken routes.
+
 ## Product Areas
 
 - Premium landing page
@@ -60,6 +69,8 @@ For deployment, set `NEXT_PUBLIC_API_URL` to the public backend API URL.
 - Invoices and payments
 - Manager action queue
 - Tenant, staff, service, and WhatsApp operations settings
+- Tenant billing and activation controls
+- Platform admin billing and support console
 
 ## Verification
 
