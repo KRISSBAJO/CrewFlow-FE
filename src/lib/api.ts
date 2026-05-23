@@ -216,6 +216,11 @@ export const api = {
   payments: () => request<Payment[]>("/payments"),
   health: () => request<Health>("/health"),
   schedulerRun: () => request<unknown>("/scheduler/run-now", { method: "POST" }),
+  scanLeadFollowUps: () =>
+    request<{ scannedAt: string; count: number; actionsCreatedOrUpdated: number }>(
+      "/workflows/scan-lead-follow-ups",
+      { method: "POST" }
+    ),
   completeFieldJob: (
     bookingId: string,
     input?: {

@@ -2037,8 +2037,55 @@ function ReadinessRow({ label, done }: { label: string; done: boolean }) {
 }
 
 function ActionsView({ items, onOpen }: { items?: OperationalAction[]; onOpen: (state: DrawerState) => void }) {
+  const queryClient = useQueryClient();
+  const scanLeads = useMutation({
+    mutationFn: api.scanLeadFollowUps,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["actions"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      void queryClient.invalidateQueries({ queryKey: ["leads"] });
+      void queryClient.invalidateQueries({ queryKey: ["lead-analytics"] });
+    }
+  });
+  const runAll = useMutation({
+    mutationFn: api.schedulerRun,
+    onSuccess: () => {
+      void queryClient.invalidateQueries();
+    }
+  });
+
   return (
-    <Panel title="Operational actions" icon={ClipboardCheck}>
+    <Panel
+      title="Operational actions"
+      icon={ClipboardCheck}
+      action={
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => scanLeads.mutate()}
+            disabled={scanLeads.isPending}
+            className="flex h-9 items-center gap-2 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink disabled:opacity-50"
+          >
+            {scanLeads.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Target className="h-4 w-4" />}
+            Scan leads
+          </button>
+          <button
+            onClick={() => runAll.mutate()}
+            disabled={runAll.isPending}
+            className="flex h-9 items-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {runAll.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            Run scans
+          </button>
+        </div>
+      }
+    >
+      {scanLeads.isSuccess ? (
+        <p className="mb-3 rounded-[8px] bg-mint/30 px-3 py-2 text-sm font-semibold text-ink">
+          Lead follow-up scan found {scanLeads.data.count} due leads.
+        </p>
+      ) : null}
+      {scanLeads.error ? <ErrorText error={scanLeads.error} /> : null}
+      {runAll.error ? <ErrorText error={runAll.error} /> : null}
       <ActionList items={items} onOpen={onOpen} />
     </Panel>
   );
