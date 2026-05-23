@@ -22,6 +22,8 @@ import {
   Loader2,
   LogOut,
   MessageSquareText,
+  PanelLeftClose,
+  PanelLeftOpen,
   Play,
   Plus,
   RefreshCw,
@@ -209,6 +211,7 @@ function Login() {
 function Console() {
   const [view, setView] = useState<View>("overview");
   const [drawer, setDrawer] = useState<DrawerState>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const logout = useAuth((state) => state.logout);
   const user = useAuth((state) => state.user);
   const queryClient = useQueryClient();
@@ -236,36 +239,71 @@ function Console() {
   return (
     <main className="min-h-screen p-3 md:p-5">
       <div className="mx-auto flex max-w-[1500px] gap-4">
-        <aside className="hidden w-64 shrink-0 rounded-[8px] border border-white/80 bg-white/90 p-4 shadow-soft backdrop-blur lg:block">
-          <div className="mb-8 flex items-center gap-3">
-            <Logo />
-            <div>
-              <p className="font-semibold text-ink">CrewFlow</p>
-              <p className="text-xs text-steel">Operations OS</p>
+        <aside
+          className={cn(
+            "hidden shrink-0 rounded-[8px] border border-white/80 bg-white/90 shadow-soft backdrop-blur transition-all duration-300 lg:block",
+            sidebarCollapsed ? "w-[76px] p-3" : "w-64 p-4"
+          )}
+        >
+          <div
+            className={cn(
+              "mb-8 flex items-center",
+              sidebarCollapsed ? "flex-col gap-3" : "justify-between gap-3"
+            )}
+          >
+            <div className={cn("flex min-w-0 items-center gap-3", sidebarCollapsed && "justify-center")}>
+              <Logo />
+              <div className={cn("min-w-0 transition-opacity", sidebarCollapsed && "sr-only")}>
+                <p className="truncate font-semibold text-ink">CrewFlow</p>
+                <p className="truncate text-xs text-steel">Operations OS</p>
+              </div>
             </div>
+            <button
+              onClick={() => setSidebarCollapsed((value) => !value)}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-mist text-ink transition hover:bg-pine hover:text-white"
+              title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+            </button>
           </div>
           <nav className="space-y-1">
             {nav.map((item) => (
               <button
                 key={item.id}
                 onClick={() => setView(item.id)}
+                title={sidebarCollapsed ? item.label : undefined}
                 className={cn(
-                  "flex h-11 w-full items-center gap-3 rounded-[8px] px-3 text-left text-sm font-medium transition",
+                  "flex h-11 w-full items-center rounded-[8px] text-sm font-medium transition",
+                  sidebarCollapsed ? "justify-center px-0" : "gap-3 px-3 text-left",
                   view === item.id
                     ? "bg-pine text-white"
                     : "text-steel hover:bg-mist hover:text-ink"
                 )}
               >
-                <item.icon className="h-4 w-4" />
-                {item.label}
+                <item.icon className="h-4 w-4 shrink-0" />
+                <span className={cn("truncate", sidebarCollapsed && "sr-only")}>{item.label}</span>
               </button>
             ))}
           </nav>
-          <div className="mt-8 rounded-[8px] bg-mist p-3">
-            <p className="text-xs uppercase tracking-[0.18em] text-steel">API</p>
-            <div className="mt-2 flex items-center gap-2">
-              <span className={cn("h-2.5 w-2.5 rounded-full", health.data?.status === "ok" ? "bg-mint" : "bg-amber")} />
-              <span className="text-sm font-medium text-ink">{health.data?.database ?? "checking"}</span>
+          <div
+            className={cn(
+              "mt-8 rounded-[8px] bg-mist",
+              sidebarCollapsed ? "flex h-12 items-center justify-center p-0" : "p-3"
+            )}
+            title={`API: ${health.data?.database ?? "checking"}`}
+          >
+            <p className={cn("text-xs uppercase tracking-[0.18em] text-steel", sidebarCollapsed && "sr-only")}>API</p>
+            <div className={cn("flex items-center gap-2", !sidebarCollapsed && "mt-2")}>
+              <span
+                className={cn(
+                  "h-2.5 w-2.5 rounded-full",
+                  health.data?.status === "ok" ? "bg-mint" : "bg-amber"
+                )}
+              />
+              <span className={cn("text-sm font-medium text-ink", sidebarCollapsed && "sr-only")}>
+                {health.data?.database ?? "checking"}
+              </span>
             </div>
           </div>
         </aside>
