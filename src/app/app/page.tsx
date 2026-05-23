@@ -45,6 +45,7 @@ import {
   Customer,
   DashboardSummary,
   Invoice,
+  InvoiceStatus,
   OnboardingProfile,
   OperationalAction,
   Payment,
@@ -843,8 +844,34 @@ function MoneyView({
     () => (invoices ?? []).filter((invoice) => invoice.status !== "PAID"),
     [invoices]
   );
+  const overdueTotal = useMemo(
+    () =>
+      (invoices ?? [])
+        .filter((invoice) => invoice.status === "OVERDUE")
+        .reduce((sum, invoice) => sum + invoice.totalCents, 0),
+    [invoices]
+  );
+  const openTotal = useMemo(
+    () => openInvoices.reduce((sum, invoice) => sum + invoice.totalCents, 0),
+    [openInvoices]
+  );
+  const paidTotal = useMemo(
+    () =>
+      (invoices ?? [])
+        .filter((invoice) => invoice.status === "PAID")
+        .reduce((sum, invoice) => sum + invoice.totalCents, 0),
+    [invoices]
+  );
+
   return (
-    <div className="grid gap-4 xl:grid-cols-2">
+    <div className="grid gap-4">
+      <div className="grid gap-4 md:grid-cols-3">
+        <Metric icon={CreditCard} label="Open invoices" value={money(openTotal)} tone="amber" />
+        <Metric icon={AlertTriangle} label="Overdue" value={money(overdueTotal)} tone="coral" />
+        <Metric icon={Banknote} label="Paid" value={money(paidTotal)} tone="mint" />
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
       <Panel title="Invoices" icon={CreditCard}>
         <div className="grid gap-3">
           {openInvoices.map((invoice) => (
@@ -875,6 +902,7 @@ function MoneyView({
           <Empty show={!payments?.length} label="No payments yet" />
         </div>
       </Panel>
+      </div>
     </div>
   );
 }
@@ -1724,6 +1752,12 @@ function BookingDetail({ item }: { item: Booking }) {
       void queryClient.invalidateQueries();
     }
   });
+  const createInvoice = useMutation({
+    mutationFn: () => api.createInvoiceFromBooking(item.id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries();
+    }
+  });
 
   return (
     <div className="grid gap-4">
@@ -1828,7 +1862,17 @@ function BookingDetail({ item }: { item: Booking }) {
           <Info label="Total" value={money(item.invoice.totalCents)} />
           <Info label="Status" value={item.invoice.status} />
         </DetailCard>
+      ) : status === "COMPLETED" ? (
+        <button
+          onClick={() => createInvoice.mutate()}
+          disabled={createInvoice.isPending}
+          className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 font-semibold text-white disabled:opacity-50"
+        >
+          {createInvoice.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+          Create invoice
+        </button>
       ) : null}
+      {createInvoice.error ? <ErrorText error={createInvoice.error} /> : null}
       {item.fieldJobReport ? (
         <DetailCard icon={Route} title="Field report">
           <Info label="Status" value={item.fieldJobReport.status} />
@@ -2122,32 +2166,95 @@ function parseCustomerCsv(value: string) {
 
 function InvoiceDetail({ item }: { item: Invoice }) {
   const queryClient = useQueryClient();
+  const [current, setCurrent] = useState(item);
   const paymentLink = useMutation({
-    mutationFn: () => api.createPaymentLink(item.id),
-    onSuccess: () => {
+    mutationFn: () => api.createPaymentLink(current.id),
+    onSuccess: (result) => {
+      setCurrent(result.invoice);
+      void queryClient.invalidateQueries();
+    }
+  });
+  const updateStatus = useMutation({
+    mutationFn: (status: InvoiceStatus) => api.updateInvoiceStatus(current.id, status),
+    onSuccess: (invoice) => {
+      setCurrent(invoice);
       void queryClient.invalidateQueries();
     }
   });
 
   return (
     <div className="grid gap-4">
-      <DetailCard icon={CreditCard} title={item.invoiceNo}>
-        <Info label="Customer" value={item.customer.name} />
-        <Info label="Due" value={shortDate(item.dueDate)} />
-        <Info label="Total" value={money(item.totalCents)} />
-        <Info label="Status" value={item.status} />
+      <DetailCard icon={CreditCard} title={current.invoiceNo}>
+        <Info label="Customer" value={current.customer.name} />
+        <Info label="Due" value={shortDate(current.dueDate)} />
+        <Info label="Subtotal" value={money(current.subtotalCents ?? current.totalCents)} />
+        <Info label="Tax" value={money(current.taxCents ?? 0)} />
+        <Info label="Total" value={money(current.totalCents)} />
+        <Info label="Status" value={current.status} />
+        {current.paymentUrl ? <Info label="Payment link" value="Ready" /> : null}
       </DetailCard>
+
+      {current.lineItems?.length ? (
+        <DetailCard icon={FileText} title="Line items">
+          {current.lineItems.map((line) => (
+            <div key={line.id} className="flex items-center justify-between rounded-[8px] bg-white p-3">
+              <div>
+                <p className="font-semibold text-ink">{line.description}</p>
+                <p className="text-sm text-steel">
+                  {line.quantity} × {money(line.unitCents)}
+                </p>
+              </div>
+              <p className="font-semibold text-ink">{money(line.totalCents)}</p>
+            </div>
+          ))}
+        </DetailCard>
+      ) : null}
+
       <button
         onClick={() => paymentLink.mutate()}
-        disabled={paymentLink.isPending || item.status === "PAID"}
+        disabled={paymentLink.isPending || current.status === "PAID" || current.status === "VOID"}
         className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 font-semibold text-white disabled:opacity-50"
       >
         {paymentLink.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
         Create payment link
       </button>
-      {item.paymentUrl ? (
+      <div className="grid gap-2 sm:grid-cols-2">
+        <button
+          onClick={() => updateStatus.mutate("SENT")}
+          disabled={updateStatus.isPending || current.status !== "DRAFT"}
+          className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink disabled:opacity-50"
+        >
+          <Send className="h-4 w-4" />
+          Mark sent
+        </button>
+        <button
+          onClick={() => updateStatus.mutate("PAID")}
+          disabled={updateStatus.isPending || !["SENT", "OVERDUE"].includes(current.status)}
+          className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-mint px-3 text-sm font-semibold text-ink disabled:opacity-50"
+        >
+          <CheckCircle2 className="h-4 w-4" />
+          Mark paid
+        </button>
+        <button
+          onClick={() => updateStatus.mutate("OVERDUE")}
+          disabled={updateStatus.isPending || current.status !== "SENT"}
+          className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-coral/10 px-3 text-sm font-semibold text-coral disabled:opacity-50"
+        >
+          <AlertTriangle className="h-4 w-4" />
+          Mark overdue
+        </button>
+        <button
+          onClick={() => updateStatus.mutate("VOID")}
+          disabled={updateStatus.isPending || !["DRAFT", "SENT", "OVERDUE"].includes(current.status)}
+          className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink disabled:opacity-50"
+        >
+          <X className="h-4 w-4" />
+          Void
+        </button>
+      </div>
+      {current.paymentUrl ? (
         <a
-          href={item.paymentUrl}
+          href={current.paymentUrl}
           target="_blank"
           className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-mist px-4 font-semibold text-ink"
         >
@@ -2156,6 +2263,7 @@ function InvoiceDetail({ item }: { item: Invoice }) {
         </a>
       ) : null}
       {paymentLink.error ? <ErrorText error={paymentLink.error} /> : null}
+      {updateStatus.error ? <ErrorText error={updateStatus.error} /> : null}
     </div>
   );
 }

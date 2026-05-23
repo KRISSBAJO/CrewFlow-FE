@@ -157,6 +157,15 @@ export const api = {
       body: JSON.stringify(input)
     }),
   invoices: () => request<Invoice[]>("/invoices"),
+  createInvoiceFromBooking: (bookingId: string) =>
+    request<Invoice>(`/invoices/from-booking/${bookingId}`, {
+      method: "POST"
+    }),
+  updateInvoiceStatus: (invoiceId: string, status: InvoiceStatus) =>
+    request<Invoice>(`/invoices/${invoiceId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status })
+    }),
   createPaymentLink: (invoiceId: string) =>
     request<{ invoice: Invoice; payment: Payment }>(`/invoices/${invoiceId}/payment-link`, {
       method: "POST",
@@ -286,6 +295,8 @@ export type BookingStatus =
 
 export type RepeatFrequency = "none" | "weekly" | "biweekly" | "monthly";
 
+export type InvoiceStatus = "DRAFT" | "SENT" | "PAID" | "OVERDUE" | "VOID";
+
 export type BookingInput = {
   customerId?: string;
   inlineCustomer?: CustomerInput;
@@ -405,11 +416,22 @@ export type FieldJobReport = {
 export type Invoice = {
   id: string;
   invoiceNo: string;
-  status: string;
+  status: InvoiceStatus;
+  subtotalCents?: number;
+  taxCents?: number;
   totalCents: number;
   dueDate: string;
   customer: Customer;
+  booking?: { id: string; service?: Service } | null;
+  lineItems?: Array<{
+    id: string;
+    description: string;
+    quantity: number;
+    unitCents: number;
+    totalCents: number;
+  }>;
   paymentUrl?: string | null;
+  paymentProvider?: string | null;
 };
 
 export type Payment = {
