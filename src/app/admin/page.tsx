@@ -155,8 +155,8 @@ function AdminConsole() {
   const selectedTenant = filteredTenants.find((tenant) => tenant.id === selectedTenantId) ?? null;
 
   return (
-    <main className="min-h-screen p-3 md:p-5">
-      <div className="mx-auto grid max-w-[1600px] gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
+    <main className="min-h-screen p-3 md:p-4">
+      <div className="mx-auto grid max-w-[1800px] gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
         <aside className="rounded-[8px] border border-white/80 bg-white/90 p-4 shadow-soft lg:sticky lg:top-5 lg:h-[calc(100vh-40px)]">
           <div className="mb-6 flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-[8px] bg-ink text-white">
@@ -197,23 +197,23 @@ function AdminConsole() {
         </aside>
 
         <section className="grid min-w-0 gap-4">
-          <header className="rounded-[8px] border border-white/80 bg-white/90 p-4 shadow-soft">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-pine">CrewFlow</p>
-              <h1 className="text-2xl font-semibold text-ink md:text-3xl">Platform control center</h1>
-              <p className="mt-1 text-sm text-steel">
-                Manage tenants, billing, support access, launch readiness, failures, and audit history.
-              </p>
+          <header className="rounded-[8px] border border-white/80 bg-white/90 p-5 shadow-soft">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-pine">CrewFlow</p>
+                <h1 className="text-2xl font-semibold text-ink md:text-3xl">Platform control center</h1>
+                <p className="mt-1 max-w-3xl text-sm text-steel">
+                  Manage tenants, billing, support access, launch readiness, failures, and audit history.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => queryClient.invalidateQueries()} className="flex h-10 items-center gap-2 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink">
+                  <RefreshCw className="h-4 w-4" />
+                  Refresh
+                </button>
+              </div>
             </div>
-            <div className="flex gap-2">
-              <button onClick={() => queryClient.invalidateQueries()} className="flex h-10 items-center gap-2 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink">
-                <RefreshCw className="h-4 w-4" />
-                Refresh
-              </button>
-            </div>
-          </div>
-        </header>
+          </header>
 
           {section === "overview" ? (
             <>
@@ -234,7 +234,7 @@ function AdminConsole() {
           ) : null}
 
           {section === "tenants" ? (
-            <section className="grid min-w-0 gap-4 xl:grid-cols-[minmax(420px,0.9fr)_minmax(0,1.35fr)]">
+            <section className="grid min-w-0 gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
               <Panel title="Tenants" icon={Building2}>
                 <div className="mb-4 flex h-11 items-center gap-2 rounded-[8px] bg-mist px-3">
                   <Search className="h-4 w-4 text-steel" />
@@ -463,20 +463,26 @@ function TenantRow({
     }
   });
   return (
-    <div className={cn("rounded-[8px] p-3", selected ? "bg-pine/10 ring-1 ring-pine/30" : "bg-mist")}>
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+    <div className={cn("rounded-[8px] p-4", selected ? "bg-pine/10 ring-1 ring-pine/30" : "bg-mist")}>
+      <div className="grid gap-3">
         <button onClick={onSelect} className="min-w-0 text-left">
-          <p className="font-semibold text-ink">{tenant.businessName}</p>
-          <p className="text-sm text-steel">{tenant.slug} · {tenant.industry}</p>
+          <div className="flex min-w-0 items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="truncate font-semibold text-ink">{tenant.businessName}</p>
+              <p className="mt-1 line-clamp-2 text-sm leading-5 text-steel">
+                {tenant.slug} · {tenant.industry}
+              </p>
+            </div>
+            <Status label={tenant.status} />
+          </div>
         </button>
         <div className="flex flex-wrap items-center gap-2">
-          <Status label={tenant.status} />
           <Status label={tenant.subscriptionStatus ?? "TRIALING"} />
           <Status label={tenant.subscriptionPlan} />
           <select
             value={tenant.status}
             onChange={(event) => update.mutate(event.target.value as PlatformTenant["status"])}
-            className="h-9 rounded-[8px] border border-ink/10 bg-white px-2 text-sm outline-none focus:border-pine"
+            className="h-9 min-w-[128px] rounded-[8px] border border-ink/10 bg-white px-2 text-sm outline-none focus:border-pine"
           >
             <option value="TRIAL">Trial</option>
             <option value="ACTIVE">Active</option>
@@ -485,14 +491,23 @@ function TenantRow({
           </select>
         </div>
       </div>
-      <div className="mt-3 grid gap-2 text-sm text-steel sm:grid-cols-3 lg:grid-cols-6">
-        <span>{tenant._count?.users ?? 0} users</span>
-        <span>{tenant._count?.customers ?? 0} customers</span>
-        <span>{tenant._count?.bookings ?? 0} bookings</span>
-        <span>{tenant._count?.leads ?? 0} leads</span>
-        <span>{tenant._count?.operationalActions ?? 0} actions</span>
-        <span>{money(tenant.monthlyPriceCents)} / mo</span>
+      <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+        <TenantMiniStat label="Users" value={tenant._count?.users ?? 0} />
+        <TenantMiniStat label="Customers" value={tenant._count?.customers ?? 0} />
+        <TenantMiniStat label="Bookings" value={tenant._count?.bookings ?? 0} />
+        <TenantMiniStat label="Leads" value={tenant._count?.leads ?? 0} />
+        <TenantMiniStat label="Actions" value={tenant._count?.operationalActions ?? 0} />
+        <TenantMiniStat label="Monthly" value={money(tenant.monthlyPriceCents)} />
       </div>
+    </div>
+  );
+}
+
+function TenantMiniStat({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-[8px] bg-white/70 p-2">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-steel">{label}</p>
+      <p className="mt-1 truncate font-semibold text-ink">{value}</p>
     </div>
   );
 }
@@ -713,40 +728,40 @@ function TenantControlPanel({ tenant }: { tenant: PlatformTenantDetail }) {
   const error = saveTenantControl.error ?? quickTenantUpdate.error;
 
   return (
-    <section className="rounded-[8px] bg-mist p-3">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+    <section className="rounded-[8px] bg-mist p-4">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
         <div>
           <p className="font-semibold text-ink">Tenant command controls</p>
           <p className="mt-1 text-sm text-steel">
             Change plan, billing state, pricing, Stripe linkage, and tenant access from one control surface.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap">
           <button
             onClick={() => quickTenantUpdate.mutate({ status: "ACTIVE", subscriptionStatus: "ACTIVE" })}
             disabled={quickTenantUpdate.isPending}
-            className="h-9 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+            className="h-10 rounded-[8px] bg-pine px-4 text-sm font-semibold text-white disabled:opacity-50"
           >
             Activate
           </button>
           <button
             onClick={() => quickTenantUpdate.mutate({ status: "SUSPENDED", subscriptionStatus: "PAST_DUE" })}
             disabled={quickTenantUpdate.isPending}
-            className="h-9 rounded-[8px] bg-amber px-3 text-sm font-semibold text-ink disabled:opacity-50"
+            className="h-10 rounded-[8px] bg-amber px-4 text-sm font-semibold text-ink disabled:opacity-50"
           >
             Suspend
           </button>
           <button
             onClick={() => quickTenantUpdate.mutate({ status: "CHURNED", subscriptionStatus: "CANCELED" })}
             disabled={quickTenantUpdate.isPending}
-            className="h-9 rounded-[8px] bg-coral px-3 text-sm font-semibold text-white disabled:opacity-50"
+            className="h-10 rounded-[8px] bg-coral px-4 text-sm font-semibold text-white disabled:opacity-50"
           >
             Churn
           </button>
         </div>
       </div>
 
-      <div className="mt-4 grid gap-3 rounded-[8px] bg-white p-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-4 grid gap-4 rounded-[8px] bg-white p-4 md:grid-cols-2 xl:grid-cols-3">
         <AdminSelect label="Tenant status" value={status} options={tenantStatuses} onChange={(value) => setStatus(value as PlatformTenant["status"])} />
         <AdminSelect label="Subscription" value={subscriptionStatus} options={subscriptionStatuses} onChange={(value) => setSubscriptionStatus(value as NonNullable<PlatformTenant["subscriptionStatus"]>)} />
         <AdminInput label="Plan" value={subscriptionPlan} onChange={setSubscriptionPlan} />
@@ -754,25 +769,25 @@ function TenantControlPanel({ tenant }: { tenant: PlatformTenantDetail }) {
         <AdminInput label="Monthly $" value={monthlyPrice} onChange={setMonthlyPrice} inputMode="decimal" />
         <AdminInput label="Setup $" value={setupFee} onChange={setSetupFee} inputMode="decimal" />
         <AdminInput label="Next billing" value={nextBillingAt} onChange={setNextBillingAt} type="date" />
-        <div className="rounded-[8px] bg-mist p-3">
+        <div className="rounded-[8px] bg-mist p-3 md:col-span-2 xl:col-span-1">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-steel">Tenant ID</p>
           <p className="mt-2 truncate text-sm font-semibold text-ink">{tenant?.id ?? "loading"}</p>
         </div>
-        <div className="md:col-span-2">
+        <div className="md:col-span-2 xl:col-span-3">
           <AdminInput label="Stripe customer ID" value={stripeCustomerId} onChange={setStripeCustomerId} />
         </div>
-        <div className="md:col-span-2">
+        <div className="md:col-span-2 xl:col-span-3">
           <AdminInput label="Stripe subscription ID" value={stripeSubscriptionId} onChange={setStripeSubscriptionId} />
         </div>
       </div>
 
-      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="grid gap-1 text-sm text-steel sm:grid-cols-3 sm:gap-4">
           <span>Created {tenant?.createdAt ? shortDate(tenant.createdAt) : "loading"}</span>
           <span>{tenant?._count?.users ?? 0} users</span>
           <span>{tenant?._count?.invoices ?? 0} invoices</span>
         </div>
-        <button onClick={() => saveTenantControl.mutate()} disabled={saveTenantControl.isPending} className="h-10 rounded-[8px] bg-ink px-4 text-sm font-semibold text-white disabled:opacity-50">
+        <button onClick={() => saveTenantControl.mutate()} disabled={saveTenantControl.isPending} className="h-11 rounded-[8px] bg-ink px-5 text-sm font-semibold text-white disabled:opacity-50">
           {saveTenantControl.isPending ? "Saving..." : "Save tenant controls"}
         </button>
       </div>
@@ -845,7 +860,7 @@ function HealthPanel({
   tenant?: PlatformTenantDetail;
 }) {
   return (
-    <section className="rounded-[8px] bg-mist p-3">
+    <section className="rounded-[8px] bg-mist p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-medium text-steel">Health score</p>
@@ -853,15 +868,24 @@ function HealthPanel({
         </div>
         <Status label={tenant?.status ?? "loading"} />
       </div>
-      <div className="mt-3 grid gap-2 text-sm text-steel sm:grid-cols-2">
-        <span>{health?.activeUsers ?? 0} active users</span>
-        <span>{health?.recentBookings ?? 0} bookings in 30 days</span>
-        <span>{health?.openActions ?? 0} open actions</span>
-        <span>{health?.overdueInvoices ?? 0} overdue invoices</span>
-        <span>{health?.hotLeads ?? 0} hot leads</span>
-        <span>{usage?._count.messages ?? 0} messages</span>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <HealthMiniStat label="Active users" value={health?.activeUsers ?? 0} />
+        <HealthMiniStat label="Bookings 30d" value={health?.recentBookings ?? 0} />
+        <HealthMiniStat label="Open actions" value={health?.openActions ?? 0} />
+        <HealthMiniStat label="Overdue invoices" value={health?.overdueInvoices ?? 0} />
+        <HealthMiniStat label="Hot leads" value={health?.hotLeads ?? 0} />
+        <HealthMiniStat label="Messages" value={usage?._count.messages ?? 0} />
       </div>
     </section>
+  );
+}
+
+function HealthMiniStat({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-[8px] bg-white/75 p-3">
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-steel">{label}</p>
+      <p className="mt-2 text-xl font-semibold text-ink">{value}</p>
+    </div>
   );
 }
 
@@ -913,7 +937,7 @@ function BillingPanel({
 }) {
   const events = summary?.events ?? [];
   return (
-    <section className="rounded-[8px] bg-mist p-3">
+    <section className="rounded-[8px] bg-mist p-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="font-semibold text-ink">Billing control</p>
@@ -922,7 +946,7 @@ function BillingPanel({
         <Status label={summary?.subscriptionStatus ?? "TRIALING"} />
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
         <BillingStat label="Monthly price" value={money(summary?.monthlyPriceCents)} />
         <BillingStat label="Setup fee" value={money(summary?.setupFeeCents)} />
         <BillingStat label="Collected" value={money(summary?.collectedCents)} />
@@ -930,7 +954,7 @@ function BillingPanel({
         <BillingStat label="Next billing" value={summary?.nextBillingAt ? shortDate(summary.nextBillingAt) : "Not set"} />
       </div>
 
-      <div className="mt-4 grid gap-3 rounded-[8px] bg-white p-3 lg:grid-cols-[1fr_0.7fr_0.7fr_auto_auto] lg:items-end">
+      <div className="mt-4 grid gap-4 rounded-[8px] bg-white p-4 lg:grid-cols-2 2xl:grid-cols-[1fr_0.7fr_0.7fr_auto_auto] 2xl:items-end">
         <label>
           <span className="mb-2 block text-sm font-medium text-steel">Monthly</span>
           <input value={amount} onChange={(event) => onAmountChange(event.target.value)} inputMode="decimal" className="h-10 w-full rounded-[8px] border border-ink/10 bg-mist px-3 text-sm outline-none focus:border-pine" />
@@ -952,7 +976,7 @@ function BillingPanel({
         </button>
       </div>
 
-      <div className="mt-3 grid gap-3 rounded-[8px] bg-white p-3 lg:grid-cols-[1fr_1.4fr_auto] lg:items-end">
+      <div className="mt-3 grid gap-4 rounded-[8px] bg-white p-4 lg:grid-cols-[1fr_1.4fr_auto] lg:items-end">
         <label>
           <span className="mb-2 block text-sm font-medium text-steel">Event type</span>
           <select value={type} onChange={(event) => onTypeChange(event.target.value as PlatformBillingEventType)} className="h-10 w-full rounded-[8px] border border-ink/10 bg-mist px-2 text-sm outline-none focus:border-pine">
@@ -1087,7 +1111,7 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-[8px] border border-white/80 bg-white/90 p-4 shadow-soft">
+    <section className="rounded-[8px] border border-white/80 bg-white/90 p-5 shadow-soft">
       <div className="mb-4 flex items-center gap-2">
         <div className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-mist text-pine">
           <Icon className="h-5 w-5" />
