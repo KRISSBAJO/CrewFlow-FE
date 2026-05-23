@@ -577,20 +577,20 @@ function LeadsView({
         <Metric icon={DollarSign} label="Lead conversion" value={`${analytics?.conversionRate ?? 0}%`} tone="coral" />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1fr_0.75fr]">
-        <Panel
-          title="Pipeline board"
-          icon={Target}
-          action={
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search leads..."
-              className="h-10 w-52 rounded-[8px] border border-ink/10 bg-mist px-3 text-sm outline-none focus:border-pine"
-            />
-          }
-        >
-          <div className="grid gap-3 xl:grid-cols-3 2xl:grid-cols-6">
+      <Panel
+        title="Pipeline board"
+        icon={Target}
+        action={
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search leads..."
+            className="h-10 w-full rounded-[8px] border border-ink/10 bg-mist px-3 text-sm outline-none focus:border-pine sm:w-80"
+          />
+        }
+      >
+        <div className="-mx-4 overflow-x-auto px-4 pb-2">
+          <div className="grid min-w-[1680px] grid-cols-6 gap-4">
             {leadStatuses.map((stage) => {
               const stageLeads = filtered.filter((lead) => lead.status === stage.value);
               const stageValue = stageLeads.reduce(
@@ -598,11 +598,13 @@ function LeadsView({
                 0
               );
               return (
-                <section key={stage.value} className="min-h-[320px] rounded-[8px] bg-mist p-3">
-                  <div className="mb-3 flex items-center justify-between gap-2">
-                    <div>
+                <section key={stage.value} className="min-h-[520px] rounded-[8px] bg-mist p-4">
+                  <div className="mb-4 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
                       <p className="font-semibold text-ink">{stage.label}</p>
-                      <p className="text-xs font-medium text-steel">{stageLeads.length} · {money(stageValue)}</p>
+                      <p className="mt-1 text-sm font-medium text-steel">
+                        {stageLeads.length} leads · {money(stageValue)}
+                      </p>
                     </div>
                     <Status label={stage.value} />
                   </div>
@@ -621,80 +623,80 @@ function LeadsView({
               );
             })}
           </div>
+        </div>
+      </Panel>
+
+      <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+        <Panel title="New lead" icon={Plus}>
+          <div className="grid gap-3 md:grid-cols-2">
+            <InputField label="Lead title" value={title} onChange={setTitle} />
+            <SelectField label="Customer" value={customerId} onChange={setCustomerId}>
+              <option value="">Unlinked lead</option>
+              {(customers ?? []).map((customer) => (
+                <option key={customer.id} value={customer.id}>
+                  {customer.name} · {customer.phone}
+                </option>
+              ))}
+            </SelectField>
+            <SelectField label="Assigned to" value={assignedToId} onChange={setAssignedToId}>
+              <option value="">Unassigned</option>
+              {(staff ?? []).map((member) => (
+                <option key={member.id} value={member.id}>
+                  {member.name} · {member.role}
+                </option>
+              ))}
+            </SelectField>
+            <SelectField label="Source" value={source} onChange={(value) => setSource(value as LeadSource)}>
+              {leadSources.map((item) => (
+                <option key={item} value={item}>
+                  {item.replaceAll("_", " ")}
+                </option>
+              ))}
+            </SelectField>
+            <InputField label="Estimated value" value={estimatedValue} onChange={setEstimatedValue} />
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-ink">Follow-up</span>
+              <input
+                type="datetime-local"
+                value={followUpAt}
+                onChange={(event) => setFollowUpAt(event.target.value)}
+                className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
+              />
+            </label>
+          </div>
+          {create.error ? <ErrorText error={create.error} /> : null}
+          <button
+            onClick={() => create.mutate()}
+            disabled={!title.trim() || create.isPending}
+            className="mt-4 flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 font-semibold text-white disabled:opacity-50"
+          >
+            {create.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            Add lead
+          </button>
         </Panel>
 
-        <div className="grid gap-4">
-          <Panel title="New lead" icon={Plus}>
-            <div className="grid gap-3">
-              <InputField label="Lead title" value={title} onChange={setTitle} />
-              <SelectField label="Customer" value={customerId} onChange={setCustomerId}>
-                <option value="">Unlinked lead</option>
-                {(customers ?? []).map((customer) => (
-                  <option key={customer.id} value={customer.id}>
-                    {customer.name} · {customer.phone}
-                  </option>
+        <Panel title="Lead-to-booking" icon={TrendingUp}>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <MiniStat label="Won leads" value={analytics?.wonCount ?? 0} />
+            <MiniStat label="Lost leads" value={analytics?.lostCount ?? 0} danger={(analytics?.lostCount ?? 0) > 0} />
+            <MiniStat label="Booked value" value={money(analytics?.leadToBooking.bookingValueCents)} />
+          </div>
+          <div className="mt-4 rounded-[8px] bg-mist p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-steel">Best sources</p>
+            <div className="mt-3 grid gap-2">
+              {Object.entries(analytics?.bySource ?? {})
+                .filter(([, count]) => count > 0)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 6)
+                .map(([sourceName, count]) => (
+                  <div key={sourceName} className="flex items-center justify-between rounded-[8px] bg-white px-3 py-2 text-sm">
+                    <span className="font-medium text-ink">{sourceName.replaceAll("_", " ")}</span>
+                    <span className="font-semibold text-steel">{count}</span>
+                  </div>
                 ))}
-              </SelectField>
-              <SelectField label="Assigned to" value={assignedToId} onChange={setAssignedToId}>
-                <option value="">Unassigned</option>
-                {(staff ?? []).map((member) => (
-                  <option key={member.id} value={member.id}>
-                    {member.name} · {member.role}
-                  </option>
-                ))}
-              </SelectField>
-              <SelectField label="Source" value={source} onChange={(value) => setSource(value as LeadSource)}>
-                {leadSources.map((item) => (
-                  <option key={item} value={item}>
-                    {item.replaceAll("_", " ")}
-                  </option>
-                ))}
-              </SelectField>
-              <InputField label="Estimated value" value={estimatedValue} onChange={setEstimatedValue} />
-              <label className="block">
-                <span className="mb-2 block text-sm font-medium text-ink">Follow-up</span>
-                <input
-                  type="datetime-local"
-                  value={followUpAt}
-                  onChange={(event) => setFollowUpAt(event.target.value)}
-                  className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
-                />
-              </label>
-              {create.error ? <ErrorText error={create.error} /> : null}
-              <button
-                onClick={() => create.mutate()}
-                disabled={!title.trim() || create.isPending}
-                className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 font-semibold text-white disabled:opacity-50"
-              >
-                {create.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                Add lead
-              </button>
             </div>
-          </Panel>
-
-          <Panel title="Lead-to-booking" icon={TrendingUp}>
-            <div className="grid gap-3">
-              <MiniStat label="Won leads" value={analytics?.wonCount ?? 0} />
-              <MiniStat label="Lost leads" value={analytics?.lostCount ?? 0} danger={(analytics?.lostCount ?? 0) > 0} />
-              <MiniStat label="Booked value" value={money(analytics?.leadToBooking.bookingValueCents)} />
-              <div className="rounded-[8px] bg-mist p-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-steel">Best sources</p>
-                <div className="mt-3 grid gap-2">
-                  {Object.entries(analytics?.bySource ?? {})
-                    .filter(([, count]) => count > 0)
-                    .sort((a, b) => b[1] - a[1])
-                    .slice(0, 4)
-                    .map(([sourceName, count]) => (
-                      <div key={sourceName} className="flex items-center justify-between text-sm">
-                        <span className="font-medium text-ink">{sourceName.replaceAll("_", " ")}</span>
-                        <span className="font-semibold text-steel">{count}</span>
-                      </div>
-                    ))}
-                </div>
-              </div>
-            </div>
-          </Panel>
-        </div>
+          </div>
+        </Panel>
       </div>
     </div>
   );
