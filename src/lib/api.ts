@@ -5,10 +5,25 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3002/api";
 type LoginResponse = {
   accessToken: string;
   user: {
+    id?: string;
     sub: string;
     tenantId: string;
     email: string;
     role: "OWNER" | "MANAGER" | "STAFF";
+  };
+  tenant?: {
+    id: string;
+    businessName: string;
+    slug: string;
+    industry: string;
+  };
+  onboardingProfile?: {
+    id: string;
+    setupStatus: string;
+    services: string[];
+    staffCount?: string | null;
+    whatsappNumber?: string | null;
+    biggestProblem?: string | null;
   };
 };
 
@@ -25,7 +40,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const message = await response.text();
-    throw new Error(message || `Request failed with ${response.status}`);
+    let parsed: { message?: string | string[]; error?: string } | null = null;
+    try {
+      parsed = JSON.parse(message) as { message?: string | string[]; error?: string };
+    } catch {
+      parsed = null;
+    }
+    const detail = Array.isArray(parsed?.message) ? parsed.message.join(", ") : parsed?.message;
+    throw new Error(detail || parsed?.error || message || `Request failed with ${response.status}`);
   }
 
   const contentType = response.headers.get("content-type") ?? "";
@@ -41,6 +63,11 @@ export const api = {
     request<LoginResponse>("/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password })
+    }),
+  register: (input: RegisterInput) =>
+    request<LoginResponse>("/auth/register", {
+      method: "POST",
+      body: JSON.stringify(input)
     }),
   dashboard: () => request<DashboardSummary>("/dashboard"),
   inbox: () => request<Conversation[]>("/inbox"),
@@ -119,6 +146,19 @@ export const api = {
         }
       )
     })
+};
+
+export type RegisterInput = {
+  businessName: string;
+  industry: string;
+  ownerName: string;
+  phone?: string;
+  email: string;
+  password: string;
+  services?: string[];
+  staffCount?: string;
+  whatsappNumber?: string;
+  biggestProblem?: string;
 };
 
 export type Health = {

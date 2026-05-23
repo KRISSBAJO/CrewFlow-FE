@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 type User = {
+  id?: string;
   sub: string;
   tenantId: string;
   email: string;
