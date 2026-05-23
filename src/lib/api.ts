@@ -44,10 +44,44 @@ export const api = {
     }),
   dashboard: () => request<DashboardSummary>("/dashboard"),
   inbox: () => request<Conversation[]>("/inbox"),
+  conversation: (id: string) => request<Conversation>(`/inbox/${id}`),
+  replyConversation: (id: string, content: string) =>
+    request<{ message: MessageLog }>(`/inbox/${id}/reply`, {
+      method: "POST",
+      body: JSON.stringify({ content })
+    }),
+  suggestReply: (id: string) =>
+    request<{ reply: string; mode: string }>(`/inbox/${id}/ai-suggest`, {
+      method: "POST"
+    }),
   actions: () => request<OperationalAction[]>("/actions"),
+  updateAction: (id: string, status: "IN_PROGRESS" | "COMPLETED" | "DISMISSED") =>
+    request<OperationalAction>(`/actions/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status })
+    }),
   bookings: () => request<Booking[]>("/bookings"),
+  createBooking: (input: {
+    customerId: string;
+    serviceId: string;
+    assignedStaffId?: string;
+    startTime: string;
+    notes?: string;
+  }) =>
+    request<Booking>("/bookings", {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
+  customers: () => request<Customer[]>("/customers"),
+  services: () => request<Service[]>("/services"),
+  staff: () => request<StaffMember[]>("/tenant/staff"),
   fieldJobs: () => request<Booking[]>("/field/jobs"),
   invoices: () => request<Invoice[]>("/invoices"),
+  createPaymentLink: (invoiceId: string) =>
+    request<{ invoice: Invoice; payment: Payment }>(`/invoices/${invoiceId}/payment-link`, {
+      method: "POST",
+      body: JSON.stringify({ provider: "MOCK" })
+    }),
   payments: () => request<Payment[]>("/payments"),
   health: () => request<Health>("/health"),
   schedulerRun: () => request<unknown>("/scheduler/run-now", { method: "POST" }),
@@ -107,6 +141,14 @@ export type Customer = {
   email?: string | null;
 };
 
+export type StaffMember = {
+  id: string;
+  name: string;
+  email: string;
+  role: "OWNER" | "MANAGER" | "STAFF";
+  phone?: string | null;
+};
+
 export type Service = {
   id: string;
   title: string;
@@ -160,7 +202,7 @@ export type Conversation = {
   channel: string;
   lastMessageAt: string;
   customer?: Customer | null;
-  messages?: Array<{ content: string; role: string; createdAt: string }>;
+  messages?: Array<{ id?: string; content: string; role: string; createdAt: string }>;
   bookingIntents?: unknown[];
 };
 

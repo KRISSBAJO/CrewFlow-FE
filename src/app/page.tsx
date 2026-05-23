@@ -3,11 +3,14 @@
 import {
   AlertTriangle,
   Banknote,
+  Bot,
   CalendarDays,
   CheckCircle2,
   ClipboardCheck,
   Clock3,
   CreditCard,
+  ExternalLink,
+  FileText,
   Headphones,
   HeartPulse,
   Inbox,
@@ -15,13 +18,15 @@ import {
   LogOut,
   MessageSquareText,
   Play,
+  Plus,
   RefreshCw,
   Route,
   Send,
   ShieldCheck,
   Sparkles,
   UsersRound,
-  Wrench
+  Wrench,
+  X
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -33,7 +38,8 @@ import {
   DashboardSummary,
   Invoice,
   OperationalAction,
-  Payment
+  Payment,
+  StaffMember
 } from "@/lib/api";
 import { cn, initials, money, shortDate } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
@@ -48,6 +54,13 @@ const nav = [
 ] as const;
 
 type View = (typeof nav)[number]["id"];
+type DrawerState =
+  | { type: "booking"; item: Booking }
+  | { type: "conversation"; item: Conversation }
+  | { type: "invoice"; item: Invoice }
+  | { type: "action"; item: OperationalAction }
+  | { type: "new-booking" }
+  | null;
 
 export default function Home() {
   const token = useAuth((state) => state.token);
@@ -148,6 +161,7 @@ function Login() {
 
 function Console() {
   const [view, setView] = useState<View>("overview");
+  const [drawer, setDrawer] = useState<DrawerState>(null);
   const logout = useAuth((state) => state.logout);
   const user = useAuth((state) => state.user);
   const queryClient = useQueryClient();
@@ -260,17 +274,18 @@ function Console() {
               transition={{ duration: 0.18 }}
             >
               {view === "overview" ? (
-                <Overview data={dashboard.data} actions={actions.data} loading={dashboard.isLoading} />
+                <Overview data={dashboard.data} actions={actions.data} loading={dashboard.isLoading} onOpen={setDrawer} />
               ) : null}
-              {view === "inbox" ? <InboxView items={inbox.data} /> : null}
-              {view === "bookings" ? <BookingsView items={bookings.data} /> : null}
-              {view === "field" ? <FieldView items={field.data} /> : null}
-              {view === "money" ? <MoneyView invoices={invoices.data} payments={payments.data} /> : null}
-              {view === "actions" ? <ActionsView items={actions.data} /> : null}
+              {view === "inbox" ? <InboxView items={inbox.data} onOpen={setDrawer} /> : null}
+              {view === "bookings" ? <BookingsView items={bookings.data} onOpen={setDrawer} /> : null}
+              {view === "field" ? <FieldView items={field.data} onOpen={setDrawer} /> : null}
+              {view === "money" ? <MoneyView invoices={invoices.data} payments={payments.data} onOpen={setDrawer} /> : null}
+              {view === "actions" ? <ActionsView items={actions.data} onOpen={setDrawer} /> : null}
             </motion.div>
           </AnimatePresence>
         </section>
       </div>
+      <DetailDrawer state={drawer} onClose={() => setDrawer(null)} />
     </main>
   );
 }
@@ -278,11 +293,13 @@ function Console() {
 function Overview({
   data,
   actions,
-  loading
+  loading,
+  onOpen
 }: {
   data?: DashboardSummary;
   actions?: OperationalAction[];
   loading: boolean;
+  onOpen: (state: DrawerState) => void;
 }) {
   if (loading) return <LoadingPanel />;
   return (
@@ -309,23 +326,23 @@ function Overview({
           </div>
         </Panel>
         <Panel title="Manager queue" icon={ClipboardCheck}>
-          <ActionList items={actions?.slice(0, 5)} />
+          <ActionList items={actions?.slice(0, 5)} onOpen={onOpen} />
         </Panel>
       </div>
 
       <Panel title="Today’s appointments" icon={Clock3}>
-        <BookingRows items={data?.today.appointments} />
+        <BookingRows items={data?.today.appointments} onOpen={onOpen} />
       </Panel>
     </div>
   );
 }
 
-function InboxView({ items }: { items?: Conversation[] }) {
+function InboxView({ items, onOpen }: { items?: Conversation[]; onOpen: (state: DrawerState) => void }) {
   return (
     <Panel title="Customer inbox" icon={MessageSquareText}>
       <div className="grid gap-3">
         {(items ?? []).map((item) => (
-          <Row key={item.id}>
+          <Row key={item.id} onClick={() => onOpen({ type: "conversation", item })}>
             <Avatar name={item.customer?.name} />
             <div className="min-w-0 flex-1">
               <p className="truncate font-semibold text-ink">{item.customer?.name ?? "New inquiry"}</p>
@@ -341,15 +358,24 @@ function InboxView({ items }: { items?: Conversation[] }) {
   );
 }
 
-function BookingsView({ items }: { items?: Booking[] }) {
+function BookingsView({ items, onOpen }: { items?: Booking[]; onOpen: (state: DrawerState) => void }) {
   return (
-    <Panel title="Booking board" icon={CalendarDays}>
-      <BookingRows items={items} />
+    <Panel
+      title="Booking board"
+      icon={CalendarDays}
+      action={
+        <button onClick={() => onOpen({ type: "new-booking" })} className="flex h-9 items-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white">
+          <Plus className="h-4 w-4" />
+          New
+        </button>
+      }
+    >
+      <BookingRows items={items} onOpen={onOpen} />
     </Panel>
   );
 }
 
-function FieldView({ items }: { items?: Booking[] }) {
+function FieldView({ items, onOpen }: { items?: Booking[]; onOpen: (state: DrawerState) => void }) {
   const queryClient = useQueryClient();
   const complete = useMutation({
     mutationFn: (bookingId: string) => api.completeFieldJob(bookingId),
@@ -362,7 +388,7 @@ function FieldView({ items }: { items?: Booking[] }) {
     <Panel title="Field jobs" icon={Route}>
       <div className="grid gap-3">
         {(items ?? []).map((item) => (
-          <Row key={item.id}>
+          <Row key={item.id} onClick={() => onOpen({ type: "booking", item })}>
             <div className="flex h-10 w-10 items-center justify-center rounded-[8px] bg-mist text-pine">
               <Wrench className="h-5 w-5" />
             </div>
@@ -375,7 +401,10 @@ function FieldView({ items }: { items?: Booking[] }) {
             <Status label={item.status} />
             {item.status !== "COMPLETED" ? (
               <button
-                onClick={() => complete.mutate(item.id)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  complete.mutate(item.id);
+                }}
                 className="flex h-9 items-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white"
               >
                 <CheckCircle2 className="h-4 w-4" />
@@ -392,10 +421,12 @@ function FieldView({ items }: { items?: Booking[] }) {
 
 function MoneyView({
   invoices,
-  payments
+  payments,
+  onOpen
 }: {
   invoices?: Invoice[];
   payments?: Payment[];
+  onOpen: (state: DrawerState) => void;
 }) {
   const openInvoices = useMemo(
     () => (invoices ?? []).filter((invoice) => invoice.status !== "PAID"),
@@ -406,7 +437,7 @@ function MoneyView({
       <Panel title="Invoices" icon={CreditCard}>
         <div className="grid gap-3">
           {openInvoices.map((invoice) => (
-            <Row key={invoice.id}>
+            <Row key={invoice.id} onClick={() => onOpen({ type: "invoice", item: invoice })}>
               <div className="flex-1">
                 <p className="font-semibold text-ink">{invoice.invoiceNo}</p>
                 <p className="text-sm text-steel">{invoice.customer.name} · due {shortDate(invoice.dueDate)}</p>
@@ -437,19 +468,19 @@ function MoneyView({
   );
 }
 
-function ActionsView({ items }: { items?: OperationalAction[] }) {
+function ActionsView({ items, onOpen }: { items?: OperationalAction[]; onOpen: (state: DrawerState) => void }) {
   return (
     <Panel title="Operational actions" icon={ClipboardCheck}>
-      <ActionList items={items} />
+      <ActionList items={items} onOpen={onOpen} />
     </Panel>
   );
 }
 
-function ActionList({ items }: { items?: OperationalAction[] }) {
+function ActionList({ items, onOpen }: { items?: OperationalAction[]; onOpen: (state: DrawerState) => void }) {
   return (
     <div className="grid gap-3">
       {(items ?? []).map((item) => (
-        <Row key={item.id}>
+        <Row key={item.id} onClick={() => onOpen({ type: "action", item })}>
           <Priority priority={item.priority} />
           <div className="min-w-0 flex-1">
             <p className="truncate font-semibold text-ink">{item.title}</p>
@@ -464,11 +495,11 @@ function ActionList({ items }: { items?: OperationalAction[] }) {
   );
 }
 
-function BookingRows({ items }: { items?: Booking[] }) {
+function BookingRows({ items, onOpen }: { items?: Booking[]; onOpen: (state: DrawerState) => void }) {
   return (
     <div className="grid gap-3">
       {(items ?? []).map((item) => (
-        <Row key={item.id}>
+        <Row key={item.id} onClick={() => onOpen({ type: "booking", item })}>
           <Avatar name={item.customer.name} />
           <div className="min-w-0 flex-1">
             <p className="truncate font-semibold text-ink">{item.service.title}</p>
@@ -488,19 +519,24 @@ function BookingRows({ items }: { items?: Booking[] }) {
 function Panel({
   title,
   icon: Icon,
+  action,
   children
 }: {
   title: string;
   icon: typeof Inbox;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <section className="rounded-[8px] border border-white/80 bg-white/90 p-4 shadow-soft backdrop-blur">
-      <div className="mb-4 flex items-center gap-2">
-        <div className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-mist text-pine">
-          <Icon className="h-5 w-5" />
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <div className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-mist text-pine">
+            <Icon className="h-5 w-5" />
+          </div>
+          <h2 className="text-lg font-semibold text-ink">{title}</h2>
         </div>
-        <h2 className="text-lg font-semibold text-ink">{title}</h2>
+        {action}
       </div>
       {children}
     </section>
@@ -553,9 +589,15 @@ function Signal({
   );
 }
 
-function Row({ children }: { children: React.ReactNode }) {
+function Row({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) {
   return (
-    <div className="flex min-h-[64px] items-center gap-3 rounded-[8px] border border-ink/5 bg-mist/80 p-3">
+    <div
+      onClick={onClick}
+      className={cn(
+        "flex min-h-[64px] items-center gap-3 rounded-[8px] border border-ink/5 bg-mist/80 p-3",
+        onClick && "cursor-pointer transition hover:border-pine/30 hover:bg-white"
+      )}
+    >
       {children}
     </div>
   );
@@ -611,6 +653,399 @@ function LoadingPanel() {
       <Loader2 className="h-7 w-7 animate-spin text-pine" />
     </div>
   );
+}
+
+function DetailDrawer({
+  state,
+  onClose
+}: {
+  state: DrawerState;
+  onClose: () => void;
+}) {
+  return (
+    <AnimatePresence>
+      {state ? (
+        <>
+          <motion.div
+            className="fixed inset-0 z-40 bg-ink/30 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+          />
+          <motion.aside
+            className="fixed bottom-0 right-0 top-0 z-50 flex w-full max-w-xl flex-col border-l border-white/80 bg-white shadow-soft md:rounded-l-[8px]"
+            initial={{ x: "100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "100%" }}
+            transition={{ type: "spring", damping: 28, stiffness: 260 }}
+          >
+            <div className="flex items-center justify-between border-b border-ink/10 p-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pine">
+                  CrewFlow
+                </p>
+                <h2 className="text-xl font-semibold text-ink">{drawerTitle(state)}</h2>
+              </div>
+              <button
+                onClick={onClose}
+                className="flex h-10 w-10 items-center justify-center rounded-[8px] bg-mist text-ink transition hover:bg-ink hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              {state.type === "new-booking" ? <NewBookingForm onDone={onClose} /> : null}
+              {state.type === "booking" ? <BookingDetail item={state.item} /> : null}
+              {state.type === "conversation" ? <ConversationDetail item={state.item} /> : null}
+              {state.type === "invoice" ? <InvoiceDetail item={state.item} /> : null}
+              {state.type === "action" ? <ActionDetail item={state.item} onDone={onClose} /> : null}
+            </div>
+          </motion.aside>
+        </>
+      ) : null}
+    </AnimatePresence>
+  );
+}
+
+function NewBookingForm({ onDone }: { onDone: () => void }) {
+  const queryClient = useQueryClient();
+  const customers = useQuery({ queryKey: ["customers"], queryFn: api.customers });
+  const services = useQuery({ queryKey: ["services"], queryFn: api.services });
+  const staff = useQuery({ queryKey: ["staff"], queryFn: api.staff });
+  const [customerId, setCustomerId] = useState("");
+  const [serviceId, setServiceId] = useState("");
+  const [assignedStaffId, setAssignedStaffId] = useState("");
+  const [startTime, setStartTime] = useState("");
+  const [notes, setNotes] = useState("");
+
+  const create = useMutation({
+    mutationFn: () =>
+      api.createBooking({
+        customerId,
+        serviceId,
+        assignedStaffId: assignedStaffId || undefined,
+        startTime: new Date(startTime).toISOString(),
+        notes: notes || undefined
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries();
+      onDone();
+    }
+  });
+
+  const canSubmit = customerId && serviceId && startTime;
+
+  return (
+    <form
+      className="grid gap-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (canSubmit) create.mutate();
+      }}
+    >
+      <SelectField label="Customer" value={customerId} onChange={setCustomerId}>
+        <option value="">Choose customer</option>
+        {(customers.data ?? []).map((customer) => (
+          <option key={customer.id} value={customer.id}>
+            {customer.name} · {customer.phone}
+          </option>
+        ))}
+      </SelectField>
+      <SelectField label="Service" value={serviceId} onChange={setServiceId}>
+        <option value="">Choose service</option>
+        {(services.data ?? []).map((service) => (
+          <option key={service.id} value={service.id}>
+            {service.title} · {money(service.priceCents)}
+          </option>
+        ))}
+      </SelectField>
+      <SelectField label="Staff" value={assignedStaffId} onChange={setAssignedStaffId}>
+        <option value="">Unassigned</option>
+        {(staff.data ?? []).map((member: StaffMember) => (
+          <option key={member.id} value={member.id}>
+            {member.name} · {member.role}
+          </option>
+        ))}
+      </SelectField>
+      <label className="block">
+        <span className="mb-2 block text-sm font-medium text-ink">Start time</span>
+        <input
+          type="datetime-local"
+          value={startTime}
+          onChange={(event) => setStartTime(event.target.value)}
+          className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
+        />
+      </label>
+      <label className="block">
+        <span className="mb-2 block text-sm font-medium text-ink">Notes</span>
+        <textarea
+          value={notes}
+          onChange={(event) => setNotes(event.target.value)}
+          className="min-h-28 w-full rounded-[8px] border border-ink/10 bg-mist p-3 outline-none focus:border-pine"
+        />
+      </label>
+      {create.error ? <ErrorText error={create.error} /> : null}
+      <button
+        disabled={!canSubmit || create.isPending}
+        className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 font-semibold text-white disabled:opacity-50"
+      >
+        {create.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+        Create booking
+      </button>
+    </form>
+  );
+}
+
+function BookingDetail({ item }: { item: Booking }) {
+  return (
+    <div className="grid gap-4">
+      <DetailCard icon={CalendarDays} title={item.service.title}>
+        <Info label="Customer" value={item.customer.name} />
+        <Info label="Time" value={shortDate(item.startTime)} />
+        <Info label="Staff" value={item.assignedStaff?.name ?? "Unassigned"} />
+        <Info label="Status" value={item.status.replaceAll("_", " ")} />
+        {item.notes ? <Info label="Notes" value={item.notes} /> : null}
+      </DetailCard>
+      {item.invoice ? (
+        <DetailCard icon={FileText} title="Invoice">
+          <Info label="Invoice" value={item.invoice.invoiceNo} />
+          <Info label="Total" value={money(item.invoice.totalCents)} />
+          <Info label="Status" value={item.invoice.status} />
+        </DetailCard>
+      ) : null}
+    </div>
+  );
+}
+
+function ConversationDetail({ item }: { item: Conversation }) {
+  const queryClient = useQueryClient();
+  const full = useQuery({
+    queryKey: ["conversation", item.id],
+    queryFn: () => api.conversation(item.id)
+  });
+  const [reply, setReply] = useState("");
+  const sendReply = useMutation({
+    mutationFn: () => api.replyConversation(item.id, reply),
+    onSuccess: () => {
+      setReply("");
+      void queryClient.invalidateQueries();
+    }
+  });
+  const suggest = useMutation({
+    mutationFn: () => api.suggestReply(item.id),
+    onSuccess: (data) => setReply(data.reply)
+  });
+  const conversation = full.data ?? item;
+
+  return (
+    <div className="grid gap-4">
+      <DetailCard icon={MessageSquareText} title={conversation.customer?.name ?? "New inquiry"}>
+        <Info label="Channel" value={conversation.channel} />
+        <Info label="Status" value={conversation.status} />
+        <Info label="Last message" value={shortDate(conversation.lastMessageAt)} />
+      </DetailCard>
+      <div className="grid gap-2">
+        {(conversation.messages ?? []).map((message) => (
+          <div
+            key={message.id ?? `${message.createdAt}-${message.role}`}
+            className={cn(
+              "rounded-[8px] p-3 text-sm",
+              message.role === "CUSTOMER" ? "bg-mist text-ink" : "bg-pine text-white"
+            )}
+          >
+            <p className="mb-1 text-xs font-semibold opacity-70">{message.role}</p>
+            {message.content}
+          </div>
+        ))}
+      </div>
+      <div className="rounded-[8px] bg-mist p-3">
+        <textarea
+          value={reply}
+          onChange={(event) => setReply(event.target.value)}
+          placeholder="Write a reply..."
+          className="min-h-28 w-full rounded-[8px] border border-ink/10 bg-white p-3 outline-none focus:border-pine"
+        />
+        <div className="mt-3 flex gap-2">
+          <button
+            onClick={() => suggest.mutate()}
+            disabled={suggest.isPending}
+            className="flex h-10 items-center gap-2 rounded-[8px] bg-white px-3 text-sm font-semibold text-ink"
+          >
+            {suggest.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
+            Suggest
+          </button>
+          <button
+            onClick={() => sendReply.mutate()}
+            disabled={!reply || sendReply.isPending}
+            className="flex h-10 items-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {sendReply.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            Send
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InvoiceDetail({ item }: { item: Invoice }) {
+  const queryClient = useQueryClient();
+  const paymentLink = useMutation({
+    mutationFn: () => api.createPaymentLink(item.id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries();
+    }
+  });
+
+  return (
+    <div className="grid gap-4">
+      <DetailCard icon={CreditCard} title={item.invoiceNo}>
+        <Info label="Customer" value={item.customer.name} />
+        <Info label="Due" value={shortDate(item.dueDate)} />
+        <Info label="Total" value={money(item.totalCents)} />
+        <Info label="Status" value={item.status} />
+      </DetailCard>
+      <button
+        onClick={() => paymentLink.mutate()}
+        disabled={paymentLink.isPending || item.status === "PAID"}
+        className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 font-semibold text-white disabled:opacity-50"
+      >
+        {paymentLink.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+        Create payment link
+      </button>
+      {item.paymentUrl ? (
+        <a
+          href={item.paymentUrl}
+          target="_blank"
+          className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-mist px-4 font-semibold text-ink"
+        >
+          <ExternalLink className="h-4 w-4" />
+          Open payment page
+        </a>
+      ) : null}
+      {paymentLink.error ? <ErrorText error={paymentLink.error} /> : null}
+    </div>
+  );
+}
+
+function ActionDetail({ item, onDone }: { item: OperationalAction; onDone: () => void }) {
+  const queryClient = useQueryClient();
+  const update = useMutation({
+    mutationFn: (status: "IN_PROGRESS" | "COMPLETED" | "DISMISSED") =>
+      api.updateAction(item.id, status),
+    onSuccess: () => {
+      void queryClient.invalidateQueries();
+      onDone();
+    }
+  });
+
+  return (
+    <div className="grid gap-4">
+      <DetailCard icon={ClipboardCheck} title={item.title}>
+        <Info label="Priority" value={item.priority} />
+        <Info label="Status" value={item.status} />
+        <Info label="Customer" value={item.customer?.name ?? "Not linked"} />
+        <Info label="Due" value={shortDate(item.dueAt)} />
+        {item.description ? <Info label="Details" value={item.description} /> : null}
+      </DetailCard>
+      <div className="grid gap-2 sm:grid-cols-3">
+        <ActionButton label="Start" icon={Play} onClick={() => update.mutate("IN_PROGRESS")} />
+        <ActionButton label="Complete" icon={CheckCircle2} onClick={() => update.mutate("COMPLETED")} />
+        <ActionButton label="Dismiss" icon={X} onClick={() => update.mutate("DISMISSED")} />
+      </div>
+      {update.error ? <ErrorText error={update.error} /> : null}
+    </div>
+  );
+}
+
+function DetailCard({
+  icon: Icon,
+  title,
+  children
+}: {
+  icon: typeof Inbox;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-[8px] bg-mist p-4">
+      <div className="mb-4 flex items-center gap-2">
+        <div className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-white text-pine">
+          <Icon className="h-5 w-5" />
+        </div>
+        <h3 className="text-lg font-semibold text-ink">{title}</h3>
+      </div>
+      <div className="grid gap-3">{children}</div>
+    </section>
+  );
+}
+
+function Info({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-steel">{label}</p>
+      <p className="mt-1 text-sm font-medium text-ink">{value}</p>
+    </div>
+  );
+}
+
+function SelectField({
+  label,
+  value,
+  onChange,
+  children
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-sm font-medium text-ink">{label}</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
+      >
+        {children}
+      </select>
+    </label>
+  );
+}
+
+function ActionButton({
+  label,
+  icon: Icon,
+  onClick
+}: {
+  label: string;
+  icon: typeof Inbox;
+  onClick: () => void;
+}) {
+  return (
+    <button onClick={onClick} className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink">
+      <Icon className="h-4 w-4" />
+      {label}
+    </button>
+  );
+}
+
+function ErrorText({ error }: { error: unknown }) {
+  return (
+    <p className="rounded-[8px] bg-coral/10 px-3 py-2 text-sm font-medium text-coral">
+      {error instanceof Error ? error.message : "Something went wrong"}
+    </p>
+  );
+}
+
+function drawerTitle(state: NonNullable<DrawerState>) {
+  if (state.type === "new-booking") return "New booking";
+  if (state.type === "booking") return "Booking details";
+  if (state.type === "conversation") return "Conversation";
+  if (state.type === "invoice") return "Invoice";
+  return "Action";
 }
 
 function Logo() {
