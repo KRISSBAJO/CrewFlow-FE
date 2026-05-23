@@ -28,16 +28,18 @@ const featureCards = [
 
 export function FeatureSection() {
   return (
-    <section id="engine" className="bg-[#f5f7f4] px-5 py-16 md:px-8">
+    <section id="engine" className="bg-[#f6f8f5] px-5 py-16 md:px-8">
       <div className="mx-auto max-w-7xl">
-        <div className="max-w-3xl">
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-pine">Money engine</p>
-          <h2 className="mt-3 text-4xl font-semibold leading-tight text-ink md:text-5xl">
-            Built for the work that leaks revenue.
-          </h2>
-          <p className="mt-5 text-lg leading-8 text-steel">
-            CrewFlow focuses on missed inquiries, scheduling gaps, field confusion, unpaid invoices,
-            and follow-up that normally falls through the cracks.
+        <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr] lg:items-end">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-pine">Money engine</p>
+            <h2 className="mt-3 text-4xl font-semibold leading-tight text-ink md:text-5xl">
+              The operating system for jobs that should not slip.
+            </h2>
+          </div>
+          <p className="max-w-2xl text-lg leading-8 text-steel">
+            CrewFlow is organized around the moments service businesses lose money:
+            missed inquiries, schedule confusion, no-shows, late invoices, and weak follow-up.
           </p>
         </div>
 
@@ -53,9 +55,9 @@ export function FeatureSection() {
               />
             </div>
             <div className="grid gap-3 p-5 text-white md:grid-cols-2">
-              <p className="text-xl font-semibold">Bookings and customer confirmation stay connected.</p>
+              <p className="text-xl font-semibold">Receptionist intake becomes scheduled work.</p>
               <p className="leading-7 text-white/70">
-                The office sees the schedule while customers get clear booking communication.
+                Quotes, customer records, service details, and booking status stay in the same flow.
               </p>
             </div>
           </div>
@@ -71,7 +73,7 @@ export function FeatureSection() {
               />
               <div className="absolute inset-0 bg-gradient-to-t from-ink via-ink/35 to-transparent" />
               <div className="absolute bottom-0 max-w-md p-5 text-white">
-                <p className="text-2xl font-semibold">Manager visibility without dashboard noise.</p>
+                <p className="text-2xl font-semibold">Manager visibility without corporate dashboard noise.</p>
                 <p className="mt-3 leading-7 text-white/72">
                   See what needs action today: missed replies, unassigned jobs, no-shows, and unpaid work.
                 </p>
