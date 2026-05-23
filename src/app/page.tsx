@@ -1,1068 +1,213 @@
-"use client";
-
+import Image from "next/image";
+import Link from "next/link";
 import {
-  AlertTriangle,
+  ArrowRight,
   Banknote,
-  Bot,
-  CalendarDays,
   CheckCircle2,
-  ClipboardCheck,
-  Clock3,
-  CreditCard,
-  ExternalLink,
-  FileText,
   Headphones,
-  HeartPulse,
-  Inbox,
-  Loader2,
-  LogOut,
   MessageSquareText,
-  Play,
-  Plus,
-  RefreshCw,
   Route,
-  Send,
   ShieldCheck,
   Sparkles,
-  UsersRound,
-  Wrench,
-  X
+  UsersRound
 } from "lucide-react";
-import { AnimatePresence, motion } from "framer-motion";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FormEvent, useMemo, useState } from "react";
-import {
-  api,
-  Booking,
-  Conversation,
-  DashboardSummary,
-  Invoice,
-  OperationalAction,
-  Payment,
-  StaffMember
-} from "@/lib/api";
-import { cn, initials, money, shortDate } from "@/lib/utils";
-import { useAuth } from "@/store/auth";
+import hero from "@/public/images/hero.png";
+import heroSecondary from "@/public/images/hero-2.png";
+import { cn } from "@/lib/utils";
 
-const nav = [
-  { id: "overview", label: "Overview", icon: HeartPulse },
-  { id: "inbox", label: "Inbox", icon: Inbox },
-  { id: "bookings", label: "Bookings", icon: CalendarDays },
-  { id: "field", label: "Field", icon: Route },
-  { id: "money", label: "Money", icon: CreditCard },
-  { id: "actions", label: "Actions", icon: ClipboardCheck }
-] as const;
+const outcomes = [
+  { label: "Missed inquiries recovered", value: "24/7", icon: Headphones },
+  { label: "Admin work reduced", value: "40%", icon: CheckCircle2 },
+  { label: "Revenue leaks surfaced", value: "$", icon: Banknote }
+];
 
-type View = (typeof nav)[number]["id"];
-type DrawerState =
-  | { type: "booking"; item: Booking }
-  | { type: "conversation"; item: Conversation }
-  | { type: "invoice"; item: Invoice }
-  | { type: "action"; item: OperationalAction }
-  | { type: "new-booking" }
-  | null;
-
-export default function Home() {
-  const token = useAuth((state) => state.token);
-  return token ? <Console /> : <Login />;
-}
-
-function Login() {
-  const setSession = useAuth((state) => state.setSession);
-  const [email, setEmail] = useState("owner@sparkle.test");
-  const [password, setPassword] = useState("Password123!");
-  const [error, setError] = useState("");
-
-  const login = useMutation({
-    mutationFn: () => api.login(email, password),
-    onSuccess: (data) => setSession(data.accessToken, data.user),
-    onError: (err) => setError(err instanceof Error ? err.message : "Login failed")
-  });
-
-  function submit(event: FormEvent) {
-    event.preventDefault();
-    setError("");
-    login.mutate();
+const features = [
+  {
+    title: "AI receptionist",
+    body: "Capture questions, quote services, collect details, and turn messages into booking-ready conversations.",
+    icon: MessageSquareText
+  },
+  {
+    title: "Field operations",
+    body: "Give crews a mobile job flow for start, notes, photos, checklist, signature, and completion.",
+    icon: Route
+  },
+  {
+    title: "Money follow-up",
+    body: "Create invoices, payment links, overdue reminders, and manager actions before revenue goes cold.",
+    icon: Banknote
+  },
+  {
+    title: "Staff visibility",
+    body: "Track assignments, attendance, active jobs, and daily operational bottlenecks from one console.",
+    icon: UsersRound
   }
+];
 
+export default function LandingPage() {
   return (
-    <main className="min-h-screen px-5 py-6 md:px-8">
-      <section className="mx-auto grid min-h-[calc(100vh-48px)] max-w-6xl items-center gap-6 md:grid-cols-[1.1fr_0.9fr]">
-        <div className="space-y-8">
-          <div className="flex items-center gap-3">
-            <Logo />
+    <main className="min-h-screen bg-[#f5f7f4] text-ink">
+      <section className="relative min-h-[92vh] overflow-hidden">
+        <Image
+          src={hero}
+          alt="Home-service operations team using CrewFlow"
+          fill
+          priority
+          sizes="100vw"
+          className="object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-ink/88 via-ink/62 to-ink/20" />
+        <header className="relative z-10 mx-auto flex max-w-7xl items-center justify-between px-5 py-5 md:px-8">
+          <div className="flex items-center gap-3 text-white">
+            <div className="flex h-11 w-11 items-center justify-center rounded-[8px] bg-white text-pine shadow-soft">
+              <Sparkles className="h-5 w-5" />
+            </div>
             <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.22em] text-pine">
-                CrewFlow
-              </p>
-              <p className="text-sm text-steel">Operations command center</p>
+              <p className="font-semibold">CrewFlow</p>
+              <p className="text-xs text-white/70">Operations AI for service teams</p>
             </div>
           </div>
-          <div className="max-w-2xl">
-            <h1 className="text-5xl font-semibold leading-[1.02] text-ink md:text-7xl">
-              Run today before it runs you.
-            </h1>
-            <p className="mt-5 max-w-xl text-lg leading-8 text-steel">
-              Bookings, inbox, field work, invoices, and revenue-risk actions in one focused console.
+          <Link
+            href="/app"
+            className="flex h-10 items-center gap-2 rounded-[8px] bg-white px-4 text-sm font-semibold text-ink transition hover:bg-mint"
+          >
+            Open app
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </header>
+
+        <div className="relative z-10 mx-auto flex min-h-[calc(92vh-84px)] max-w-7xl items-center px-5 pb-12 md:px-8">
+          <div className="max-w-3xl pt-10 text-white">
+            <p className="mb-5 inline-flex items-center gap-2 rounded-[8px] bg-white/12 px-3 py-2 text-sm font-semibold backdrop-blur">
+              <ShieldCheck className="h-4 w-4 text-mint" />
+              AI-powered operations assistant for service businesses
             </p>
-          </div>
-          <div className="grid max-w-3xl gap-3 sm:grid-cols-3">
-            <Signal icon={Headphones} label="Missed leads" value="Inbox" />
-            <Signal icon={Route} label="Crew status" value="Live jobs" />
-            <Signal icon={Banknote} label="Cash leaks" value="Actions" />
+            <h1 className="max-w-3xl text-5xl font-semibold leading-[1.01] md:text-7xl">
+              Stop losing bookings, invoices, and follow-ups in the daily rush.
+            </h1>
+            <p className="mt-6 max-w-2xl text-lg leading-8 text-white/82">
+              CrewFlow gives cleaning and home-service teams one command center for bookings,
+              staff, customer messages, field work, invoices, and revenue-risk actions.
+            </p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link
+                href="/app"
+                className="flex h-12 items-center gap-2 rounded-[8px] bg-mint px-5 font-semibold text-ink shadow-soft transition hover:bg-white"
+              >
+                Launch console
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+              <a
+                href="#engine"
+                className="flex h-12 items-center rounded-[8px] border border-white/35 px-5 font-semibold text-white backdrop-blur transition hover:bg-white/10"
+              >
+                See the engine
+              </a>
+            </div>
+            <div className="mt-8 grid max-w-3xl gap-3 sm:grid-cols-3">
+              {outcomes.map((item) => (
+                <Outcome key={item.label} {...item} />
+              ))}
+            </div>
           </div>
         </div>
+      </section>
 
-        <form
-          onSubmit={submit}
-          className="rounded-[8px] border border-white/80 bg-white/90 p-5 shadow-soft backdrop-blur md:p-6"
-        >
-          <div className="mb-6 flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-semibold text-ink">Sign in</h2>
-              <p className="mt-1 text-sm text-steel">Sparkle Home Services</p>
-            </div>
-            <ShieldCheck className="h-6 w-6 text-pine" />
+      <section id="engine" className="mx-auto grid max-w-7xl gap-8 px-5 py-16 md:grid-cols-[0.95fr_1.05fr] md:px-8">
+        <div>
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-pine">Money engine</p>
+          <h2 className="mt-3 text-4xl font-semibold leading-tight text-ink md:text-5xl">
+            Built around operational pain, not dashboard theater.
+          </h2>
+          <p className="mt-5 text-lg leading-8 text-steel">
+            Every screen points at a revenue problem: missed calls, slow replies, unassigned jobs,
+            no-shows, unpaid invoices, and confused staff.
+          </p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {features.map((feature) => (
+            <Feature key={feature.title} {...feature} />
+          ))}
+        </div>
+      </section>
+
+      <section className="mx-auto grid max-w-7xl gap-8 px-5 pb-16 md:grid-cols-[1.1fr_0.9fr] md:px-8">
+        <div className="relative min-h-[420px] overflow-hidden rounded-[8px] shadow-soft">
+          <Image
+            src={heroSecondary}
+            alt="Field team preparing service work"
+            fill
+            sizes="(min-width: 768px) 55vw, 100vw"
+            className="object-cover"
+          />
+        </div>
+        <div className="rounded-[8px] bg-ink p-6 text-white shadow-soft md:p-8">
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-mint">Workflow</p>
+          <h2 className="mt-3 text-3xl font-semibold leading-tight md:text-4xl">
+            From inquiry to paid invoice without losing the thread.
+          </h2>
+          <div className="mt-8 grid gap-4">
+            {[
+              "AI receptionist captures the request",
+              "Manager sees the booking-ready conversation",
+              "Crew completes the job from mobile",
+              "Invoice and payment follow-up happen immediately"
+            ].map((item, index) => (
+              <div key={item} className="flex gap-3">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-white text-sm font-bold text-ink">
+                  {index + 1}
+                </span>
+                <p className="pt-1 text-white/82">{item}</p>
+              </div>
+            ))}
           </div>
-          <label className="mb-4 block">
-            <span className="mb-2 block text-sm font-medium text-ink">Email</span>
-            <input
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              className="h-12 w-full rounded-[8px] border border-ink/10 bg-mist px-4 outline-none transition focus:border-pine"
-            />
-          </label>
-          <label className="block">
-            <span className="mb-2 block text-sm font-medium text-ink">Password</span>
-            <input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className="h-12 w-full rounded-[8px] border border-ink/10 bg-mist px-4 outline-none transition focus:border-pine"
-            />
-          </label>
-          {error ? (
-            <p className="mt-4 rounded-[8px] bg-coral/10 px-3 py-2 text-sm text-coral">
-              {error}
-            </p>
-          ) : null}
-          <button
-            disabled={login.isPending}
-            className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-[8px] bg-pine px-4 font-semibold text-white shadow-soft transition hover:bg-ink disabled:opacity-60"
+          <Link
+            href="/app"
+            className="mt-8 flex h-12 w-fit items-center gap-2 rounded-[8px] bg-white px-5 font-semibold text-ink transition hover:bg-mint"
           >
-            {login.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            Sign in
-          </button>
-        </form>
+            Enter CrewFlow
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
       </section>
     </main>
   );
 }
 
-function Console() {
-  const [view, setView] = useState<View>("overview");
-  const [drawer, setDrawer] = useState<DrawerState>(null);
-  const logout = useAuth((state) => state.logout);
-  const user = useAuth((state) => state.user);
-  const queryClient = useQueryClient();
-
-  const dashboard = useQuery({ queryKey: ["dashboard"], queryFn: api.dashboard });
-  const inbox = useQuery({ queryKey: ["inbox"], queryFn: api.inbox });
-  const actions = useQuery({ queryKey: ["actions"], queryFn: api.actions });
-  const bookings = useQuery({ queryKey: ["bookings"], queryFn: api.bookings });
-  const field = useQuery({ queryKey: ["field"], queryFn: api.fieldJobs });
-  const invoices = useQuery({ queryKey: ["invoices"], queryFn: api.invoices });
-  const payments = useQuery({ queryKey: ["payments"], queryFn: api.payments });
-  const health = useQuery({ queryKey: ["health"], queryFn: api.health });
-
-  const refreshAll = () => {
-    void queryClient.invalidateQueries();
-  };
-
-  return (
-    <main className="min-h-screen p-3 md:p-5">
-      <div className="mx-auto flex max-w-[1500px] gap-4">
-        <aside className="hidden w-64 shrink-0 rounded-[8px] border border-white/80 bg-white/90 p-4 shadow-soft backdrop-blur lg:block">
-          <div className="mb-8 flex items-center gap-3">
-            <Logo />
-            <div>
-              <p className="font-semibold text-ink">CrewFlow</p>
-              <p className="text-xs text-steel">Operations OS</p>
-            </div>
-          </div>
-          <nav className="space-y-1">
-            {nav.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => setView(item.id)}
-                className={cn(
-                  "flex h-11 w-full items-center gap-3 rounded-[8px] px-3 text-left text-sm font-medium transition",
-                  view === item.id
-                    ? "bg-pine text-white"
-                    : "text-steel hover:bg-mist hover:text-ink"
-                )}
-              >
-                <item.icon className="h-4 w-4" />
-                {item.label}
-              </button>
-            ))}
-          </nav>
-          <div className="mt-8 rounded-[8px] bg-mist p-3">
-            <p className="text-xs uppercase tracking-[0.18em] text-steel">API</p>
-            <div className="mt-2 flex items-center gap-2">
-              <span className={cn("h-2.5 w-2.5 rounded-full", health.data?.status === "ok" ? "bg-mint" : "bg-amber")} />
-              <span className="text-sm font-medium text-ink">{health.data?.database ?? "checking"}</span>
-            </div>
-          </div>
-        </aside>
-
-        <section className="min-w-0 flex-1">
-          <header className="mb-4 rounded-[8px] border border-white/80 bg-white/90 p-4 shadow-soft backdrop-blur">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="text-sm font-medium text-steel">Sparkle Home Services</p>
-                <h1 className="text-2xl font-semibold text-ink md:text-3xl">
-                  {titleFor(view)}
-                </h1>
-              </div>
-              <div className="flex items-center gap-2 overflow-x-auto">
-                <button
-                  onClick={refreshAll}
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] bg-mist text-ink transition hover:bg-pine hover:text-white"
-                  title="Refresh"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                </button>
-                <div className="flex shrink-0 items-center gap-2 rounded-[8px] bg-mist py-1 pl-1 pr-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-[8px] bg-pine text-xs font-bold text-white">
-                    {initials(user?.email)}
-                  </div>
-                  <span className="text-sm font-medium text-ink">{user?.role}</span>
-                </div>
-                <button
-                  onClick={logout}
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] bg-ink text-white transition hover:bg-coral"
-                  title="Logout"
-                >
-                  <LogOut className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-            <div className="mt-4 flex gap-2 overflow-x-auto lg:hidden">
-              {nav.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => setView(item.id)}
-                  className={cn(
-                    "flex h-10 shrink-0 items-center gap-2 rounded-[8px] px-3 text-sm font-medium",
-                    view === item.id ? "bg-pine text-white" : "bg-mist text-steel"
-                  )}
-                >
-                  <item.icon className="h-4 w-4" />
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          </header>
-
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={view}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.18 }}
-            >
-              {view === "overview" ? (
-                <Overview data={dashboard.data} actions={actions.data} loading={dashboard.isLoading} onOpen={setDrawer} />
-              ) : null}
-              {view === "inbox" ? <InboxView items={inbox.data} onOpen={setDrawer} /> : null}
-              {view === "bookings" ? <BookingsView items={bookings.data} onOpen={setDrawer} /> : null}
-              {view === "field" ? <FieldView items={field.data} onOpen={setDrawer} /> : null}
-              {view === "money" ? <MoneyView invoices={invoices.data} payments={payments.data} onOpen={setDrawer} /> : null}
-              {view === "actions" ? <ActionsView items={actions.data} onOpen={setDrawer} /> : null}
-            </motion.div>
-          </AnimatePresence>
-        </section>
-      </div>
-      <DetailDrawer state={drawer} onClose={() => setDrawer(null)} />
-    </main>
-  );
-}
-
-function Overview({
-  data,
-  actions,
-  loading,
-  onOpen
-}: {
-  data?: DashboardSummary;
-  actions?: OperationalAction[];
-  loading: boolean;
-  onOpen: (state: DrawerState) => void;
-}) {
-  if (loading) return <LoadingPanel />;
-  return (
-    <div className="grid gap-4">
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Metric icon={CalendarDays} label="Today" value={data?.today.appointments.length ?? 0} tone="pine" />
-        <Metric icon={Banknote} label="Paid revenue" value={money(data?.revenue.paidTotalCents)} tone="mint" />
-        <Metric icon={AlertTriangle} label="At risk" value={money(data?.revenue.atRiskTotalCents)} tone="coral" />
-        <Metric icon={UsersRound} label="Active crew" value={data?.activeStaff ?? 0} tone="amber" />
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
-        <Panel title="Revenue-risk alerts" icon={AlertTriangle}>
-          <div className="grid gap-3">
-            {data?.operations.alerts.map((alert) => (
-              <div key={alert.key} className="flex items-center justify-between rounded-[8px] bg-mist p-3">
-                <div>
-                  <p className="font-medium text-ink">{alert.title}</p>
-                  <p className="text-sm text-steel">{alert.value ?? (alert.amountCents ? money(alert.amountCents) : "Clear")}</p>
-                </div>
-                <Severity severity={alert.severity} />
-              </div>
-            ))}
-          </div>
-        </Panel>
-        <Panel title="Manager queue" icon={ClipboardCheck}>
-          <ActionList items={actions?.slice(0, 5)} onOpen={onOpen} />
-        </Panel>
-      </div>
-
-      <Panel title="Today’s appointments" icon={Clock3}>
-        <BookingRows items={data?.today.appointments} onOpen={onOpen} />
-      </Panel>
-    </div>
-  );
-}
-
-function InboxView({ items, onOpen }: { items?: Conversation[]; onOpen: (state: DrawerState) => void }) {
-  return (
-    <Panel title="Customer inbox" icon={MessageSquareText}>
-      <div className="grid gap-3">
-        {(items ?? []).map((item) => (
-          <Row key={item.id} onClick={() => onOpen({ type: "conversation", item })}>
-            <Avatar name={item.customer?.name} />
-            <div className="min-w-0 flex-1">
-              <p className="truncate font-semibold text-ink">{item.customer?.name ?? "New inquiry"}</p>
-              <p className="truncate text-sm text-steel">{item.messages?.[0]?.content ?? item.channel}</p>
-            </div>
-            <Status label={item.status} />
-            <p className="hidden text-sm text-steel md:block">{shortDate(item.lastMessageAt)}</p>
-          </Row>
-        ))}
-        <Empty show={!items?.length} label="No active conversations" />
-      </div>
-    </Panel>
-  );
-}
-
-function BookingsView({ items, onOpen }: { items?: Booking[]; onOpen: (state: DrawerState) => void }) {
-  return (
-    <Panel
-      title="Booking board"
-      icon={CalendarDays}
-      action={
-        <button onClick={() => onOpen({ type: "new-booking" })} className="flex h-9 items-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white">
-          <Plus className="h-4 w-4" />
-          New
-        </button>
-      }
-    >
-      <BookingRows items={items} onOpen={onOpen} />
-    </Panel>
-  );
-}
-
-function FieldView({ items, onOpen }: { items?: Booking[]; onOpen: (state: DrawerState) => void }) {
-  const queryClient = useQueryClient();
-  const complete = useMutation({
-    mutationFn: (bookingId: string) => api.completeFieldJob(bookingId),
-    onSuccess: () => {
-      void queryClient.invalidateQueries();
-    }
-  });
-
-  return (
-    <Panel title="Field jobs" icon={Route}>
-      <div className="grid gap-3">
-        {(items ?? []).map((item) => (
-          <Row key={item.id} onClick={() => onOpen({ type: "booking", item })}>
-            <div className="flex h-10 w-10 items-center justify-center rounded-[8px] bg-mist text-pine">
-              <Wrench className="h-5 w-5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate font-semibold text-ink">{item.service.title}</p>
-              <p className="truncate text-sm text-steel">
-                {item.customer.name} · {shortDate(item.startTime)}
-              </p>
-            </div>
-            <Status label={item.status} />
-            {item.status !== "COMPLETED" ? (
-              <button
-                onClick={(event) => {
-                  event.stopPropagation();
-                  complete.mutate(item.id);
-                }}
-                className="flex h-9 items-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white"
-              >
-                <CheckCircle2 className="h-4 w-4" />
-                Complete
-              </button>
-            ) : null}
-          </Row>
-        ))}
-        <Empty show={!items?.length} label="No field jobs today" />
-      </div>
-    </Panel>
-  );
-}
-
-function MoneyView({
-  invoices,
-  payments,
-  onOpen
-}: {
-  invoices?: Invoice[];
-  payments?: Payment[];
-  onOpen: (state: DrawerState) => void;
-}) {
-  const openInvoices = useMemo(
-    () => (invoices ?? []).filter((invoice) => invoice.status !== "PAID"),
-    [invoices]
-  );
-  return (
-    <div className="grid gap-4 xl:grid-cols-2">
-      <Panel title="Invoices" icon={CreditCard}>
-        <div className="grid gap-3">
-          {openInvoices.map((invoice) => (
-            <Row key={invoice.id} onClick={() => onOpen({ type: "invoice", item: invoice })}>
-              <div className="flex-1">
-                <p className="font-semibold text-ink">{invoice.invoiceNo}</p>
-                <p className="text-sm text-steel">{invoice.customer.name} · due {shortDate(invoice.dueDate)}</p>
-              </div>
-              <p className="font-semibold text-ink">{money(invoice.totalCents)}</p>
-              <Status label={invoice.status} />
-            </Row>
-          ))}
-          <Empty show={!openInvoices.length} label="No open invoices" />
-        </div>
-      </Panel>
-      <Panel title="Payments" icon={Banknote}>
-        <div className="grid gap-3">
-          {(payments ?? []).slice(0, 8).map((payment) => (
-            <Row key={payment.id}>
-              <div className="flex-1">
-                <p className="font-semibold text-ink">{payment.invoice.invoiceNo}</p>
-                <p className="text-sm text-steel">{payment.provider}</p>
-              </div>
-              <p className="font-semibold text-ink">{money(payment.amountCents)}</p>
-              <Status label={payment.status} />
-            </Row>
-          ))}
-          <Empty show={!payments?.length} label="No payments yet" />
-        </div>
-      </Panel>
-    </div>
-  );
-}
-
-function ActionsView({ items, onOpen }: { items?: OperationalAction[]; onOpen: (state: DrawerState) => void }) {
-  return (
-    <Panel title="Operational actions" icon={ClipboardCheck}>
-      <ActionList items={items} onOpen={onOpen} />
-    </Panel>
-  );
-}
-
-function ActionList({ items, onOpen }: { items?: OperationalAction[]; onOpen: (state: DrawerState) => void }) {
-  return (
-    <div className="grid gap-3">
-      {(items ?? []).map((item) => (
-        <Row key={item.id} onClick={() => onOpen({ type: "action", item })}>
-          <Priority priority={item.priority} />
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-semibold text-ink">{item.title}</p>
-            <p className="truncate text-sm text-steel">{item.customer?.name ?? item.type}</p>
-          </div>
-          <Status label={item.status} />
-          <p className="hidden text-sm text-steel md:block">{shortDate(item.dueAt)}</p>
-        </Row>
-      ))}
-      <Empty show={!items?.length} label="No actions open" />
-    </div>
-  );
-}
-
-function BookingRows({ items, onOpen }: { items?: Booking[]; onOpen: (state: DrawerState) => void }) {
-  return (
-    <div className="grid gap-3">
-      {(items ?? []).map((item) => (
-        <Row key={item.id} onClick={() => onOpen({ type: "booking", item })}>
-          <Avatar name={item.customer.name} />
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-semibold text-ink">{item.service.title}</p>
-            <p className="truncate text-sm text-steel">
-              {item.customer.name} · {item.assignedStaff?.name ?? "Unassigned"}
-            </p>
-          </div>
-          <p className="hidden text-sm font-medium text-ink md:block">{shortDate(item.startTime)}</p>
-          <Status label={item.status} />
-        </Row>
-      ))}
-      <Empty show={!items?.length} label="No bookings found" />
-    </div>
-  );
-}
-
-function Panel({
-  title,
-  icon: Icon,
-  action,
-  children
-}: {
-  title: string;
-  icon: typeof Inbox;
-  action?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="rounded-[8px] border border-white/80 bg-white/90 p-4 shadow-soft backdrop-blur">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-mist text-pine">
-            <Icon className="h-5 w-5" />
-          </div>
-          <h2 className="text-lg font-semibold text-ink">{title}</h2>
-        </div>
-        {action}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function Metric({
-  icon: Icon,
+function Outcome({
   label,
   value,
-  tone
+  icon: Icon
 }: {
-  icon: typeof Inbox;
   label: string;
-  value: string | number;
-  tone: "pine" | "mint" | "coral" | "amber";
+  value: string;
+  icon: typeof Headphones;
 }) {
-  const tones = {
-    pine: "bg-pine text-white",
-    mint: "bg-mint text-ink",
-    coral: "bg-coral text-white",
-    amber: "bg-amber text-ink"
-  };
   return (
-    <section className="rounded-[8px] border border-white/80 bg-white/90 p-4 shadow-soft backdrop-blur">
-      <div className={cn("mb-5 flex h-10 w-10 items-center justify-center rounded-[8px]", tones[tone])}>
+    <div className="rounded-[8px] border border-white/20 bg-white/12 p-4 backdrop-blur">
+      <Icon className="mb-5 h-5 w-5 text-mint" />
+      <p className="text-3xl font-semibold">{value}</p>
+      <p className="mt-1 text-sm text-white/75">{label}</p>
+    </div>
+  );
+}
+
+function Feature({
+  title,
+  body,
+  icon: Icon
+}: {
+  title: string;
+  body: string;
+  icon: typeof Headphones;
+}) {
+  return (
+    <div className="rounded-[8px] border border-ink/8 bg-white p-5 shadow-soft">
+      <div className={cn("mb-5 flex h-10 w-10 items-center justify-center rounded-[8px] bg-mist text-pine")}>
         <Icon className="h-5 w-5" />
       </div>
-      <p className="text-sm text-steel">{label}</p>
-      <p className="mt-1 text-3xl font-semibold text-ink">{value}</p>
-    </section>
-  );
-}
-
-function Signal({
-  icon: Icon,
-  label,
-  value
-}: {
-  icon: typeof Inbox;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-[8px] border border-white/80 bg-white/80 p-4 shadow-soft backdrop-blur">
-      <Icon className="mb-4 h-5 w-5 text-pine" />
-      <p className="text-xs uppercase tracking-[0.18em] text-steel">{label}</p>
-      <p className="mt-1 font-semibold text-ink">{value}</p>
+      <h3 className="text-lg font-semibold text-ink">{title}</h3>
+      <p className="mt-2 leading-7 text-steel">{body}</p>
     </div>
   );
-}
-
-function Row({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) {
-  return (
-    <div
-      onClick={onClick}
-      className={cn(
-        "flex min-h-[64px] items-center gap-3 rounded-[8px] border border-ink/5 bg-mist/80 p-3",
-        onClick && "cursor-pointer transition hover:border-pine/30 hover:bg-white"
-      )}
-    >
-      {children}
-    </div>
-  );
-}
-
-function Avatar({ name }: { name?: string | null }) {
-  return (
-    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] bg-ink text-sm font-bold text-white">
-      {initials(name)}
-    </div>
-  );
-}
-
-function Status({ label }: { label: string }) {
-  return (
-    <span className="shrink-0 rounded-[8px] bg-white px-2.5 py-1 text-xs font-semibold text-steel">
-      {label.replaceAll("_", " ")}
-    </span>
-  );
-}
-
-function Priority({ priority }: { priority: OperationalAction["priority"] }) {
-  const color =
-    priority === "URGENT"
-      ? "bg-coral text-white"
-      : priority === "HIGH"
-        ? "bg-amber text-ink"
-        : "bg-white text-steel";
-  return <span className={cn("rounded-[8px] px-2.5 py-1 text-xs font-bold", color)}>{priority}</span>;
-}
-
-function Severity({ severity }: { severity: "info" | "warning" | "critical" }) {
-  const color =
-    severity === "critical"
-      ? "bg-coral text-white"
-      : severity === "warning"
-        ? "bg-amber text-ink"
-        : "bg-mint text-ink";
-  return <span className={cn("rounded-[8px] px-2.5 py-1 text-xs font-bold", color)}>{severity}</span>;
-}
-
-function Empty({ show, label }: { show: boolean; label: string }) {
-  return show ? (
-    <div className="flex min-h-[120px] items-center justify-center rounded-[8px] border border-dashed border-ink/15 bg-white/50 text-sm font-medium text-steel">
-      {label}
-    </div>
-  ) : null;
-}
-
-function LoadingPanel() {
-  return (
-    <div className="flex min-h-[360px] items-center justify-center rounded-[8px] border border-white/80 bg-white/90 shadow-soft">
-      <Loader2 className="h-7 w-7 animate-spin text-pine" />
-    </div>
-  );
-}
-
-function DetailDrawer({
-  state,
-  onClose
-}: {
-  state: DrawerState;
-  onClose: () => void;
-}) {
-  return (
-    <AnimatePresence>
-      {state ? (
-        <>
-          <motion.div
-            className="fixed inset-0 z-40 bg-ink/30 backdrop-blur-sm"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onClose}
-          />
-          <motion.aside
-            className="fixed bottom-0 right-0 top-0 z-50 flex w-full max-w-xl flex-col border-l border-white/80 bg-white shadow-soft md:rounded-l-[8px]"
-            initial={{ x: "100%" }}
-            animate={{ x: 0 }}
-            exit={{ x: "100%" }}
-            transition={{ type: "spring", damping: 28, stiffness: 260 }}
-          >
-            <div className="flex items-center justify-between border-b border-ink/10 p-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pine">
-                  CrewFlow
-                </p>
-                <h2 className="text-xl font-semibold text-ink">{drawerTitle(state)}</h2>
-              </div>
-              <button
-                onClick={onClose}
-                className="flex h-10 w-10 items-center justify-center rounded-[8px] bg-mist text-ink transition hover:bg-ink hover:text-white"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              {state.type === "new-booking" ? <NewBookingForm onDone={onClose} /> : null}
-              {state.type === "booking" ? <BookingDetail item={state.item} /> : null}
-              {state.type === "conversation" ? <ConversationDetail item={state.item} /> : null}
-              {state.type === "invoice" ? <InvoiceDetail item={state.item} /> : null}
-              {state.type === "action" ? <ActionDetail item={state.item} onDone={onClose} /> : null}
-            </div>
-          </motion.aside>
-        </>
-      ) : null}
-    </AnimatePresence>
-  );
-}
-
-function NewBookingForm({ onDone }: { onDone: () => void }) {
-  const queryClient = useQueryClient();
-  const customers = useQuery({ queryKey: ["customers"], queryFn: api.customers });
-  const services = useQuery({ queryKey: ["services"], queryFn: api.services });
-  const staff = useQuery({ queryKey: ["staff"], queryFn: api.staff });
-  const [customerId, setCustomerId] = useState("");
-  const [serviceId, setServiceId] = useState("");
-  const [assignedStaffId, setAssignedStaffId] = useState("");
-  const [startTime, setStartTime] = useState("");
-  const [notes, setNotes] = useState("");
-
-  const create = useMutation({
-    mutationFn: () =>
-      api.createBooking({
-        customerId,
-        serviceId,
-        assignedStaffId: assignedStaffId || undefined,
-        startTime: new Date(startTime).toISOString(),
-        notes: notes || undefined
-      }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries();
-      onDone();
-    }
-  });
-
-  const canSubmit = customerId && serviceId && startTime;
-
-  return (
-    <form
-      className="grid gap-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (canSubmit) create.mutate();
-      }}
-    >
-      <SelectField label="Customer" value={customerId} onChange={setCustomerId}>
-        <option value="">Choose customer</option>
-        {(customers.data ?? []).map((customer) => (
-          <option key={customer.id} value={customer.id}>
-            {customer.name} · {customer.phone}
-          </option>
-        ))}
-      </SelectField>
-      <SelectField label="Service" value={serviceId} onChange={setServiceId}>
-        <option value="">Choose service</option>
-        {(services.data ?? []).map((service) => (
-          <option key={service.id} value={service.id}>
-            {service.title} · {money(service.priceCents)}
-          </option>
-        ))}
-      </SelectField>
-      <SelectField label="Staff" value={assignedStaffId} onChange={setAssignedStaffId}>
-        <option value="">Unassigned</option>
-        {(staff.data ?? []).map((member: StaffMember) => (
-          <option key={member.id} value={member.id}>
-            {member.name} · {member.role}
-          </option>
-        ))}
-      </SelectField>
-      <label className="block">
-        <span className="mb-2 block text-sm font-medium text-ink">Start time</span>
-        <input
-          type="datetime-local"
-          value={startTime}
-          onChange={(event) => setStartTime(event.target.value)}
-          className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
-        />
-      </label>
-      <label className="block">
-        <span className="mb-2 block text-sm font-medium text-ink">Notes</span>
-        <textarea
-          value={notes}
-          onChange={(event) => setNotes(event.target.value)}
-          className="min-h-28 w-full rounded-[8px] border border-ink/10 bg-mist p-3 outline-none focus:border-pine"
-        />
-      </label>
-      {create.error ? <ErrorText error={create.error} /> : null}
-      <button
-        disabled={!canSubmit || create.isPending}
-        className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 font-semibold text-white disabled:opacity-50"
-      >
-        {create.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-        Create booking
-      </button>
-    </form>
-  );
-}
-
-function BookingDetail({ item }: { item: Booking }) {
-  return (
-    <div className="grid gap-4">
-      <DetailCard icon={CalendarDays} title={item.service.title}>
-        <Info label="Customer" value={item.customer.name} />
-        <Info label="Time" value={shortDate(item.startTime)} />
-        <Info label="Staff" value={item.assignedStaff?.name ?? "Unassigned"} />
-        <Info label="Status" value={item.status.replaceAll("_", " ")} />
-        {item.notes ? <Info label="Notes" value={item.notes} /> : null}
-      </DetailCard>
-      {item.invoice ? (
-        <DetailCard icon={FileText} title="Invoice">
-          <Info label="Invoice" value={item.invoice.invoiceNo} />
-          <Info label="Total" value={money(item.invoice.totalCents)} />
-          <Info label="Status" value={item.invoice.status} />
-        </DetailCard>
-      ) : null}
-    </div>
-  );
-}
-
-function ConversationDetail({ item }: { item: Conversation }) {
-  const queryClient = useQueryClient();
-  const full = useQuery({
-    queryKey: ["conversation", item.id],
-    queryFn: () => api.conversation(item.id)
-  });
-  const [reply, setReply] = useState("");
-  const sendReply = useMutation({
-    mutationFn: () => api.replyConversation(item.id, reply),
-    onSuccess: () => {
-      setReply("");
-      void queryClient.invalidateQueries();
-    }
-  });
-  const suggest = useMutation({
-    mutationFn: () => api.suggestReply(item.id),
-    onSuccess: (data) => setReply(data.reply)
-  });
-  const conversation = full.data ?? item;
-
-  return (
-    <div className="grid gap-4">
-      <DetailCard icon={MessageSquareText} title={conversation.customer?.name ?? "New inquiry"}>
-        <Info label="Channel" value={conversation.channel} />
-        <Info label="Status" value={conversation.status} />
-        <Info label="Last message" value={shortDate(conversation.lastMessageAt)} />
-      </DetailCard>
-      <div className="grid gap-2">
-        {(conversation.messages ?? []).map((message) => (
-          <div
-            key={message.id ?? `${message.createdAt}-${message.role}`}
-            className={cn(
-              "rounded-[8px] p-3 text-sm",
-              message.role === "CUSTOMER" ? "bg-mist text-ink" : "bg-pine text-white"
-            )}
-          >
-            <p className="mb-1 text-xs font-semibold opacity-70">{message.role}</p>
-            {message.content}
-          </div>
-        ))}
-      </div>
-      <div className="rounded-[8px] bg-mist p-3">
-        <textarea
-          value={reply}
-          onChange={(event) => setReply(event.target.value)}
-          placeholder="Write a reply..."
-          className="min-h-28 w-full rounded-[8px] border border-ink/10 bg-white p-3 outline-none focus:border-pine"
-        />
-        <div className="mt-3 flex gap-2">
-          <button
-            onClick={() => suggest.mutate()}
-            disabled={suggest.isPending}
-            className="flex h-10 items-center gap-2 rounded-[8px] bg-white px-3 text-sm font-semibold text-ink"
-          >
-            {suggest.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
-            Suggest
-          </button>
-          <button
-            onClick={() => sendReply.mutate()}
-            disabled={!reply || sendReply.isPending}
-            className="flex h-10 items-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
-          >
-            {sendReply.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            Send
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function InvoiceDetail({ item }: { item: Invoice }) {
-  const queryClient = useQueryClient();
-  const paymentLink = useMutation({
-    mutationFn: () => api.createPaymentLink(item.id),
-    onSuccess: () => {
-      void queryClient.invalidateQueries();
-    }
-  });
-
-  return (
-    <div className="grid gap-4">
-      <DetailCard icon={CreditCard} title={item.invoiceNo}>
-        <Info label="Customer" value={item.customer.name} />
-        <Info label="Due" value={shortDate(item.dueDate)} />
-        <Info label="Total" value={money(item.totalCents)} />
-        <Info label="Status" value={item.status} />
-      </DetailCard>
-      <button
-        onClick={() => paymentLink.mutate()}
-        disabled={paymentLink.isPending || item.status === "PAID"}
-        className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 font-semibold text-white disabled:opacity-50"
-      >
-        {paymentLink.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
-        Create payment link
-      </button>
-      {item.paymentUrl ? (
-        <a
-          href={item.paymentUrl}
-          target="_blank"
-          className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-mist px-4 font-semibold text-ink"
-        >
-          <ExternalLink className="h-4 w-4" />
-          Open payment page
-        </a>
-      ) : null}
-      {paymentLink.error ? <ErrorText error={paymentLink.error} /> : null}
-    </div>
-  );
-}
-
-function ActionDetail({ item, onDone }: { item: OperationalAction; onDone: () => void }) {
-  const queryClient = useQueryClient();
-  const update = useMutation({
-    mutationFn: (status: "IN_PROGRESS" | "COMPLETED" | "DISMISSED") =>
-      api.updateAction(item.id, status),
-    onSuccess: () => {
-      void queryClient.invalidateQueries();
-      onDone();
-    }
-  });
-
-  return (
-    <div className="grid gap-4">
-      <DetailCard icon={ClipboardCheck} title={item.title}>
-        <Info label="Priority" value={item.priority} />
-        <Info label="Status" value={item.status} />
-        <Info label="Customer" value={item.customer?.name ?? "Not linked"} />
-        <Info label="Due" value={shortDate(item.dueAt)} />
-        {item.description ? <Info label="Details" value={item.description} /> : null}
-      </DetailCard>
-      <div className="grid gap-2 sm:grid-cols-3">
-        <ActionButton label="Start" icon={Play} onClick={() => update.mutate("IN_PROGRESS")} />
-        <ActionButton label="Complete" icon={CheckCircle2} onClick={() => update.mutate("COMPLETED")} />
-        <ActionButton label="Dismiss" icon={X} onClick={() => update.mutate("DISMISSED")} />
-      </div>
-      {update.error ? <ErrorText error={update.error} /> : null}
-    </div>
-  );
-}
-
-function DetailCard({
-  icon: Icon,
-  title,
-  children
-}: {
-  icon: typeof Inbox;
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="rounded-[8px] bg-mist p-4">
-      <div className="mb-4 flex items-center gap-2">
-        <div className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-white text-pine">
-          <Icon className="h-5 w-5" />
-        </div>
-        <h3 className="text-lg font-semibold text-ink">{title}</h3>
-      </div>
-      <div className="grid gap-3">{children}</div>
-    </section>
-  );
-}
-
-function Info({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-steel">{label}</p>
-      <p className="mt-1 text-sm font-medium text-ink">{value}</p>
-    </div>
-  );
-}
-
-function SelectField({
-  label,
-  value,
-  onChange,
-  children
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="block">
-      <span className="mb-2 block text-sm font-medium text-ink">{label}</span>
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
-      >
-        {children}
-      </select>
-    </label>
-  );
-}
-
-function ActionButton({
-  label,
-  icon: Icon,
-  onClick
-}: {
-  label: string;
-  icon: typeof Inbox;
-  onClick: () => void;
-}) {
-  return (
-    <button onClick={onClick} className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink">
-      <Icon className="h-4 w-4" />
-      {label}
-    </button>
-  );
-}
-
-function ErrorText({ error }: { error: unknown }) {
-  return (
-    <p className="rounded-[8px] bg-coral/10 px-3 py-2 text-sm font-medium text-coral">
-      {error instanceof Error ? error.message : "Something went wrong"}
-    </p>
-  );
-}
-
-function drawerTitle(state: NonNullable<DrawerState>) {
-  if (state.type === "new-booking") return "New booking";
-  if (state.type === "booking") return "Booking details";
-  if (state.type === "conversation") return "Conversation";
-  if (state.type === "invoice") return "Invoice";
-  return "Action";
-}
-
-function Logo() {
-  return (
-    <div className="flex h-11 w-11 items-center justify-center rounded-[8px] bg-ink text-white shadow-soft">
-      <Sparkles className="h-5 w-5" />
-    </div>
-  );
-}
-
-function titleFor(view: View) {
-  return {
-    overview: "Operations overview",
-    inbox: "Customer inbox",
-    bookings: "Booking board",
-    field: "Field operations",
-    money: "Invoices and payments",
-    actions: "Manager action queue"
-  }[view];
 }

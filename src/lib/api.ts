@@ -76,6 +76,16 @@ export const api = {
   services: () => request<Service[]>("/services"),
   staff: () => request<StaffMember[]>("/tenant/staff"),
   fieldJobs: () => request<Booking[]>("/field/jobs"),
+  startFieldJob: (bookingId: string) =>
+    request<Booking>(`/field/jobs/${bookingId}/start`, { method: "POST" }),
+  saveFieldNotes: (
+    bookingId: string,
+    input: { staffNotes?: string; photoUrls?: string[] }
+  ) =>
+    request<FieldJobReport>(`/field/jobs/${bookingId}/notes`, {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
   invoices: () => request<Invoice[]>("/invoices"),
   createPaymentLink: (invoiceId: string) =>
     request<{ invoice: Invoice; payment: Payment }>(`/invoices/${invoiceId}/payment-link`, {
@@ -85,17 +95,29 @@ export const api = {
   payments: () => request<Payment[]>("/payments"),
   health: () => request<Health>("/health"),
   schedulerRun: () => request<unknown>("/scheduler/run-now", { method: "POST" }),
-  completeFieldJob: (bookingId: string) =>
-    request<unknown>(`/field/jobs/${bookingId}/complete`, {
+  completeFieldJob: (
+    bookingId: string,
+    input?: {
+      checklist?: Array<{ label: string; done: boolean; note?: string }>;
+      photoUrls?: string[];
+      staffNotes?: string;
+      customerSignatureName?: string;
+      customerSignatureUrl?: string;
+      autoInvoice?: boolean;
+    }
+  ) =>
+    request<{ booking: Booking; report: FieldJobReport; invoice?: Invoice | null }>(`/field/jobs/${bookingId}/complete`, {
       method: "POST",
-      body: JSON.stringify({
-        checklist: [
-          { label: "Service completed", done: true },
-          { label: "Customer notified", done: true }
-        ],
-        staffNotes: "Completed from CrewFlow console.",
-        autoInvoice: true
-      })
+      body: JSON.stringify(
+        input ?? {
+          checklist: [
+            { label: "Service completed", done: true },
+            { label: "Customer notified", done: true }
+          ],
+          staffNotes: "Completed from CrewFlow console.",
+          autoInvoice: true
+        }
+      )
     })
 };
 
@@ -166,7 +188,19 @@ export type Booking = {
   service: Service;
   assignedStaff?: { id: string; name: string } | null;
   invoice?: Invoice | null;
-  fieldJobReport?: unknown;
+  fieldJobReport?: FieldJobReport | null;
+};
+
+export type FieldJobReport = {
+  id: string;
+  status: string;
+  checklist?: Array<{ label: string; done: boolean; note?: string }> | null;
+  photoUrls: string[];
+  staffNotes?: string | null;
+  customerSignatureName?: string | null;
+  customerSignatureUrl?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
 };
 
 export type Invoice = {
