@@ -42,9 +42,11 @@ import {
   Conversation,
   DashboardSummary,
   Invoice,
+  OnboardingProfile,
   OperationalAction,
   Payment,
-  StaffMember
+  StaffMember,
+  TenantProfile
 } from "@/lib/api";
 import { cn, initials, money, shortDate } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
@@ -55,7 +57,8 @@ const nav = [
   { id: "bookings", label: "Bookings", icon: CalendarDays },
   { id: "field", label: "Field", icon: Route },
   { id: "money", label: "Money", icon: CreditCard },
-  { id: "actions", label: "Actions", icon: ClipboardCheck }
+  { id: "actions", label: "Actions", icon: ClipboardCheck },
+  { id: "settings", label: "Settings", icon: Settings2 }
 ] as const;
 
 type View = (typeof nav)[number]["id"];
@@ -180,6 +183,8 @@ function Console() {
   const invoices = useQuery({ queryKey: ["invoices"], queryFn: api.invoices });
   const payments = useQuery({ queryKey: ["payments"], queryFn: api.payments });
   const health = useQuery({ queryKey: ["health"], queryFn: api.health });
+  const tenant = useQuery({ queryKey: ["tenant"], queryFn: api.tenant });
+  const onboarding = useQuery({ queryKey: ["onboarding"], queryFn: api.onboarding });
   const customers = useQuery({ queryKey: ["customers"], queryFn: api.customers });
   const services = useQuery({ queryKey: ["services"], queryFn: api.services });
   const staff = useQuery({ queryKey: ["staff"], queryFn: api.staff });
@@ -229,7 +234,9 @@ function Console() {
           <header className="mb-4 rounded-[8px] border border-white/80 bg-white/90 p-4 shadow-soft backdrop-blur">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
-                <p className="text-sm font-medium text-steel">Sparkle Home Services</p>
+                <p className="text-sm font-medium text-steel">
+                  {tenant.data?.businessName ?? "Sparkle Home Services"}
+                </p>
                 <h1 className="text-2xl font-semibold text-ink md:text-3xl">
                   {titleFor(view)}
                 </h1>
@@ -289,6 +296,8 @@ function Console() {
                   customers={customers.data}
                   services={services.data}
                   staff={staff.data}
+                  onboarding={onboarding.data}
+                  tenant={tenant.data}
                   loading={dashboard.isLoading}
                   onOpen={setDrawer}
                   onView={setView}
@@ -299,6 +308,7 @@ function Console() {
               {view === "field" ? <FieldView items={field.data} onOpen={setDrawer} /> : null}
               {view === "money" ? <MoneyView invoices={invoices.data} payments={payments.data} onOpen={setDrawer} /> : null}
               {view === "actions" ? <ActionsView items={actions.data} onOpen={setDrawer} /> : null}
+              {view === "settings" ? <SettingsView tenant={tenant.data} onboarding={onboarding.data} /> : null}
             </motion.div>
           </AnimatePresence>
         </section>
@@ -314,6 +324,8 @@ function Overview({
   customers,
   services,
   staff,
+  onboarding,
+  tenant,
   loading,
   onOpen,
   onView
@@ -323,6 +335,8 @@ function Overview({
   customers?: unknown[];
   services?: unknown[];
   staff?: unknown[];
+  onboarding?: OnboardingProfile;
+  tenant?: TenantProfile;
   loading: boolean;
   onOpen: (state: DrawerState) => void;
   onView: (view: View) => void;
@@ -335,6 +349,8 @@ function Overview({
         services={services?.length ?? 0}
         staff={staff?.length ?? 0}
         bookings={data?.today.appointments.length ?? 0}
+        onboarding={onboarding}
+        tenant={tenant}
         onOpen={onOpen}
         onView={onView}
       />
@@ -415,6 +431,8 @@ function SetupChecklist({
   services,
   staff,
   bookings,
+  onboarding,
+  tenant,
   onOpen,
   onView
 }: {
@@ -422,17 +440,24 @@ function SetupChecklist({
   services: number;
   staff: number;
   bookings: number;
+  onboarding?: OnboardingProfile;
+  tenant?: TenantProfile;
   onOpen: (state: DrawerState) => void;
   onView: (view: View) => void;
 }) {
+  const completedSteps = new Set(tenant?.onboardingProfile?.completedSteps ?? []);
+  const whatsappReady =
+    Boolean(onboarding?.whatsappNumber) ||
+    completedSteps.has("whatsappPlanned") ||
+    tenant?.onboardingProfile?.setupStatus === "READY";
   const items = [
     {
       label: "Business profile ready",
-      detail: "Tenant and sample company are active.",
-      done: true,
+      detail: tenant ? `${tenant.businessName} · ${tenant.industry}` : "Tenant profile is active.",
+      done: Boolean(tenant),
       icon: Building2,
       action: "Review",
-      onClick: () => onView("overview")
+      onClick: () => onView("settings")
     },
     {
       label: "Services loaded",
@@ -440,7 +465,7 @@ function SetupChecklist({
       done: services > 0,
       icon: Settings2,
       action: "Services",
-      onClick: () => onOpen({ type: "new-booking" })
+      onClick: () => onView("settings")
     },
     {
       label: "Staff added",
@@ -448,7 +473,7 @@ function SetupChecklist({
       done: staff > 0,
       icon: UsersRound,
       action: "Staff",
-      onClick: () => onView("field")
+      onClick: () => onView("settings")
     },
     {
       label: "First booking created",
@@ -468,11 +493,13 @@ function SetupChecklist({
     },
     {
       label: "WhatsApp automation planned",
-      detail: "Connect reminders, on-the-way texts, invoice nudges, and review requests.",
-      done: false,
+      detail: onboarding?.whatsappNumber
+        ? `Automation number: ${onboarding.whatsappNumber}`
+        : "Connect reminders, on-the-way texts, invoice nudges, and review requests.",
+      done: whatsappReady,
       icon: MessageSquareText,
-      action: "Inbox",
-      onClick: () => onView("inbox")
+      action: "Settings",
+      onClick: () => onView("settings")
     }
   ];
   const completed = items.filter((item) => item.done).length;
@@ -487,6 +514,11 @@ function SetupChecklist({
             This checklist keeps onboarding focused on the operating pieces that make a business pay:
             services, staff, bookings, customers, and automation.
           </p>
+          {onboarding?.biggestProblem ? (
+            <p className="mt-3 rounded-[8px] bg-white/8 p-3 text-sm leading-6 text-white/72">
+              Priority: {onboarding.biggestProblem}
+            </p>
+          ) : null}
           <div className="mt-5">
             <div className="mb-2 flex items-center justify-between text-sm font-semibold">
               <span>{completed} of {items.length} complete</span>
@@ -623,6 +655,171 @@ function MoneyView({
           <Empty show={!payments?.length} label="No payments yet" />
         </div>
       </Panel>
+    </div>
+  );
+}
+
+function SettingsView({
+  tenant,
+  onboarding
+}: {
+  tenant?: TenantProfile;
+  onboarding?: OnboardingProfile;
+}) {
+  if (!tenant) return <LoadingPanel />;
+
+  return <SettingsForm key={`${tenant.id}-${onboarding?.updatedAt ?? "new"}`} tenant={tenant} onboarding={onboarding} />;
+}
+
+function SettingsForm({
+  tenant,
+  onboarding
+}: {
+  tenant: TenantProfile;
+  onboarding?: OnboardingProfile;
+}) {
+  const queryClient = useQueryClient();
+  const [businessName, setBusinessName] = useState(tenant.businessName);
+  const [industry, setIndustry] = useState(tenant.industry);
+  const [serviceArea, setServiceArea] = useState(tenant.receptionistConfig?.serviceArea ?? "");
+  const [whatsappNumber, setWhatsappNumber] = useState(onboarding?.whatsappNumber ?? "");
+  const [staffCount, setStaffCount] = useState(onboarding?.staffCount ?? "");
+  const [biggestProblem, setBiggestProblem] = useState(onboarding?.biggestProblem ?? "");
+  const [weekdayHours, setWeekdayHours] = useState(
+    tenant.receptionistConfig?.businessHours?.monday ?? "8:00 AM - 5:00 PM"
+  );
+  const [saturdayHours, setSaturdayHours] = useState(
+    tenant.receptionistConfig?.businessHours?.saturday ?? "Closed"
+  );
+  const [whatsappPlanned, setWhatsappPlanned] = useState(Boolean(onboarding?.whatsappNumber));
+
+  const save = useMutation({
+    mutationFn: () =>
+      api.updateTenant({
+        businessName,
+        industry,
+        serviceArea,
+        whatsappNumber,
+        staffCount,
+        biggestProblem,
+        whatsappPlanned,
+        completedSteps: [
+          "businessProfile",
+          "operatingDetails",
+          ...(whatsappPlanned || whatsappNumber ? ["whatsappPlanned"] : []),
+          ...(staffCount ? ["staffPlan"] : [])
+        ],
+        businessHours: {
+          monday: weekdayHours,
+          tuesday: weekdayHours,
+          wednesday: weekdayHours,
+          thursday: weekdayHours,
+          friday: weekdayHours,
+          saturday: saturdayHours,
+          sunday: "Closed"
+        }
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["tenant"] });
+      void queryClient.invalidateQueries({ queryKey: ["onboarding"] });
+    }
+  });
+
+  return (
+    <div className="grid gap-4 xl:grid-cols-[1fr_0.8fr]">
+      <Panel title="Tenant settings" icon={Settings2}>
+        <div className="grid gap-4 md:grid-cols-2">
+          <InputField label="Business name" value={businessName} onChange={setBusinessName} />
+          <InputField label="Industry" value={industry} onChange={setIndustry} />
+          <InputField label="Service area" value={serviceArea} onChange={setServiceArea} />
+          <InputField label="WhatsApp number" value={whatsappNumber} onChange={setWhatsappNumber} />
+          <InputField label="Staff plan" value={staffCount} onChange={setStaffCount} />
+          <InputField label="Weekday hours" value={weekdayHours} onChange={setWeekdayHours} />
+          <InputField label="Saturday hours" value={saturdayHours} onChange={setSaturdayHours} />
+          <label className="flex min-h-11 items-center gap-3 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink">
+            <input
+              type="checkbox"
+              checked={whatsappPlanned}
+              onChange={(event) => setWhatsappPlanned(event.target.checked)}
+              className="h-5 w-5 accent-pine"
+            />
+            WhatsApp automation planned
+          </label>
+        </div>
+        <label className="mt-4 block">
+          <span className="mb-2 block text-sm font-medium text-ink">Biggest operational problem</span>
+          <textarea
+            value={biggestProblem}
+            onChange={(event) => setBiggestProblem(event.target.value)}
+            className="min-h-28 w-full rounded-[8px] border border-ink/10 bg-mist p-3 outline-none focus:border-pine"
+          />
+        </label>
+        {save.error ? <ErrorText error={save.error} /> : null}
+        {save.isSuccess ? (
+          <p className="mt-3 rounded-[8px] bg-mint/30 px-3 py-2 text-sm font-semibold text-ink">
+            Settings saved. Setup progress updated.
+          </p>
+        ) : null}
+        <button
+          onClick={() => save.mutate()}
+          disabled={save.isPending || !businessName || !industry}
+          className="mt-4 flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 font-semibold text-white disabled:opacity-50"
+        >
+          {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          Save settings
+        </button>
+      </Panel>
+
+      <Panel title="Setup readiness" icon={ClipboardCheck}>
+        <div className="grid gap-3">
+          <ReadinessRow label="Business profile" done={Boolean(tenant?.businessName && tenant?.industry)} />
+          <ReadinessRow label="Operating area" done={Boolean(serviceArea)} />
+          <ReadinessRow label="Business hours" done={Boolean(weekdayHours)} />
+          <ReadinessRow label="WhatsApp plan" done={Boolean(whatsappNumber || whatsappPlanned)} />
+          <ReadinessRow label="Staff plan" done={Boolean(staffCount)} />
+        </div>
+        <div className="mt-4 rounded-[8px] bg-mist p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-steel">Status</p>
+          <p className="mt-1 text-2xl font-semibold text-ink">
+            {tenant?.onboardingProfile?.setupStatus ?? onboarding?.setupStatus ?? "IN_PROGRESS"}
+          </p>
+          <p className="mt-2 text-sm leading-6 text-steel">
+            Settings here drive the first-run checklist and give the AI receptionist the business context it needs.
+          </p>
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function InputField({
+  label,
+  value,
+  onChange
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-sm font-medium text-ink">{label}</span>
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
+      />
+    </label>
+  );
+}
+
+function ReadinessRow({ label, done }: { label: string; done: boolean }) {
+  return (
+    <div className="flex items-center justify-between rounded-[8px] bg-mist p-3">
+      <p className="font-medium text-ink">{label}</p>
+      <span className={cn("rounded-[8px] px-2.5 py-1 text-xs font-bold", done ? "bg-mint text-ink" : "bg-white text-steel")}>
+        {done ? "Ready" : "Needed"}
+      </span>
     </div>
   );
 }
@@ -1399,6 +1596,7 @@ function titleFor(view: View) {
     bookings: "Booking board",
     field: "Field operations",
     money: "Invoices and payments",
-    actions: "Manager action queue"
+    actions: "Manager action queue",
+    settings: "Tenant settings"
   }[view];
 }

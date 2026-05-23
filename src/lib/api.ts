@@ -101,6 +101,13 @@ export const api = {
     }),
   customers: () => request<Customer[]>("/customers"),
   services: () => request<Service[]>("/services"),
+  tenant: () => request<TenantProfile>("/tenant"),
+  onboarding: () => request<OnboardingProfile>("/tenant/onboarding"),
+  updateTenant: (input: UpdateTenantInput) =>
+    request<TenantProfile>("/tenant", {
+      method: "PATCH",
+      body: JSON.stringify(input)
+    }),
   staff: () => request<StaffMember[]>("/tenant/staff"),
   fieldJobs: () => request<Booking[]>("/field/jobs"),
   startFieldJob: (bookingId: string) =>
@@ -165,6 +172,50 @@ export type Health = {
   status: string;
   database: string;
   latencyMs: number;
+};
+
+export type TenantProfile = {
+  id: string;
+  businessName: string;
+  slug: string;
+  industry: string;
+  subscriptionPlan: string;
+  createdAt: string;
+  onboardingProfile?: OnboardingProfile & { completedSteps?: string[] };
+  receptionistConfig?: {
+    displayName: string;
+    serviceArea?: string | null;
+    businessHours?: Record<string, string> | null;
+    enabled: boolean;
+  } | null;
+};
+
+export type OnboardingProfile = {
+  id: string;
+  tenantId: string;
+  ownerName: string;
+  ownerEmail: string;
+  ownerPhone?: string | null;
+  staffCount?: string | null;
+  whatsappNumber?: string | null;
+  services: string[];
+  biggestProblem?: string | null;
+  setupStatus: string;
+  source: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type UpdateTenantInput = {
+  businessName?: string;
+  industry?: string;
+  whatsappNumber?: string;
+  serviceArea?: string;
+  businessHours?: Record<string, string>;
+  biggestProblem?: string;
+  staffCount?: string;
+  completedSteps?: string[];
+  whatsappPlanned?: boolean;
 };
 
 export type DashboardSummary = {
