@@ -2,19 +2,26 @@
 
 import {
   AlertTriangle,
+  Activity,
   Building2,
   CheckCircle2,
   CreditCard,
+  KeyRound,
+  LayoutDashboard,
+  LifeBuoy,
+  ListChecks,
   Loader2,
   LogOut,
   RefreshCw,
+  Search,
   ServerCog,
   ShieldCheck,
+  SlidersHorizontal,
   TimerReset,
   UsersRound
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import {
   api,
   PlatformAuditLog,
@@ -34,6 +41,24 @@ import {
 } from "@/lib/api";
 import { cn, money, shortDate } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
+
+type AdminSection = "overview" | "tenants" | "failures" | "audit";
+
+const adminNav: Array<{ id: AdminSection; label: string; icon: typeof ShieldCheck }> = [
+  { id: "overview", label: "Overview", icon: LayoutDashboard },
+  { id: "tenants", label: "Tenants", icon: Building2 },
+  { id: "failures", label: "Failures", icon: AlertTriangle },
+  { id: "audit", label: "Audit", icon: ShieldCheck }
+];
+
+const tenantStatuses: PlatformTenant["status"][] = ["TRIAL", "ACTIVE", "SUSPENDED", "CHURNED"];
+const subscriptionStatuses: NonNullable<PlatformTenant["subscriptionStatus"]>[] = [
+  "TRIALING",
+  "ACTIVE",
+  "PAST_DUE",
+  "CANCELED",
+  "UNPAID"
+];
 
 export default function AdminPage() {
   const token = useAuth((state) => state.token);
@@ -100,6 +125,8 @@ function AdminLogin() {
 function AdminConsole() {
   const logout = useAuth((state) => state.logout);
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
+  const [section, setSection] = useState<AdminSection>("overview");
+  const [search, setSearch] = useState("");
   const queryClient = useQueryClient();
   const metrics = useQuery({ queryKey: ["platform-metrics"], queryFn: api.platformMetrics });
   const tenants = useQuery({ queryKey: ["platform-tenants"], queryFn: api.platformTenants });
@@ -111,63 +138,167 @@ function AdminConsole() {
     queryFn: api.readiness,
     refetchInterval: 60_000
   });
+  const filteredTenants = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    if (!needle) return tenants.data ?? [];
+    return (tenants.data ?? []).filter((tenant) =>
+      [
+        tenant.businessName,
+        tenant.slug,
+        tenant.industry,
+        tenant.status,
+        tenant.subscriptionStatus ?? "",
+        tenant.subscriptionPlan
+      ].join(" ").toLowerCase().includes(needle)
+    );
+  }, [search, tenants.data]);
+  const selectedTenant = filteredTenants.find((tenant) => tenant.id === selectedTenantId) ?? null;
 
   return (
-    <main className="min-h-screen p-4 md:p-6">
-      <div className="mx-auto grid max-w-[1500px] gap-4">
-        <header className="rounded-[8px] border border-white/80 bg-white/90 p-4 shadow-soft">
+    <main className="min-h-screen p-3 md:p-5">
+      <div className="mx-auto grid max-w-[1600px] gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
+        <aside className="rounded-[8px] border border-white/80 bg-white/90 p-4 shadow-soft lg:sticky lg:top-5 lg:h-[calc(100vh-40px)]">
+          <div className="mb-6 flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-[8px] bg-ink text-white">
+              <ShieldCheck className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate font-semibold text-ink">CrewFlow Admin</p>
+              <p className="truncate text-xs text-steel">Platform operations</p>
+            </div>
+          </div>
+          <nav className="grid gap-1">
+            {adminNav.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => setSection(item.id)}
+                className={cn(
+                  "flex h-11 items-center gap-3 rounded-[8px] px-3 text-left text-sm font-semibold transition",
+                  section === item.id ? "bg-pine text-white" : "text-steel hover:bg-mist hover:text-ink"
+                )}
+              >
+                <item.icon className="h-4 w-4" />
+                {item.label}
+              </button>
+            ))}
+          </nav>
+          <div className="mt-6 rounded-[8px] bg-mist p-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-steel">System</p>
+            <div className="mt-3 grid gap-2 text-sm font-medium text-ink">
+              <span>{readiness.data?.environment ?? "checking"}</span>
+              <span>{readiness.data?.productionReady ? "Production ready" : `${readiness.data?.warnings.length ?? 0} warnings`}</span>
+              <span>{metrics.data?.tenantStatus.ACTIVE ?? 0} active tenants</span>
+            </div>
+          </div>
+          <button onClick={logout} className="mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-[8px] bg-ink px-3 text-sm font-semibold text-white">
+            <LogOut className="h-4 w-4" />
+            Logout
+          </button>
+        </aside>
+
+        <section className="grid min-w-0 gap-4">
+          <header className="rounded-[8px] border border-white/80 bg-white/90 p-4 shadow-soft">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-pine">CrewFlow</p>
               <h1 className="text-2xl font-semibold text-ink md:text-3xl">Platform control center</h1>
+              <p className="mt-1 text-sm text-steel">
+                Manage tenants, billing, support access, launch readiness, failures, and audit history.
+              </p>
             </div>
             <div className="flex gap-2">
               <button onClick={() => queryClient.invalidateQueries()} className="flex h-10 items-center gap-2 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink">
                 <RefreshCw className="h-4 w-4" />
                 Refresh
               </button>
-              <button onClick={logout} className="flex h-10 items-center gap-2 rounded-[8px] bg-ink px-3 text-sm font-semibold text-white">
-                <LogOut className="h-4 w-4" />
-                Logout
-              </button>
             </div>
           </div>
         </header>
 
-        <ReadinessPanel
-          data={readiness.data}
-          loading={readiness.isLoading}
-          error={readiness.error}
-          onRefresh={() => void readiness.refetch()}
-        />
+          {section === "overview" ? (
+            <>
+              <ReadinessPanel
+                data={readiness.data}
+                loading={readiness.isLoading}
+                error={readiness.error}
+                onRefresh={() => void readiness.refetch()}
+              />
+              <Metrics data={metrics.data} readiness={readiness.data} />
+              <div className="grid gap-4 xl:grid-cols-[1fr_0.9fr]">
+                <PlatformSummary data={metrics.data} tenants={tenants.data} />
+                <Panel title="Failure monitor" icon={AlertTriangle}>
+                  <FailureList automation={automationFailures.data} webhooks={webhookFailures.data} />
+                </Panel>
+              </div>
+            </>
+          ) : null}
 
-        <Metrics data={metrics.data} readiness={readiness.data} />
+          {section === "tenants" ? (
+            <section className="grid min-w-0 gap-4 xl:grid-cols-[minmax(420px,0.9fr)_minmax(0,1.35fr)]">
+              <Panel title="Tenants" icon={Building2}>
+                <div className="mb-4 flex h-11 items-center gap-2 rounded-[8px] bg-mist px-3">
+                  <Search className="h-4 w-4 text-steel" />
+                  <input
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Search tenants, plans, status..."
+                    className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none"
+                  />
+                </div>
+                <div className="grid gap-3">
+                  {filteredTenants.map((tenant) => (
+                    <TenantRow
+                      key={tenant.id}
+                      tenant={tenant}
+                      selected={selectedTenantId === tenant.id}
+                      onSelect={() => setSelectedTenantId(tenant.id)}
+                    />
+                  ))}
+                  {!filteredTenants.length ? <Empty label="No tenants found" /> : null}
+                </div>
+              </Panel>
+              {selectedTenantId ? (
+                <TenantDetail tenantId={selectedTenantId} />
+              ) : (
+                <Panel title="Select tenant" icon={SlidersHorizontal}>
+                  <div className="flex min-h-[360px] items-center justify-center rounded-[8px] bg-mist p-6 text-center">
+                    <div>
+                      <Building2 className="mx-auto h-8 w-8 text-pine" />
+                      <p className="mt-3 font-semibold text-ink">Choose a tenant to control</p>
+                      <p className="mt-1 text-sm text-steel">Status, subscription, pricing, support access, billing, feature flags, and limits live here.</p>
+                    </div>
+                  </div>
+                </Panel>
+              )}
+            </section>
+          ) : null}
 
-        <section className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
-          <Panel title="Tenants" icon={Building2}>
-            <div className="grid gap-3">
-              {(tenants.data ?? []).map((tenant) => (
-                <TenantRow
-                  key={tenant.id}
-                  tenant={tenant}
-                  selected={selectedTenantId === tenant.id}
-                  onSelect={() => setSelectedTenantId(tenant.id)}
-                />
-              ))}
+          {section === "failures" ? (
+            <div className="grid gap-4 xl:grid-cols-2">
+              <Panel title="Automation failures" icon={Activity}>
+                <FailureList automation={automationFailures.data} />
+              </Panel>
+              <Panel title="Webhook failures" icon={AlertTriangle}>
+                <FailureList webhooks={webhookFailures.data} />
+              </Panel>
             </div>
-          </Panel>
-          {selectedTenantId ? (
-            <TenantDetail tenantId={selectedTenantId} />
-          ) : (
-            <Panel title="Failures" icon={AlertTriangle}>
-              <FailureList automation={automationFailures.data} webhooks={webhookFailures.data} />
-            </Panel>
-          )}
-        </section>
+          ) : null}
 
-        <Panel title="Audit stream" icon={ShieldCheck}>
-          <AuditList items={audit.data} />
-        </Panel>
+          {section === "audit" ? (
+            <Panel title="Audit stream" icon={ShieldCheck}>
+              <AuditList items={audit.data} />
+            </Panel>
+          ) : null}
+
+          {section !== "tenants" && selectedTenant ? (
+            <button
+              onClick={() => setSection("tenants")}
+              className="fixed bottom-5 right-5 rounded-[8px] bg-ink px-4 py-3 text-sm font-semibold text-white shadow-soft"
+            >
+              Managing {selectedTenant.businessName}
+            </button>
+          ) : null}
+        </section>
       </div>
     </main>
   );
@@ -180,6 +311,47 @@ function Metrics({ data, readiness }: { data?: PlatformMetrics; readiness?: Read
       <Metric icon={CreditCard} label="Monthly recurring revenue" value={money(data?.mrrCents)} />
       <Metric icon={AlertTriangle} label="Past-due tenants" value={data?.pastDueTenants ?? 0} danger={(data?.pastDueTenants ?? 0) > 0} />
       <Metric icon={UsersRound} label={readiness?.productionReady ? "Active users" : "Launch blockers"} value={readiness?.productionReady ? data?.activeUsers ?? 0 : readiness?.warnings.length ?? 0} danger={!readiness?.productionReady} />
+    </div>
+  );
+}
+
+function PlatformSummary({ data, tenants }: { data?: PlatformMetrics; tenants?: PlatformTenant[] }) {
+  const atRisk = (tenants ?? []).filter((tenant) =>
+    tenant.status === "SUSPENDED" ||
+    tenant.subscriptionStatus === "PAST_DUE" ||
+    tenant.subscriptionStatus === "UNPAID"
+  );
+  return (
+    <Panel title="Operator command board" icon={ListChecks}>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <CommandStat label="Total tenants" value={(tenants ?? []).length} />
+        <CommandStat label="Bookings" value={data?.bookings ?? 0} />
+        <CommandStat label="Open actions" value={data?.openActions ?? 0} danger={(data?.openActions ?? 0) > 20} />
+        <CommandStat label="Failed automations" value={data?.failedAutomations ?? 0} danger={(data?.failedAutomations ?? 0) > 0} />
+        <CommandStat label="Failed webhooks" value={data?.failedWebhooks ?? 0} danger={(data?.failedWebhooks ?? 0) > 0} />
+        <CommandStat label="Paid revenue" value={money(data?.paidRevenueCents)} />
+      </div>
+      <div className="mt-4 grid gap-2">
+        {atRisk.slice(0, 5).map((tenant) => (
+          <div key={tenant.id} className="flex items-center justify-between rounded-[8px] bg-coral/10 p-3">
+            <div>
+              <p className="font-semibold text-ink">{tenant.businessName}</p>
+              <p className="text-sm text-steel">{tenant.subscriptionStatus ?? tenant.status}</p>
+            </div>
+            <Status label={tenant.status} />
+          </div>
+        ))}
+        {!atRisk.length ? <Empty label="No at-risk tenants" /> : null}
+      </div>
+    </Panel>
+  );
+}
+
+function CommandStat({ label, value, danger }: { label: string; value: string | number; danger?: boolean }) {
+  return (
+    <div className={cn("rounded-[8px] bg-mist p-3 ring-1", danger ? "ring-coral/25" : "ring-ink/5")}>
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-steel">{label}</p>
+      <p className={cn("mt-2 text-2xl font-semibold", danger ? "text-coral" : "text-ink")}>{value}</p>
     </div>
   );
 }
@@ -421,6 +593,7 @@ function TenantDetail({ tenantId }: { tenantId: string }) {
     <Panel title={tenant?.businessName ?? "Tenant detail"} icon={ShieldCheck}>
       <div className="grid gap-4">
         <HealthPanel health={health.data} usage={usage.data} tenant={tenant} />
+        {tenant ? <TenantControlPanel key={tenant.id} tenant={tenant} /> : null}
         <BillingPanel
           summary={billing.data}
           type={billingType}
@@ -492,6 +665,173 @@ function TenantDetail({ tenantId }: { tenantId: string }) {
         </section>
       </div>
     </Panel>
+  );
+}
+
+function TenantControlPanel({ tenant }: { tenant: PlatformTenantDetail }) {
+  const queryClient = useQueryClient();
+  const [status, setStatus] = useState<PlatformTenant["status"]>(tenant.status);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<NonNullable<PlatformTenant["subscriptionStatus"]>>(tenant.subscriptionStatus ?? "TRIALING");
+  const [subscriptionPlan, setSubscriptionPlan] = useState(tenant.subscriptionPlan ?? "pilot");
+  const [billingEmail, setBillingEmail] = useState(tenant.billingEmail ?? "");
+  const [monthlyPrice, setMonthlyPrice] = useState(String((tenant.monthlyPriceCents ?? 0) / 100));
+  const [setupFee, setSetupFee] = useState(String((tenant.setupFeeCents ?? 0) / 100));
+  const [nextBillingAt, setNextBillingAt] = useState(tenant.nextBillingAt ? tenant.nextBillingAt.slice(0, 10) : "");
+  const [stripeCustomerId, setStripeCustomerId] = useState(tenant.stripeCustomerId ?? "");
+  const [stripeSubscriptionId, setStripeSubscriptionId] = useState(tenant.stripeSubscriptionId ?? "");
+
+  const invalidateTenant = () => {
+    void queryClient.invalidateQueries({ queryKey: ["platform-tenant", tenant.id] });
+    void queryClient.invalidateQueries({ queryKey: ["platform-billing", tenant.id] });
+    void queryClient.invalidateQueries({ queryKey: ["platform-tenant-health", tenant.id] });
+    void queryClient.invalidateQueries({ queryKey: ["platform-tenants"] });
+    void queryClient.invalidateQueries({ queryKey: ["platform-metrics"] });
+    void queryClient.invalidateQueries({ queryKey: ["platform-audit"] });
+  };
+
+  const saveTenantControl = useMutation({
+    mutationFn: () =>
+      api.updatePlatformTenant(tenant.id, {
+        status,
+        subscriptionStatus,
+        subscriptionPlan: subscriptionPlan.trim(),
+        billingEmail: billingEmail.trim() || undefined,
+        monthlyPriceCents: Math.round(Number(monthlyPrice || 0) * 100),
+        setupFeeCents: Math.round(Number(setupFee || 0) * 100),
+        nextBillingAt: nextBillingAt ? new Date(`${nextBillingAt}T12:00:00.000Z`).toISOString() : undefined,
+        stripeCustomerId: stripeCustomerId.trim() || undefined,
+        stripeSubscriptionId: stripeSubscriptionId.trim() || undefined
+      }),
+    onSuccess: invalidateTenant
+  });
+
+  const quickTenantUpdate = useMutation({
+    mutationFn: (input: Partial<PlatformTenant>) => api.updatePlatformTenant(tenant.id, input),
+    onSuccess: invalidateTenant
+  });
+
+  const error = saveTenantControl.error ?? quickTenantUpdate.error;
+
+  return (
+    <section className="rounded-[8px] bg-mist p-3">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="font-semibold text-ink">Tenant command controls</p>
+          <p className="mt-1 text-sm text-steel">
+            Change plan, billing state, pricing, Stripe linkage, and tenant access from one control surface.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => quickTenantUpdate.mutate({ status: "ACTIVE", subscriptionStatus: "ACTIVE" })}
+            disabled={quickTenantUpdate.isPending}
+            className="h-9 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            Activate
+          </button>
+          <button
+            onClick={() => quickTenantUpdate.mutate({ status: "SUSPENDED", subscriptionStatus: "PAST_DUE" })}
+            disabled={quickTenantUpdate.isPending}
+            className="h-9 rounded-[8px] bg-amber px-3 text-sm font-semibold text-ink disabled:opacity-50"
+          >
+            Suspend
+          </button>
+          <button
+            onClick={() => quickTenantUpdate.mutate({ status: "CHURNED", subscriptionStatus: "CANCELED" })}
+            disabled={quickTenantUpdate.isPending}
+            className="h-9 rounded-[8px] bg-coral px-3 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            Churn
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 rounded-[8px] bg-white p-3 md:grid-cols-2 xl:grid-cols-4">
+        <AdminSelect label="Tenant status" value={status} options={tenantStatuses} onChange={(value) => setStatus(value as PlatformTenant["status"])} />
+        <AdminSelect label="Subscription" value={subscriptionStatus} options={subscriptionStatuses} onChange={(value) => setSubscriptionStatus(value as NonNullable<PlatformTenant["subscriptionStatus"]>)} />
+        <AdminInput label="Plan" value={subscriptionPlan} onChange={setSubscriptionPlan} />
+        <AdminInput label="Billing email" value={billingEmail} onChange={setBillingEmail} />
+        <AdminInput label="Monthly $" value={monthlyPrice} onChange={setMonthlyPrice} inputMode="decimal" />
+        <AdminInput label="Setup $" value={setupFee} onChange={setSetupFee} inputMode="decimal" />
+        <AdminInput label="Next billing" value={nextBillingAt} onChange={setNextBillingAt} type="date" />
+        <div className="rounded-[8px] bg-mist p-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-steel">Tenant ID</p>
+          <p className="mt-2 truncate text-sm font-semibold text-ink">{tenant?.id ?? "loading"}</p>
+        </div>
+        <div className="md:col-span-2">
+          <AdminInput label="Stripe customer ID" value={stripeCustomerId} onChange={setStripeCustomerId} />
+        </div>
+        <div className="md:col-span-2">
+          <AdminInput label="Stripe subscription ID" value={stripeSubscriptionId} onChange={setStripeSubscriptionId} />
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="grid gap-1 text-sm text-steel sm:grid-cols-3 sm:gap-4">
+          <span>Created {tenant?.createdAt ? shortDate(tenant.createdAt) : "loading"}</span>
+          <span>{tenant?._count?.users ?? 0} users</span>
+          <span>{tenant?._count?.invoices ?? 0} invoices</span>
+        </div>
+        <button onClick={() => saveTenantControl.mutate()} disabled={saveTenantControl.isPending} className="h-10 rounded-[8px] bg-ink px-4 text-sm font-semibold text-white disabled:opacity-50">
+          {saveTenantControl.isPending ? "Saving..." : "Save tenant controls"}
+        </button>
+      </div>
+      {error ? <p className="mt-3 text-sm font-medium text-coral">{error instanceof Error ? error.message : "Unable to update tenant"}</p> : null}
+    </section>
+  );
+}
+
+function AdminInput({
+  label,
+  value,
+  onChange,
+  type = "text",
+  inputMode
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+  inputMode?: "text" | "decimal" | "numeric";
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-sm font-medium text-steel">{label}</span>
+      <input
+        type={type}
+        inputMode={inputMode}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-10 w-full rounded-[8px] border border-ink/10 bg-mist px-3 text-sm outline-none focus:border-pine"
+      />
+    </label>
+  );
+}
+
+function AdminSelect({
+  label,
+  value,
+  options,
+  onChange
+}: {
+  label: string;
+  value: string;
+  options: string[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-sm font-medium text-steel">{label}</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-10 w-full rounded-[8px] border border-ink/10 bg-mist px-2 text-sm outline-none focus:border-pine"
+      >
+        {options.map((option) => (
+          <option key={option} value={option}>{option.replaceAll("_", " ")}</option>
+        ))}
+      </select>
+    </label>
   );
 }
 
