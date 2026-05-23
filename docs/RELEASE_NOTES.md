@@ -20,6 +20,7 @@ This checkpoint covers the CrewFlow landing page and operations console through 
 - Tenant, service, staff, and WhatsApp operations settings
 - WhatsApp readiness and delivery monitor
 - Tenant billing, activation, and platform admin controls
+- Platform system readiness console with production warnings and integration status
 
 ### Demo Login
 

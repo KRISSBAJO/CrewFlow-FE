@@ -226,8 +226,9 @@ export const api = {
     request<{ scannedAt: string; repeatCandidates: number; winBackCandidates: number; actionsCreatedOrUpdated: number }>(
       "/retention/scan",
       { method: "POST" }
-    ),
+  ),
   health: () => request<Health>("/health"),
+  readiness: () => request<Readiness>("/health/readiness"),
   schedulerRun: () => request<unknown>("/scheduler/run-now", { method: "POST" }),
   scanLeadFollowUps: () =>
     request<{ scannedAt: string; count: number; actionsCreatedOrUpdated: number }>(
@@ -343,6 +344,47 @@ export type Health = {
   status: string;
   database: string;
   latencyMs: number;
+};
+
+export type Readiness = {
+  status: string;
+  productionReady: boolean;
+  checks: {
+    database: string;
+    api: {
+      publicUrlConfigured: boolean;
+      https: boolean;
+    };
+    security: {
+      corsOrigins: number;
+      rateLimitEnabled: boolean;
+      jwtConfigured: boolean;
+    };
+    integrations: {
+      stripe: {
+        configured: boolean;
+        webhookSecretConfigured: boolean;
+      };
+      whatsapp: {
+        configured: boolean;
+        appSecretConfigured: boolean;
+        mode: string;
+      };
+      openai: {
+        configured: boolean;
+        model: string;
+      };
+    };
+    scheduler: {
+      enabled: boolean;
+      intervalMs: number;
+    };
+  };
+  warnings: string[];
+  uptimeSeconds: number;
+  latencyMs: number;
+  environment: string;
+  timestamp: string;
 };
 
 export type TenantProfile = {

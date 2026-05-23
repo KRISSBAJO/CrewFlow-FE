@@ -3,11 +3,14 @@
 import {
   AlertTriangle,
   Building2,
+  CheckCircle2,
   CreditCard,
   Loader2,
   LogOut,
   RefreshCw,
+  ServerCog,
   ShieldCheck,
+  TimerReset,
   UsersRound
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -20,6 +23,7 @@ import {
   PlatformBillingEventType,
   PlatformBillingSummary,
   PlatformMetrics,
+  Readiness,
   PlatformSupportAccess,
   PlatformSupportNote,
   PlatformTenant,
@@ -102,6 +106,11 @@ function AdminConsole() {
   const automationFailures = useQuery({ queryKey: ["platform-automation-failures"], queryFn: api.platformAutomationFailures });
   const webhookFailures = useQuery({ queryKey: ["platform-webhook-failures"], queryFn: api.platformWebhookFailures });
   const audit = useQuery({ queryKey: ["platform-audit"], queryFn: api.platformAudit });
+  const readiness = useQuery({
+    queryKey: ["platform-readiness"],
+    queryFn: api.readiness,
+    refetchInterval: 60_000
+  });
 
   return (
     <main className="min-h-screen p-4 md:p-6">
@@ -125,7 +134,14 @@ function AdminConsole() {
           </div>
         </header>
 
-        <Metrics data={metrics.data} />
+        <ReadinessPanel
+          data={readiness.data}
+          loading={readiness.isLoading}
+          error={readiness.error}
+          onRefresh={() => void readiness.refetch()}
+        />
+
+        <Metrics data={metrics.data} readiness={readiness.data} />
 
         <section className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
           <Panel title="Tenants" icon={Building2}>
@@ -157,13 +173,102 @@ function AdminConsole() {
   );
 }
 
-function Metrics({ data }: { data?: PlatformMetrics }) {
+function Metrics({ data, readiness }: { data?: PlatformMetrics; readiness?: Readiness }) {
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       <Metric icon={Building2} label="Active tenants" value={data?.tenantStatus.ACTIVE ?? 0} />
       <Metric icon={CreditCard} label="Monthly recurring revenue" value={money(data?.mrrCents)} />
       <Metric icon={AlertTriangle} label="Past-due tenants" value={data?.pastDueTenants ?? 0} danger={(data?.pastDueTenants ?? 0) > 0} />
-      <Metric icon={UsersRound} label="Active users" value={data?.activeUsers ?? 0} />
+      <Metric icon={UsersRound} label={readiness?.productionReady ? "Active users" : "Launch blockers"} value={readiness?.productionReady ? data?.activeUsers ?? 0 : readiness?.warnings.length ?? 0} danger={!readiness?.productionReady} />
+    </div>
+  );
+}
+
+function ReadinessPanel({
+  data,
+  loading,
+  error,
+  onRefresh
+}: {
+  data?: Readiness;
+  loading: boolean;
+  error: unknown;
+  onRefresh: () => void;
+}) {
+  const warnings = data?.warnings ?? [];
+  const healthy = Boolean(data?.productionReady);
+  const checks = data?.checks;
+  return (
+    <Panel title="System readiness" icon={ServerCog}>
+      <div className="grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
+        <section className={cn("rounded-[8px] p-4", healthy ? "bg-pine text-white" : "bg-coral text-white")}>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.16em] opacity-80">Launch posture</p>
+              <p className="mt-2 text-3xl font-semibold">{loading ? "Checking" : healthy ? "Ready" : "Needs work"}</p>
+            </div>
+            {loading ? <Loader2 className="h-6 w-6 animate-spin" /> : healthy ? <CheckCircle2 className="h-6 w-6" /> : <AlertTriangle className="h-6 w-6" />}
+          </div>
+          <div className="mt-5 grid gap-2 text-sm font-medium opacity-90 sm:grid-cols-3">
+            <span>{data?.environment ?? "environment"}</span>
+            <span>{data?.status ?? "unknown"}</span>
+            <span>{data ? `${data.latencyMs}ms` : "latency"}</span>
+          </div>
+          <button onClick={onRefresh} className="mt-5 inline-flex h-10 items-center gap-2 rounded-[8px] bg-white/15 px-3 text-sm font-semibold text-white ring-1 ring-white/20">
+            <RefreshCw className="h-4 w-4" />
+            Refresh
+          </button>
+        </section>
+
+        <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <ReadinessCheck label="Database" value={checks?.database ?? "checking"} good={checks?.database === "ok"} />
+          <ReadinessCheck label="Security" value={`${checks?.security.corsOrigins ?? 0} origins`} good={Boolean(checks?.security.rateLimitEnabled && checks.security.jwtConfigured)} />
+          <ReadinessCheck label="WhatsApp" value={checks?.integrations.whatsapp.mode ?? "checking"} good={Boolean(checks?.integrations.whatsapp.configured && checks.integrations.whatsapp.appSecretConfigured)} muted={checks?.integrations.whatsapp.mode === "mock"} />
+          <ReadinessCheck label="Scheduler" value={checks?.scheduler.enabled ? "enabled" : "off"} good={Boolean(checks?.scheduler.enabled)} muted={!checks?.scheduler.enabled} />
+          <ReadinessCheck label="Stripe" value={checks?.integrations.stripe.configured ? "configured" : "mock"} good={Boolean(checks?.integrations.stripe.configured && checks.integrations.stripe.webhookSecretConfigured)} muted={!checks?.integrations.stripe.configured} />
+          <ReadinessCheck label="OpenAI" value={checks?.integrations.openai.configured ? checks.integrations.openai.model : "mock"} good={Boolean(checks?.integrations.openai.configured)} muted={!checks?.integrations.openai.configured} />
+          <ReadinessCheck label="Public API" value={checks?.api.publicUrlConfigured ? checks.api.https ? "https" : "local" : "unset"} good={Boolean(checks?.api.publicUrlConfigured)} muted={!checks?.api.https} />
+          <ReadinessCheck label="Uptime" value={data ? formatUptime(data.uptimeSeconds) : "checking"} good={Boolean(data?.uptimeSeconds)} />
+        </section>
+      </div>
+
+      {error ? <p className="mt-4 rounded-[8px] bg-coral/10 px-3 py-2 text-sm font-semibold text-coral">{error instanceof Error ? error.message : "Unable to load readiness"}</p> : null}
+
+      <div className="mt-4 grid gap-2 md:grid-cols-2">
+        {warnings.length ? warnings.map((warning) => (
+          <div key={warning} className="flex items-start gap-2 rounded-[8px] bg-coral/10 p-3 text-sm font-medium text-coral">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{warning}</span>
+          </div>
+        )) : (
+          <div className="flex items-center gap-2 rounded-[8px] bg-pine/10 p-3 text-sm font-medium text-pine">
+            <CheckCircle2 className="h-4 w-4" />
+            <span>No launch blockers detected.</span>
+          </div>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
+function ReadinessCheck({
+  label,
+  value,
+  good,
+  muted
+}: {
+  label: string;
+  value: string;
+  good: boolean;
+  muted?: boolean;
+}) {
+  return (
+    <div className={cn("rounded-[8px] bg-mist p-3 ring-1", good ? "ring-pine/20" : muted ? "ring-amber/30" : "ring-coral/25")}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-steel">{label}</p>
+        {good ? <CheckCircle2 className="h-4 w-4 text-pine" /> : muted ? <TimerReset className="h-4 w-4 text-amber" /> : <AlertTriangle className="h-4 w-4 text-coral" />}
+      </div>
+      <p className="mt-2 truncate text-lg font-semibold text-ink">{value}</p>
     </div>
   );
 }
@@ -678,6 +783,15 @@ function Metric({
 
 function Status({ label }: { label: string }) {
   return <span className="rounded-[8px] bg-white px-2.5 py-1 text-xs font-semibold text-steel">{label.replaceAll("_", " ")}</span>;
+}
+
+function formatUptime(seconds: number) {
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  return `${Math.floor(hours / 24)}d`;
 }
 
 function Empty({ label }: { label: string }) {
