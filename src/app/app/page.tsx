@@ -405,20 +405,134 @@ function Overview({
 
 function InboxView({ items, onOpen }: { items?: Conversation[]; onOpen: (state: DrawerState) => void }) {
   return (
-    <Panel title="Customer inbox" icon={MessageSquareText}>
+    <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+      <ReceptionistSimulator onOpen={onOpen} />
+      <Panel title="Customer inbox" icon={MessageSquareText}>
+        <div className="grid gap-3">
+          {(items ?? []).map((item) => (
+            <Row key={item.id} onClick={() => onOpen({ type: "conversation", item })}>
+              <Avatar name={item.customer?.name} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-semibold text-ink">{item.customer?.name ?? "New inquiry"}</p>
+                <p className="truncate text-sm text-steel">{item.messages?.[0]?.content ?? item.channel}</p>
+              </div>
+              {item.bookingIntents?.[0] ? (
+                <Status label={item.bookingIntents[0].status} />
+              ) : null}
+              <Status label={item.status} />
+              <p className="hidden text-sm text-steel md:block">{shortDate(item.lastMessageAt)}</p>
+            </Row>
+          ))}
+          <Empty show={!items?.length} label="No active conversations" />
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function ReceptionistSimulator({ onOpen }: { onOpen: (state: DrawerState) => void }) {
+  const queryClient = useQueryClient();
+  const [customerName, setCustomerName] = useState("Test Lead");
+  const [phone, setPhone] = useState("+15550102020");
+  const [message, setMessage] = useState(
+    "Hi, I need a deep clean next Friday afternoon at 123 Main St. What is the price and can you book me?"
+  );
+  const [conversationId, setConversationId] = useState("");
+  const [lastResult, setLastResult] = useState<{
+    reply: string;
+    conversationId: string;
+    bookingIntent?: { status: string; missingFields?: string[]; service?: Service | null; quotedPriceCents?: number | null } | null;
+    missingFields: string[];
+    handoff: boolean;
+  } | null>(null);
+
+  const simulate = useMutation({
+    mutationFn: () =>
+      api.receptionistInquiry({
+        customerName: customerName || undefined,
+        phone: phone || undefined,
+        message,
+        conversationId: conversationId || undefined,
+        channel: "WEB_CHAT"
+      }),
+    onSuccess: (result) => {
+      setConversationId(result.conversationId);
+      setLastResult(result);
+      void queryClient.invalidateQueries({ queryKey: ["inbox"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    }
+  });
+  const openConversation = useMutation({
+    mutationFn: () => api.conversation(lastResult!.conversationId),
+    onSuccess: (conversation) => onOpen({ type: "conversation", item: conversation })
+  });
+  const canSend = Boolean(message.trim());
+
+  return (
+    <Panel title="Receptionist simulator" icon={Bot}>
       <div className="grid gap-3">
-        {(items ?? []).map((item) => (
-          <Row key={item.id} onClick={() => onOpen({ type: "conversation", item })}>
-            <Avatar name={item.customer?.name} />
-            <div className="min-w-0 flex-1">
-              <p className="truncate font-semibold text-ink">{item.customer?.name ?? "New inquiry"}</p>
-              <p className="truncate text-sm text-steel">{item.messages?.[0]?.content ?? item.channel}</p>
+        <div className="grid gap-3 md:grid-cols-2">
+          <InputField label="Customer name" value={customerName} onChange={setCustomerName} />
+          <InputField label="Phone" value={phone} onChange={setPhone} />
+        </div>
+        <label className="block">
+          <span className="mb-2 block text-sm font-medium text-ink">Inquiry</span>
+          <textarea
+            value={message}
+            onChange={(event) => setMessage(event.target.value)}
+            className="min-h-32 w-full rounded-[8px] border border-ink/10 bg-mist p-3 outline-none focus:border-pine"
+          />
+        </label>
+        <button
+          onClick={() => simulate.mutate()}
+          disabled={!canSend || simulate.isPending}
+          className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 font-semibold text-white disabled:opacity-50"
+        >
+          {simulate.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+          Run intake
+        </button>
+        {simulate.error ? <ErrorText error={simulate.error} /> : null}
+        {lastResult ? (
+          <div className="rounded-[8px] bg-ink p-4 text-white">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-mint">Assistant reply</p>
+                <p className="mt-2 text-sm leading-6 text-white/78">{lastResult.reply}</p>
+              </div>
+              <Status label={lastResult.handoff ? "HANDOFF" : lastResult.bookingIntent?.status ?? "OPEN"} />
             </div>
-            <Status label={item.status} />
-            <p className="hidden text-sm text-steel md:block">{shortDate(item.lastMessageAt)}</p>
-          </Row>
-        ))}
-        <Empty show={!items?.length} label="No active conversations" />
+            <div className="mt-4 grid gap-2 rounded-[8px] bg-white/8 p-3 text-sm text-white/75">
+              <p>
+                Service:{" "}
+                <span className="font-semibold text-white">
+                  {lastResult.bookingIntent?.service?.title ?? "Not detected"}
+                </span>
+              </p>
+              <p>
+                Quote:{" "}
+                <span className="font-semibold text-white">
+                  {lastResult.bookingIntent?.quotedPriceCents
+                    ? money(lastResult.bookingIntent.quotedPriceCents)
+                    : "Pending"}
+                </span>
+              </p>
+              <p>
+                Missing:{" "}
+                <span className="font-semibold text-white">
+                  {(lastResult.missingFields.length ? lastResult.missingFields : ["none"]).join(", ")}
+                </span>
+              </p>
+            </div>
+            <button
+              onClick={() => openConversation.mutate()}
+              disabled={openConversation.isPending}
+              className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-[8px] bg-mint px-3 text-sm font-semibold text-ink"
+            >
+              {openConversation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+              Open intake
+            </button>
+          </div>
+        ) : null}
       </div>
     </Panel>
   );

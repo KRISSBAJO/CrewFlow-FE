@@ -98,6 +98,11 @@ export const api = {
         body: JSON.stringify(input)
       }
     ),
+  receptionistInquiry: (input: ReceptionistInquiryInput) =>
+    request<ReceptionistInquiryResult>("/receptionist/inquiry", {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
   actions: () => request<OperationalAction[]>("/actions"),
   updateAction: (id: string, status: "IN_PROGRESS" | "COMPLETED" | "DISMISSED") =>
     request<OperationalAction>(`/actions/${id}`, {
@@ -490,6 +495,24 @@ export type BookingIntent = {
   customer?: Customer | null;
   service?: Service | null;
   booking?: Booking | null;
+};
+
+export type ReceptionistInquiryInput = {
+  customerName?: string;
+  phone?: string;
+  message: string;
+  conversationId?: string;
+  channel?: "WHATSAPP" | "SMS" | "WEB_CHAT" | "EMAIL" | "SYSTEM";
+};
+
+export type ReceptionistInquiryResult = {
+  reply: string;
+  customer?: Customer | null;
+  conversationId: string;
+  bookingIntent?: BookingIntent | null;
+  suggestedSlots?: string[];
+  missingFields: string[];
+  handoff: boolean;
 };
 
 export type OperationalAction = {
