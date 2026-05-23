@@ -81,6 +81,14 @@ export const api = {
     request<{ reply: string; mode: string }>(`/inbox/${id}/ai-suggest`, {
       method: "POST"
     }),
+  whatsappStatus: () => request<WhatsappStatus>("/webhooks/whatsapp/status"),
+  whatsappEvents: () => request<WebhookEvent[]>("/webhooks/whatsapp/events"),
+  automationRuns: () => request<AutomationRun[]>("/automations/runs"),
+  retryAutomationRun: (id: string, reason?: string) =>
+    request<AutomationRun>(`/automations/runs/${id}/retry`, {
+      method: "POST",
+      body: JSON.stringify({ reason })
+    }),
   bookConversationIntent: (
     conversationId: string,
     intentId: string,
@@ -479,6 +487,54 @@ export type MessageLog = {
   provider: string;
   createdAt: string;
   customer?: Customer | null;
+};
+
+export type WhatsappStatus = {
+  provider: {
+    mode: "live" | "mock";
+    ready: boolean;
+    checks: {
+      accessToken: boolean;
+      phoneNumberId: boolean;
+      verifyToken: boolean;
+      appSecret: boolean;
+      signatureVerification: boolean;
+    };
+  };
+  webhook: {
+    verifyTokenConfigured: boolean;
+    appSecretConfigured: boolean;
+    events: number;
+    failedEvents: number;
+  };
+  messages: {
+    inbound: number;
+    outbound: number;
+  };
+};
+
+export type WebhookEvent = {
+  id: string;
+  provider: string;
+  providerEventId?: string | null;
+  status: string;
+  error?: string | null;
+  createdAt: string;
+  processedAt?: string | null;
+};
+
+export type AutomationRun = {
+  id: string;
+  trigger: string;
+  provider: string;
+  status: string;
+  scheduledFor: string;
+  sentAt?: string | null;
+  content?: string | null;
+  error?: string | null;
+  customer?: Customer | null;
+  booking?: Booking | null;
+  invoice?: Invoice | null;
 };
 
 export type Conversation = {

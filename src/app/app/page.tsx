@@ -39,6 +39,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FormEvent, useMemo, useState } from "react";
 import {
   api,
+  AutomationRun,
   Booking,
   BookingStatus,
   Conversation,
@@ -51,7 +52,9 @@ import {
   Payment,
   Service,
   StaffMember,
-  TenantProfile
+  TenantProfile,
+  WebhookEvent,
+  WhatsappStatus
 } from "@/lib/api";
 import { cn, initials, money, shortDate } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
@@ -1149,6 +1152,9 @@ function SettingsForm({
     tenant.receptionistConfig?.businessHours?.saturday ?? "Closed"
   );
   const [whatsappPlanned, setWhatsappPlanned] = useState(Boolean(onboarding?.whatsappNumber));
+  const whatsappStatus = useQuery({ queryKey: ["whatsapp-status"], queryFn: api.whatsappStatus });
+  const automationRuns = useQuery({ queryKey: ["automation-runs"], queryFn: api.automationRuns });
+  const webhookEvents = useQuery({ queryKey: ["whatsapp-events"], queryFn: api.whatsappEvents });
 
   const save = useMutation({
     mutationFn: () =>
@@ -1252,6 +1258,125 @@ function SettingsForm({
         <ServiceManager services={services} />
         <StaffManager staff={staff} />
       </div>
+
+      <WhatsAppOpsPanel
+        status={whatsappStatus.data}
+        runs={automationRuns.data}
+        events={webhookEvents.data}
+      />
+    </div>
+  );
+}
+
+function WhatsAppOpsPanel({
+  status,
+  runs,
+  events
+}: {
+  status?: WhatsappStatus;
+  runs?: AutomationRun[];
+  events?: WebhookEvent[];
+}) {
+  const queryClient = useQueryClient();
+  const retry = useMutation({
+    mutationFn: (id: string) => api.retryAutomationRun(id, "Manual retry from WhatsApp operations panel"),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["automation-runs"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    }
+  });
+  const recentRuns = (runs ?? []).slice(0, 8);
+  const recentEvents = (events ?? []).slice(0, 6);
+  const failedRuns = (runs ?? []).filter((run) => run.status === "FAILED").length;
+
+  return (
+    <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
+      <Panel title="WhatsApp readiness" icon={MessageSquareText}>
+        <div className="grid gap-3">
+          <div className="rounded-[8px] bg-ink p-4 text-white">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-mint">Meta Cloud API</p>
+                <p className="mt-1 text-2xl font-semibold">{status?.provider.mode ?? "checking"}</p>
+              </div>
+              <Status label={status?.provider.ready ? "READY" : "SETUP"} />
+            </div>
+            <p className="mt-3 text-sm leading-6 text-white/72">
+              Live sending requires access token, phone number ID, verify token, and ideally app secret for webhook signature checks.
+            </p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <ReadinessRow label="Access token" done={Boolean(status?.provider.checks.accessToken)} />
+            <ReadinessRow label="Phone number ID" done={Boolean(status?.provider.checks.phoneNumberId)} />
+            <ReadinessRow label="Verify token" done={Boolean(status?.provider.checks.verifyToken)} />
+            <ReadinessRow label="Signature secret" done={Boolean(status?.provider.checks.appSecret)} />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <MiniStat label="Inbound" value={status?.messages.inbound ?? 0} />
+            <MiniStat label="Outbound" value={status?.messages.outbound ?? 0} />
+            <MiniStat label="Webhook fails" value={status?.webhook.failedEvents ?? 0} danger />
+          </div>
+        </div>
+      </Panel>
+
+      <Panel title="Delivery monitor" icon={Send}>
+        <div className="mb-4 grid gap-3 sm:grid-cols-3">
+          <MiniStat label="Recent runs" value={recentRuns.length} />
+          <MiniStat label="Failed runs" value={failedRuns} danger={failedRuns > 0} />
+          <MiniStat label="Webhook events" value={status?.webhook.events ?? 0} />
+        </div>
+        <div className="grid gap-3">
+          {recentRuns.map((run) => (
+            <div key={run.id} className="rounded-[8px] bg-mist p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-ink">{run.trigger.replaceAll("_", " ")}</p>
+                  <p className="truncate text-sm text-steel">
+                    {run.customer?.name ?? run.provider} · {shortDate(run.sentAt ?? run.scheduledFor)}
+                  </p>
+                </div>
+                <Status label={run.status} />
+              </div>
+              {run.error ? <p className="mt-2 text-sm font-medium text-coral">{run.error}</p> : null}
+              {run.status === "FAILED" ? (
+                <button
+                  onClick={() => retry.mutate(run.id)}
+                  disabled={retry.isPending}
+                  className="mt-3 flex h-9 items-center gap-2 rounded-[8px] bg-white px-3 text-sm font-semibold text-ink disabled:opacity-50"
+                >
+                  {retry.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  Retry
+                </button>
+              ) : null}
+            </div>
+          ))}
+          <Empty show={!recentRuns.length} label="No automation deliveries yet" />
+        </div>
+        <div className="mt-4 rounded-[8px] bg-white p-3">
+          <p className="mb-2 text-sm font-semibold text-ink">Recent webhook events</p>
+          <div className="grid gap-2">
+            {recentEvents.map((event) => (
+              <div key={event.id} className="flex items-center justify-between gap-3 rounded-[8px] bg-mist px-3 py-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-ink">{event.providerEventId ?? event.id}</p>
+                  <p className="text-xs text-steel">{shortDate(event.processedAt ?? event.createdAt)}</p>
+                </div>
+                <Status label={event.status} />
+              </div>
+            ))}
+            <Empty show={!recentEvents.length} label="No WhatsApp webhook events yet" />
+          </div>
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function MiniStat({ label, value, danger }: { label: string; value: string | number; danger?: boolean }) {
+  return (
+    <div className={cn("rounded-[8px] p-3", danger ? "bg-coral/10" : "bg-mist")}>
+      <p className={cn("text-xs font-semibold uppercase tracking-[0.16em]", danger ? "text-coral" : "text-steel")}>{label}</p>
+      <p className="mt-2 text-2xl font-semibold text-ink">{value}</p>
     </div>
   );
 }
