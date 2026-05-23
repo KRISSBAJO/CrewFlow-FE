@@ -172,6 +172,11 @@ export const api = {
     }),
   tenant: () => request<TenantProfile>("/tenant"),
   onboarding: () => request<OnboardingProfile>("/tenant/onboarding"),
+  tenantBilling: () => request<TenantBillingSummary>("/tenant/billing"),
+  createTenantBillingCheckout: () =>
+    request<TenantBillingSession>("/tenant/billing/checkout", { method: "POST" }),
+  createTenantBillingPortal: () =>
+    request<TenantBillingSession>("/tenant/billing/portal", { method: "POST" }),
   updateTenant: (input: UpdateTenantInput) =>
     request<TenantProfile>("/tenant", {
       method: "PATCH",
@@ -340,6 +345,16 @@ export type TenantProfile = {
   slug: string;
   industry: string;
   subscriptionPlan: string;
+  subscriptionStatus?: "TRIALING" | "ACTIVE" | "PAST_DUE" | "CANCELED" | "UNPAID";
+  billingEmail?: string | null;
+  monthlyPriceCents?: number | null;
+  setupFeeCents?: number | null;
+  currentPeriodEnd?: string | null;
+  nextBillingAt?: string | null;
+  pastDueAt?: string | null;
+  canceledAt?: string | null;
+  featureFlags?: Record<string, boolean> | null;
+  planLimits?: Record<string, number> | null;
   createdAt: string;
   onboardingProfile?: OnboardingProfile & { completedSteps?: string[] };
   receptionistConfig?: {
@@ -348,6 +363,31 @@ export type TenantProfile = {
     businessHours?: Record<string, string> | null;
     enabled: boolean;
   } | null;
+};
+
+export type TenantBillingSummary = {
+  tenantId: string;
+  subscriptionPlan: string;
+  subscriptionStatus: "TRIALING" | "ACTIVE" | "PAST_DUE" | "CANCELED" | "UNPAID";
+  monthlyPriceCents?: number | null;
+  setupFeeCents?: number | null;
+  billingEmail?: string | null;
+  currentPeriodEnd?: string | null;
+  nextBillingAt?: string | null;
+  pastDueAt?: string | null;
+  canceledAt?: string | null;
+  stripeConfigured: boolean;
+  hasStripeCustomer: boolean;
+  limits: Record<string, number>;
+  usage: Record<string, number>;
+  events: PlatformBillingEvent[];
+};
+
+export type TenantBillingSession = {
+  provider: string;
+  mock?: boolean;
+  sessionId: string;
+  url?: string | null;
 };
 
 export type OnboardingProfile = {

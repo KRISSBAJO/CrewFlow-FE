@@ -65,6 +65,7 @@ import {
   RetentionSummary,
   Service,
   StaffMember,
+  TenantBillingSummary,
   TenantProfile,
   WebhookEvent,
   WhatsappStatus
@@ -232,6 +233,7 @@ function Console() {
   const payments = useQuery({ queryKey: ["payments"], queryFn: api.payments });
   const health = useQuery({ queryKey: ["health"], queryFn: api.health });
   const tenant = useQuery({ queryKey: ["tenant"], queryFn: api.tenant });
+  const tenantBilling = useQuery({ queryKey: ["tenant-billing"], queryFn: api.tenantBilling });
   const onboarding = useQuery({ queryKey: ["onboarding"], queryFn: api.onboarding });
   const customers = useQuery({ queryKey: ["customers"], queryFn: () => api.customers() });
   const services = useQuery({ queryKey: ["services"], queryFn: api.services });
@@ -407,6 +409,7 @@ function Console() {
               {view === "settings" ? (
                 <SettingsView
                   tenant={tenant.data}
+                  billing={tenantBilling.data}
                   onboarding={onboarding.data}
                   services={services.data}
                   staff={staff.data}
@@ -1679,11 +1682,13 @@ function MoneyView({
 
 function SettingsView({
   tenant,
+  billing,
   onboarding,
   services,
   staff
 }: {
   tenant?: TenantProfile;
+  billing?: TenantBillingSummary;
   onboarding?: OnboardingProfile;
   services?: Service[];
   staff?: StaffMember[];
@@ -1694,6 +1699,7 @@ function SettingsView({
     <SettingsForm
       key={`${tenant.id}-${onboarding?.updatedAt ?? "new"}`}
       tenant={tenant}
+      billing={billing}
       onboarding={onboarding}
       services={services ?? []}
       staff={staff ?? []}
@@ -1703,11 +1709,13 @@ function SettingsView({
 
 function SettingsForm({
   tenant,
+  billing,
   onboarding,
   services,
   staff
 }: {
   tenant: TenantProfile;
+  billing?: TenantBillingSummary;
   onboarding?: OnboardingProfile;
   services: Service[];
   staff: StaffMember[];
@@ -1729,6 +1737,19 @@ function SettingsForm({
   const whatsappStatus = useQuery({ queryKey: ["whatsapp-status"], queryFn: api.whatsappStatus });
   const automationRuns = useQuery({ queryKey: ["automation-runs"], queryFn: api.automationRuns });
   const webhookEvents = useQuery({ queryKey: ["whatsapp-events"], queryFn: api.whatsappEvents });
+  const createCheckout = useMutation({
+    mutationFn: api.createTenantBillingCheckout,
+    onSuccess: (data) => {
+      void queryClient.invalidateQueries({ queryKey: ["tenant-billing"] });
+      if (data.url) window.open(data.url, "_blank", "noopener,noreferrer");
+    }
+  });
+  const createPortal = useMutation({
+    mutationFn: api.createTenantBillingPortal,
+    onSuccess: (data) => {
+      if (data.url) window.open(data.url, "_blank", "noopener,noreferrer");
+    }
+  });
 
   const save = useMutation({
     mutationFn: () =>
@@ -1765,6 +1786,15 @@ function SettingsForm({
   return (
     <div className="grid gap-4">
       <div className="grid gap-4 xl:grid-cols-[1fr_0.8fr]">
+        <BillingSelfServePanel
+          billing={billing}
+          checkoutPending={createCheckout.isPending}
+          portalPending={createPortal.isPending}
+          error={createCheckout.error ?? createPortal.error}
+          onCheckout={() => createCheckout.mutate()}
+          onPortal={() => createPortal.mutate()}
+        />
+
         <Panel title="Tenant settings" icon={Settings2}>
         <div className="grid gap-4 md:grid-cols-2">
           <InputField label="Business name" value={businessName} onChange={setBusinessName} />
@@ -1838,6 +1868,96 @@ function SettingsForm({
         runs={automationRuns.data}
         events={webhookEvents.data}
       />
+    </div>
+  );
+}
+
+function BillingSelfServePanel({
+  billing,
+  checkoutPending,
+  portalPending,
+  error,
+  onCheckout,
+  onPortal
+}: {
+  billing?: TenantBillingSummary;
+  checkoutPending: boolean;
+  portalPending: boolean;
+  error: unknown;
+  onCheckout: () => void;
+  onPortal: () => void;
+}) {
+  const limits = billing?.limits ?? {};
+  const usage = billing?.usage ?? {};
+  const blocked =
+    billing?.subscriptionStatus === "CANCELED" ||
+    billing?.subscriptionStatus === "UNPAID";
+  return (
+    <Panel title="Billing and plan" icon={CreditCard}>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <PlanStat label="Plan" value={billing?.subscriptionPlan ?? "pilot"} />
+        <PlanStat label="Status" value={billing?.subscriptionStatus ?? "TRIALING"} danger={blocked} />
+        <PlanStat label="Monthly" value={money(billing?.monthlyPriceCents)} />
+        <PlanStat label="Next bill" value={billing?.nextBillingAt ? shortDate(billing.nextBillingAt) : "Not set"} />
+      </div>
+
+      <div className="mt-4 grid gap-2">
+        {(["staff", "customers", "leads", "monthlyBookings"] as const).map((key) => (
+          <UsageBar key={key} label={key} used={usage[key] ?? 0} limit={limits[key]} />
+        ))}
+      </div>
+
+      {billing?.pastDueAt ? (
+        <p className="mt-4 rounded-[8px] bg-coral/10 px-3 py-2 text-sm font-semibold text-coral">
+          Payment is past due since {shortDate(billing.pastDueAt)}.
+        </p>
+      ) : null}
+      {error ? <ErrorText error={error} /> : null}
+
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+        <button
+          onClick={onCheckout}
+          disabled={checkoutPending}
+          className="flex h-10 flex-1 items-center justify-center gap-2 rounded-[8px] bg-ink px-3 text-sm font-semibold text-white disabled:opacity-50"
+        >
+          {checkoutPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+          Upgrade plan
+        </button>
+        <button
+          onClick={onPortal}
+          disabled={portalPending || !billing?.hasStripeCustomer || !billing?.stripeConfigured}
+          className="flex h-10 flex-1 items-center justify-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+        >
+          {portalPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+          Manage billing
+        </button>
+      </div>
+    </Panel>
+  );
+}
+
+function PlanStat({ label, value, danger }: { label: string; value: string | number; danger?: boolean }) {
+  return (
+    <div className={cn("rounded-[8px] bg-mist p-3", danger && "ring-1 ring-coral/30")}>
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-steel">{label}</p>
+      <p className={cn("mt-1 text-lg font-semibold", danger ? "text-coral" : "text-ink")}>
+        {String(value).replaceAll("_", " ")}
+      </p>
+    </div>
+  );
+}
+
+function UsageBar({ label, used, limit }: { label: string; used: number; limit?: number }) {
+  const pct = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+  return (
+    <div className="rounded-[8px] bg-mist p-3">
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <span className="font-semibold capitalize text-ink">{label.replace(/([A-Z])/g, " $1")}</span>
+        <span className="text-steel">{limit ? `${used}/${limit}` : `${used}`}</span>
+      </div>
+      <div className="mt-2 h-2 overflow-hidden rounded-full bg-white">
+        <div className={cn("h-full rounded-full", pct > 85 ? "bg-coral" : "bg-pine")} style={{ width: `${limit ? pct : 12}%` }} />
+      </div>
     </div>
   );
 }
