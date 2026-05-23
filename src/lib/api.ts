@@ -233,6 +233,11 @@ export const api = {
       "/workflows/scan-lead-follow-ups",
       { method: "POST" }
     ),
+  scanBillingRecovery: () =>
+    request<{ scannedAt: string; actionsCreatedOrUpdated: number }>(
+      "/workflows/scan-billing-recovery",
+      { method: "POST" }
+    ),
   platformMetrics: () => request<PlatformMetrics>("/platform/metrics"),
   platformTenants: () => request<PlatformTenant[]>("/platform/tenants"),
   platformTenant: (id: string) => request<PlatformTenantDetail>(`/platform/tenants/${id}`),

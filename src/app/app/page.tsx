@@ -1750,6 +1750,14 @@ function SettingsForm({
       if (data.url) window.open(data.url, "_blank", "noopener,noreferrer");
     }
   });
+  const scanBilling = useMutation({
+    mutationFn: api.scanBillingRecovery,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["actions"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      void queryClient.invalidateQueries({ queryKey: ["tenant-billing"] });
+    }
+  });
 
   const save = useMutation({
     mutationFn: () =>
@@ -1790,9 +1798,11 @@ function SettingsForm({
           billing={billing}
           checkoutPending={createCheckout.isPending}
           portalPending={createPortal.isPending}
-          error={createCheckout.error ?? createPortal.error}
+          scanPending={scanBilling.isPending}
+          error={createCheckout.error ?? createPortal.error ?? scanBilling.error}
           onCheckout={() => createCheckout.mutate()}
           onPortal={() => createPortal.mutate()}
+          onScan={() => scanBilling.mutate()}
         />
 
         <Panel title="Tenant settings" icon={Settings2}>
@@ -1876,16 +1886,20 @@ function BillingSelfServePanel({
   billing,
   checkoutPending,
   portalPending,
+  scanPending,
   error,
   onCheckout,
-  onPortal
+  onPortal,
+  onScan
 }: {
   billing?: TenantBillingSummary;
   checkoutPending: boolean;
   portalPending: boolean;
+  scanPending: boolean;
   error: unknown;
   onCheckout: () => void;
   onPortal: () => void;
+  onScan: () => void;
 }) {
   const limits = billing?.limits ?? {};
   const usage = billing?.usage ?? {};
@@ -1932,6 +1946,14 @@ function BillingSelfServePanel({
           Manage billing
         </button>
       </div>
+      <button
+        onClick={onScan}
+        disabled={scanPending}
+        className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink disabled:opacity-50"
+      >
+        {scanPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+        Scan billing risk
+      </button>
     </Panel>
   );
 }
