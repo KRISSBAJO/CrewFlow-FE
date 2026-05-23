@@ -28,7 +28,7 @@ const featureCards = [
 
 export function FeatureSection() {
   return (
-    <section id="engine" className="bg-[#f6f8f5] px-5 py-16 md:px-8">
+    <section id="engine" className="bg-[#f6f8f5] px-5 py-24 md:px-8">
       <div className="mx-auto max-w-7xl">
         <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr] lg:items-end">
           <div>

@@ -9,14 +9,14 @@ import {
   Headphones,
   MessageSquareText,
   Route,
-  ShieldCheck,
-  Sparkles
+  ShieldCheck
 } from "lucide-react";
 import { ConversionSection } from "@/components/Conversion";
 import { FeatureSection } from "@/components/Feature";
 import hero from "@/public/images/hero.png";
 import delivery from "@/public/images/delivery.png";
 import employee from "@/public/images/employee.png";
+import logoMark from "@/public/images/logo.png";
 
 const outcomes = [
   { label: "Lead capture", value: "24/7", icon: Headphones },
@@ -63,8 +63,8 @@ export default function LandingPage() {
 
         <header className="relative z-10 mx-auto flex max-w-7xl items-center justify-between px-5 py-5 md:px-8">
           <Link href="/" className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-[8px] bg-mint text-ink shadow-soft">
-              <Sparkles className="h-5 w-5" />
+            <div className="relative h-11 w-11 overflow-hidden rounded-[8px] bg-ink shadow-soft">
+              <Image src={logoMark} alt="" fill sizes="44px" className="object-cover" />
             </div>
             <div>
               <p className="font-semibold">CrewFlow</p>
@@ -86,7 +86,7 @@ export default function LandingPage() {
           </Link>
         </header>
 
-        <div className="relative z-10 mx-auto grid min-h-[720px] max-w-7xl items-center gap-10 px-5 pb-20 pt-10 md:px-8 lg:grid-cols-[0.92fr_1.08fr]">
+        <div className="relative z-10 mx-auto grid min-h-[760px] max-w-7xl items-center gap-10 px-5 pb-24 pt-16 md:px-8 lg:grid-cols-[0.92fr_1.08fr]">
           <div className="max-w-2xl">
             <div className="mb-6 flex w-fit items-center gap-2 rounded-[8px] border border-white/14 bg-white/8 px-3 py-2 text-sm font-semibold text-white/78">
               <ShieldCheck className="h-4 w-4 text-mint" />
@@ -159,7 +159,7 @@ export default function LandingPage() {
 
       <FeatureSection />
 
-      <section id="workflow" className="bg-white px-5 py-16 md:px-8">
+      <section id="workflow" className="bg-white px-5 py-24 md:px-8">
         <div className="mx-auto max-w-7xl">
           <div className="grid gap-8 lg:grid-cols-[0.95fr_1.05fr]">
             <div>
@@ -197,7 +197,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section id="operations" className="px-5 py-16 md:px-8">
+      <section id="operations" className="px-5 py-24 md:px-8">
         <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[1.05fr_0.95fr]">
           <div className="relative min-h-[520px] overflow-hidden rounded-[8px] bg-ink shadow-soft">
             <Image
@@ -237,8 +237,8 @@ export default function LandingPage() {
         <div className="mx-auto grid max-w-7xl gap-8 px-5 py-10 md:grid-cols-[1.2fr_0.8fr_0.8fr] md:px-8">
           <div>
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-[8px] bg-ink text-white">
-                <Sparkles className="h-5 w-5" />
+              <div className="relative h-10 w-10 overflow-hidden rounded-[8px] bg-ink shadow-soft">
+                <Image src={logoMark} alt="" fill sizes="40px" className="object-cover" />
               </div>
               <div>
                 <p className="font-semibold text-ink">CrewFlow</p>

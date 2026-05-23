@@ -76,7 +76,7 @@ export function ConversionSection() {
   }
 
   return (
-    <section id="setup" className="bg-ink px-5 py-16 text-white md:px-8">
+    <section id="setup" className="bg-ink px-5 py-24 text-white md:px-8">
       <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[0.9fr_1.1fr]">
         <div className="max-w-xl">
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-mint">Start setup</p>

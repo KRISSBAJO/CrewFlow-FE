@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import {
   AlertTriangle,
   Banknote,
@@ -58,6 +59,7 @@ import {
 } from "@/lib/api";
 import { cn, initials, money, shortDate } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
+import logoMark from "@/public/images/logo.png";
 
 const nav = [
   { id: "overview", label: "Overview", icon: HeartPulse },
@@ -1841,11 +1843,14 @@ function DetailDrawer({
             transition={{ type: "spring", damping: 28, stiffness: 260 }}
           >
             <div className="flex items-center justify-between border-b border-ink/10 p-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pine">
-                  CrewFlow
-                </p>
-                <h2 className="text-xl font-semibold text-ink">{drawerTitle(state)}</h2>
+              <div className="flex items-center gap-3">
+                <Logo />
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pine">
+                    CrewFlow
+                  </p>
+                  <h2 className="text-xl font-semibold text-ink">{drawerTitle(state)}</h2>
+                </div>
               </div>
               <button
                 onClick={onClose}
@@ -2842,8 +2847,8 @@ function parsePhotoUrls(value: string) {
 
 function Logo() {
   return (
-    <div className="flex h-11 w-11 items-center justify-center rounded-[8px] bg-ink text-white shadow-soft">
-      <Sparkles className="h-5 w-5" />
+    <div className="relative h-11 w-11 overflow-hidden rounded-[8px] bg-ink shadow-soft">
+      <Image src={logoMark} alt="CrewFlow" fill sizes="44px" className="object-cover" />
     </div>
   );
 }
