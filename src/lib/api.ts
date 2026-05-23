@@ -88,15 +88,14 @@ export const api = {
       body: JSON.stringify({ status })
     }),
   bookings: () => request<Booking[]>("/bookings"),
-  createBooking: (input: {
-    customerId: string;
-    serviceId: string;
-    assignedStaffId?: string;
-    startTime: string;
-    notes?: string;
-  }) =>
+  createBooking: (input: BookingInput) =>
     request<Booking>("/bookings", {
       method: "POST",
+      body: JSON.stringify(input)
+    }),
+  updateBooking: (id: string, input: Partial<BookingInput> & { status?: BookingStatus }) =>
+    request<Booking>(`/bookings/${id}`, {
+      method: "PATCH",
       body: JSON.stringify(input)
     }),
   customers: (search?: string) =>
@@ -277,6 +276,29 @@ export type CustomerInput = {
   notes?: string;
 };
 
+export type BookingStatus =
+  | "REQUESTED"
+  | "CONFIRMED"
+  | "IN_PROGRESS"
+  | "COMPLETED"
+  | "NO_SHOW"
+  | "CANCELLED";
+
+export type RepeatFrequency = "none" | "weekly" | "biweekly" | "monthly";
+
+export type BookingInput = {
+  customerId?: string;
+  inlineCustomer?: CustomerInput;
+  serviceId: string;
+  assignedStaffId?: string;
+  startTime: string;
+  status?: BookingStatus;
+  source?: string;
+  notes?: string;
+  repeatFrequency?: RepeatFrequency;
+  repeatCount?: number;
+};
+
 export type DashboardSummary = {
   today: {
     appointments: Booking[];
@@ -359,7 +381,7 @@ export type Booking = {
   id: string;
   startTime: string;
   endTime?: string | null;
-  status: string;
+  status: BookingStatus;
   notes?: string | null;
   customer: Customer;
   service: Service;

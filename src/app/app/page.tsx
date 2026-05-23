@@ -40,6 +40,7 @@ import { FormEvent, useMemo, useState } from "react";
 import {
   api,
   Booking,
+  BookingStatus,
   Conversation,
   Customer,
   DashboardSummary,
@@ -587,6 +588,27 @@ function CustomersView({ items, onOpen }: { items?: Customer[]; onOpen: (state: 
 }
 
 function BookingsView({ items, onOpen }: { items?: Booking[]; onOpen: (state: DrawerState) => void }) {
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("all");
+
+  const filtered = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return (items ?? []).filter((booking) => {
+      const matchesStatus = status === "all" || booking.status === status;
+      const haystack = [
+        booking.customer.name,
+        booking.customer.phone,
+        booking.service.title,
+        booking.assignedStaff?.name ?? "",
+        booking.status
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return matchesStatus && (!query || haystack.includes(query));
+    });
+  }, [items, search, status]);
+
   return (
     <Panel
       title="Booking board"
@@ -598,7 +620,28 @@ function BookingsView({ items, onOpen }: { items?: Booking[]; onOpen: (state: Dr
         </button>
       }
     >
-      <BookingRows items={items} onOpen={onOpen} />
+      <div className="mb-4 grid gap-3 md:grid-cols-[1fr_220px]">
+        <input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Search customer, service, staff..."
+          className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
+        />
+        <select
+          value={status}
+          onChange={(event) => setStatus(event.target.value)}
+          className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
+        >
+          <option value="all">All statuses</option>
+          <option value="REQUESTED">Requested</option>
+          <option value="CONFIRMED">Confirmed</option>
+          <option value="IN_PROGRESS">On the way</option>
+          <option value="COMPLETED">Completed</option>
+          <option value="NO_SHOW">No-show</option>
+          <option value="CANCELLED">Cancelled</option>
+        </select>
+      </div>
+      <BookingRows items={filtered} onOpen={onOpen} />
     </Panel>
   );
 }
@@ -1481,25 +1524,50 @@ function DetailDrawer({
   );
 }
 
+function toDateTimeLocal(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const offsetMs = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+}
+
 function NewBookingForm({ onDone }: { onDone: () => void }) {
   const queryClient = useQueryClient();
   const customers = useQuery({ queryKey: ["customers"], queryFn: () => api.customers() });
   const services = useQuery({ queryKey: ["services"], queryFn: api.services });
   const staff = useQuery({ queryKey: ["staff"], queryFn: api.staff });
+  const [customerMode, setCustomerMode] = useState<"existing" | "new">("existing");
   const [customerId, setCustomerId] = useState("");
+  const [newCustomerName, setNewCustomerName] = useState("");
+  const [newCustomerPhone, setNewCustomerPhone] = useState("");
+  const [newCustomerEmail, setNewCustomerEmail] = useState("");
+  const [newCustomerNotes, setNewCustomerNotes] = useState("");
   const [serviceId, setServiceId] = useState("");
   const [assignedStaffId, setAssignedStaffId] = useState("");
   const [startTime, setStartTime] = useState("");
+  const [repeatFrequency, setRepeatFrequency] = useState("none");
+  const [repeatCount, setRepeatCount] = useState("4");
   const [notes, setNotes] = useState("");
 
   const create = useMutation({
     mutationFn: () =>
       api.createBooking({
-        customerId,
+        customerId: customerMode === "existing" ? customerId : undefined,
+        inlineCustomer:
+          customerMode === "new"
+            ? {
+                name: newCustomerName,
+                phone: newCustomerPhone,
+                email: newCustomerEmail || undefined,
+                notes: newCustomerNotes || undefined
+              }
+            : undefined,
         serviceId,
         assignedStaffId: assignedStaffId || undefined,
         startTime: new Date(startTime).toISOString(),
-        notes: notes || undefined
+        notes: notes || undefined,
+        repeatFrequency: repeatFrequency as "none" | "weekly" | "biweekly" | "monthly",
+        repeatCount: repeatFrequency === "none" ? undefined : Number(repeatCount) || 1
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries();
@@ -1507,7 +1575,11 @@ function NewBookingForm({ onDone }: { onDone: () => void }) {
     }
   });
 
-  const canSubmit = customerId && serviceId && startTime;
+  const hasCustomer =
+    customerMode === "existing"
+      ? Boolean(customerId)
+      : Boolean(newCustomerName.trim() && newCustomerPhone.trim());
+  const canSubmit = hasCustomer && serviceId && startTime;
 
   return (
     <form
@@ -1517,14 +1589,42 @@ function NewBookingForm({ onDone }: { onDone: () => void }) {
         if (canSubmit) create.mutate();
       }}
     >
-      <SelectField label="Customer" value={customerId} onChange={setCustomerId}>
-        <option value="">Choose customer</option>
-        {(customers.data ?? []).map((customer) => (
-          <option key={customer.id} value={customer.id}>
-            {customer.name} · {customer.phone}
-          </option>
+      <div className="grid grid-cols-2 gap-2 rounded-[8px] bg-mist p-1">
+        {(["existing", "new"] as const).map((mode) => (
+          <button
+            key={mode}
+            type="button"
+            onClick={() => setCustomerMode(mode)}
+            className={cn(
+              "h-10 rounded-[8px] text-sm font-semibold transition",
+              customerMode === mode ? "bg-white text-ink shadow-soft" : "text-steel hover:text-ink"
+            )}
+          >
+            {mode === "existing" ? "Existing customer" : "New lead"}
+          </button>
         ))}
-      </SelectField>
+      </div>
+
+      {customerMode === "existing" ? (
+        <SelectField label="Customer" value={customerId} onChange={setCustomerId}>
+          <option value="">Choose customer</option>
+          {(customers.data ?? []).map((customer) => (
+            <option key={customer.id} value={customer.id}>
+              {customer.name} · {customer.phone}
+            </option>
+          ))}
+        </SelectField>
+      ) : (
+        <div className="rounded-[8px] bg-mist p-3">
+          <div className="grid gap-3 md:grid-cols-2">
+            <InputField label="Lead name" value={newCustomerName} onChange={setNewCustomerName} />
+            <InputField label="Phone" value={newCustomerPhone} onChange={setNewCustomerPhone} />
+            <InputField label="Email" value={newCustomerEmail} onChange={setNewCustomerEmail} />
+            <InputField label="Customer notes" value={newCustomerNotes} onChange={setNewCustomerNotes} />
+          </div>
+        </div>
+      )}
+
       <SelectField label="Service" value={serviceId} onChange={setServiceId}>
         <option value="">Choose service</option>
         {(services.data ?? []).map((service) => (
@@ -1550,6 +1650,26 @@ function NewBookingForm({ onDone }: { onDone: () => void }) {
           className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
         />
       </label>
+      <div className="grid gap-3 md:grid-cols-[1fr_140px]">
+        <SelectField label="Repeat" value={repeatFrequency} onChange={setRepeatFrequency}>
+          <option value="none">One-time</option>
+          <option value="weekly">Weekly</option>
+          <option value="biweekly">Every 2 weeks</option>
+          <option value="monthly">Monthly</option>
+        </SelectField>
+        <label className="block">
+          <span className="mb-2 block text-sm font-medium text-ink">Occurrences</span>
+          <input
+            type="number"
+            min={1}
+            max={12}
+            disabled={repeatFrequency === "none"}
+            value={repeatFrequency === "none" ? "1" : repeatCount}
+            onChange={(event) => setRepeatCount(event.target.value)}
+            className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine disabled:opacity-50"
+          />
+        </label>
+      </div>
       <label className="block">
         <span className="mb-2 block text-sm font-medium text-ink">Notes</span>
         <textarea
@@ -1571,10 +1691,132 @@ function NewBookingForm({ onDone }: { onDone: () => void }) {
 }
 
 function BookingDetail({ item }: { item: Booking }) {
+  const queryClient = useQueryClient();
+  const customers = useQuery({ queryKey: ["customers"], queryFn: () => api.customers() });
+  const services = useQuery({ queryKey: ["services"], queryFn: api.services });
+  const staff = useQuery({ queryKey: ["staff"], queryFn: api.staff });
+  const [customerId, setCustomerId] = useState(item.customer.id);
+  const [serviceId, setServiceId] = useState(item.service.id);
+  const [assignedStaffId, setAssignedStaffId] = useState(item.assignedStaff?.id ?? "");
+  const [status, setStatus] = useState<BookingStatus>(item.status);
+  const [startTime, setStartTime] = useState(toDateTimeLocal(item.startTime));
+  const [notes, setNotes] = useState(item.notes ?? "");
+
+  const update = useMutation({
+    mutationFn: () =>
+      api.updateBooking(item.id, {
+        customerId,
+        serviceId,
+        assignedStaffId: assignedStaffId || undefined,
+        status,
+        startTime: new Date(startTime).toISOString(),
+        notes: notes || undefined
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries();
+    }
+  });
+
+  const quickStatus = useMutation({
+    mutationFn: (nextStatus: BookingStatus) => api.updateBooking(item.id, { status: nextStatus, serviceId }),
+    onSuccess: (booking) => {
+      setStatus(booking.status);
+      void queryClient.invalidateQueries();
+    }
+  });
+
   return (
     <div className="grid gap-4">
-      <DetailCard icon={CalendarDays} title={item.service.title}>
-        <Info label="Customer" value={item.customer.name} />
+      <DetailCard icon={CalendarDays} title="Booking controls">
+        <div className="grid gap-3">
+          <SelectField label="Customer" value={customerId} onChange={setCustomerId}>
+            {(customers.data ?? [item.customer]).map((customer) => (
+              <option key={customer.id} value={customer.id}>
+                {customer.name} · {customer.phone}
+              </option>
+            ))}
+          </SelectField>
+          <SelectField label="Service" value={serviceId} onChange={setServiceId}>
+            {(services.data ?? [item.service]).map((service) => (
+              <option key={service.id} value={service.id}>
+                {service.title} · {money(service.priceCents)}
+              </option>
+            ))}
+          </SelectField>
+          <SelectField label="Staff" value={assignedStaffId} onChange={setAssignedStaffId}>
+            <option value="">Unassigned</option>
+            {(staff.data ?? []).map((member) => (
+              <option key={member.id} value={member.id}>
+                {member.name} · {member.role}
+              </option>
+            ))}
+          </SelectField>
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-ink">Start time</span>
+            <input
+              type="datetime-local"
+              value={startTime}
+              onChange={(event) => setStartTime(event.target.value)}
+              className="h-11 w-full rounded-[8px] border border-ink/10 bg-white px-3 outline-none focus:border-pine"
+            />
+          </label>
+          <SelectField label="Status" value={status} onChange={(value) => setStatus(value as BookingStatus)}>
+            <option value="REQUESTED">Requested</option>
+            <option value="CONFIRMED">Confirmed</option>
+            <option value="IN_PROGRESS">On the way</option>
+            <option value="COMPLETED">Completed</option>
+            <option value="NO_SHOW">No-show</option>
+            <option value="CANCELLED">Cancelled</option>
+          </SelectField>
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-ink">Notes</span>
+            <textarea
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              className="min-h-24 w-full rounded-[8px] border border-ink/10 bg-white p-3 outline-none focus:border-pine"
+            />
+          </label>
+        </div>
+        {update.error ? <ErrorText error={update.error} /> : null}
+        {quickStatus.error ? <ErrorText error={quickStatus.error} /> : null}
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <button
+            onClick={() => update.mutate()}
+            disabled={update.isPending}
+            className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {update.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Save changes
+          </button>
+          <button
+            onClick={() => quickStatus.mutate("IN_PROGRESS")}
+            disabled={quickStatus.isPending || status !== "CONFIRMED"}
+            className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink disabled:opacity-50"
+          >
+            <Route className="h-4 w-4" />
+            On the way
+          </button>
+          <button
+            onClick={() => quickStatus.mutate("COMPLETED")}
+            disabled={quickStatus.isPending || !["CONFIRMED", "IN_PROGRESS"].includes(status)}
+            className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink disabled:opacity-50"
+          >
+            <CheckCircle2 className="h-4 w-4" />
+            Complete
+          </button>
+          <button
+            onClick={() => quickStatus.mutate("NO_SHOW")}
+            disabled={quickStatus.isPending || status !== "CONFIRMED"}
+            className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-coral/10 px-3 text-sm font-semibold text-coral disabled:opacity-50"
+          >
+            <AlertTriangle className="h-4 w-4" />
+            No-show
+          </button>
+        </div>
+      </DetailCard>
+      <DetailCard icon={ContactRound} title={item.customer.name}>
+        <Info label="Phone" value={item.customer.phone} />
+        <Info label="Email" value={item.customer.email ?? "No email"} />
         <Info label="Time" value={shortDate(item.startTime)} />
         <Info label="Staff" value={item.assignedStaff?.name ?? "Unassigned"} />
         <Info label="Status" value={item.status.replaceAll("_", " ")} />
