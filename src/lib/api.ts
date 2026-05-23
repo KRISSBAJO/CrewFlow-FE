@@ -233,7 +233,27 @@ export const api = {
   platformTenant: (id: string) => request<PlatformTenantDetail>(`/platform/tenants/${id}`),
   platformTenantHealth: (id: string) => request<PlatformTenantHealth>(`/platform/tenants/${id}/health`),
   platformTenantUsage: (id: string) => request<PlatformTenantUsage>(`/platform/tenants/${id}/usage`),
-  updatePlatformTenant: (id: string, input: Partial<Pick<PlatformTenant, "status" | "subscriptionPlan" | "billingEmail" | "monthlyPriceCents" | "setupFeeCents" | "featureFlags" | "planLimits">>) =>
+  updatePlatformTenant: (
+    id: string,
+    input: Partial<
+      Pick<
+        PlatformTenant,
+        | "status"
+        | "subscriptionStatus"
+        | "subscriptionPlan"
+        | "billingEmail"
+        | "monthlyPriceCents"
+        | "setupFeeCents"
+        | "trialEndsAt"
+        | "currentPeriodEnd"
+        | "nextBillingAt"
+        | "stripeCustomerId"
+        | "stripeSubscriptionId"
+        | "featureFlags"
+        | "planLimits"
+      >
+    >
+  ) =>
     request<PlatformTenant>(`/platform/tenants/${id}`, {
       method: "PATCH",
       body: JSON.stringify(input)
@@ -249,6 +269,13 @@ export const api = {
     request<PlatformSupportAccess>(`/platform/tenants/${id}/support-access`, {
       method: "POST",
       body: JSON.stringify({ reason })
+    }),
+  platformBilling: (id: string) => request<PlatformBillingSummary>(`/platform/tenants/${id}/billing`),
+  platformBillingEvents: (id: string) => request<PlatformBillingEvent[]>(`/platform/tenants/${id}/billing-events`),
+  createPlatformBillingEvent: (id: string, input: PlatformBillingEventInput) =>
+    request<PlatformBillingEvent>(`/platform/tenants/${id}/billing-events`, {
+      method: "POST",
+      body: JSON.stringify(input)
     }),
   platformAutomationFailures: () => request<PlatformAutomationFailure[]>("/platform/automation-failures"),
   platformWebhookFailures: () => request<PlatformWebhookFailure[]>("/platform/webhook-failures"),
@@ -536,6 +563,8 @@ export type PlatformMetrics = {
   failedAutomations: number;
   failedWebhooks: number;
   paidRevenueCents: number;
+  mrrCents: number;
+  pastDueTenants: number;
 };
 
 export type PlatformTenant = {
@@ -544,10 +573,18 @@ export type PlatformTenant = {
   slug: string;
   industry: string;
   status: "TRIAL" | "ACTIVE" | "SUSPENDED" | "CHURNED";
+  subscriptionStatus?: "TRIALING" | "ACTIVE" | "PAST_DUE" | "CANCELED" | "UNPAID";
   subscriptionPlan: string;
   billingEmail?: string | null;
   monthlyPriceCents?: number | null;
   setupFeeCents?: number | null;
+  trialEndsAt?: string | null;
+  currentPeriodEnd?: string | null;
+  nextBillingAt?: string | null;
+  pastDueAt?: string | null;
+  canceledAt?: string | null;
+  stripeCustomerId?: string | null;
+  stripeSubscriptionId?: string | null;
   featureFlags?: Record<string, boolean> | null;
   planLimits?: Record<string, number> | null;
   suspendedAt?: string | null;
@@ -604,6 +641,49 @@ export type PlatformSupportAccess = {
   usedAt?: string | null;
   createdAt: string;
   admin?: { id: string; email: string; role: string } | null;
+};
+
+export type PlatformBillingEventType =
+  | "SETUP_FEE_INVOICED"
+  | "SETUP_FEE_PAID"
+  | "SUBSCRIPTION_STARTED"
+  | "SUBSCRIPTION_RENEWED"
+  | "PAYMENT_FAILED"
+  | "PAST_DUE"
+  | "CANCELED"
+  | "CREDIT_APPLIED";
+
+export type PlatformBillingEventInput = {
+  type: PlatformBillingEventType;
+  amountCents?: number;
+  provider?: string;
+  note?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type PlatformBillingEvent = {
+  id: string;
+  type: PlatformBillingEventType;
+  amountCents?: number | null;
+  provider: string;
+  note?: string | null;
+  createdAt: string;
+  actor?: { id: string; email: string; role: string } | null;
+};
+
+export type PlatformBillingSummary = {
+  tenantId: string;
+  subscriptionStatus: string;
+  monthlyPriceCents?: number | null;
+  setupFeeCents?: number | null;
+  trialEndsAt?: string | null;
+  currentPeriodEnd?: string | null;
+  nextBillingAt?: string | null;
+  pastDueAt?: string | null;
+  canceledAt?: string | null;
+  collectedCents: number;
+  failedCount: number;
+  events: PlatformBillingEvent[];
 };
 
 export type PlatformAutomationFailure = {

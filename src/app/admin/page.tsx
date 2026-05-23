@@ -16,6 +16,9 @@ import {
   api,
   PlatformAuditLog,
   PlatformAutomationFailure,
+  PlatformBillingEvent,
+  PlatformBillingEventType,
+  PlatformBillingSummary,
   PlatformMetrics,
   PlatformSupportAccess,
   PlatformSupportNote,
@@ -158,9 +161,9 @@ function Metrics({ data }: { data?: PlatformMetrics }) {
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       <Metric icon={Building2} label="Active tenants" value={data?.tenantStatus.ACTIVE ?? 0} />
+      <Metric icon={CreditCard} label="Monthly recurring revenue" value={money(data?.mrrCents)} />
+      <Metric icon={AlertTriangle} label="Past-due tenants" value={data?.pastDueTenants ?? 0} danger={(data?.pastDueTenants ?? 0) > 0} />
       <Metric icon={UsersRound} label="Active users" value={data?.activeUsers ?? 0} />
-      <Metric icon={CreditCard} label="Paid service revenue" value={money(data?.paidRevenueCents)} />
-      <Metric icon={AlertTriangle} label="Failures" value={(data?.failedAutomations ?? 0) + (data?.failedWebhooks ?? 0)} danger />
     </div>
   );
 }
@@ -191,6 +194,7 @@ function TenantRow({
         </button>
         <div className="flex flex-wrap items-center gap-2">
           <Status label={tenant.status} />
+          <Status label={tenant.subscriptionStatus ?? "TRIALING"} />
           <Status label={tenant.subscriptionPlan} />
           <select
             value={tenant.status}
@@ -223,10 +227,14 @@ function TenantDetail({ tenantId }: { tenantId: string }) {
   const usage = useQuery({ queryKey: ["platform-tenant-usage", tenantId], queryFn: () => api.platformTenantUsage(tenantId) });
   const notes = useQuery({ queryKey: ["platform-support-notes", tenantId], queryFn: () => api.platformSupportNotes(tenantId) });
   const access = useQuery({ queryKey: ["platform-support-access", tenantId], queryFn: () => api.platformSupportAccess(tenantId) });
+  const billing = useQuery({ queryKey: ["platform-billing", tenantId], queryFn: () => api.platformBilling(tenantId) });
   const [note, setNote] = useState("");
   const [reason, setReason] = useState("Support troubleshooting for tenant setup.");
   const [flags, setFlags] = useState("");
   const [limits, setLimits] = useState("");
+  const [billingType, setBillingType] = useState<PlatformBillingEventType>("SUBSCRIPTION_RENEWED");
+  const [billingAmount, setBillingAmount] = useState("299");
+  const [billingNote, setBillingNote] = useState("Manual payment recorded.");
 
   const saveConfig = useMutation({
     mutationFn: () =>
@@ -255,6 +263,25 @@ function TenantDetail({ tenantId }: { tenantId: string }) {
       void queryClient.invalidateQueries({ queryKey: ["platform-audit"] });
     }
   });
+  const createBillingEvent = useMutation({
+    mutationFn: () => {
+      const parsedAmount = Number(billingAmount);
+      return api.createPlatformBillingEvent(tenantId, {
+        type: billingType,
+        amountCents: billingAmount.trim() && Number.isFinite(parsedAmount) ? Math.round(parsedAmount * 100) : undefined,
+        provider: "manual",
+        note: billingNote.trim() || undefined
+      });
+    },
+    onSuccess: () => {
+      setBillingNote("");
+      void queryClient.invalidateQueries({ queryKey: ["platform-billing", tenantId] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-tenant", tenantId] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-tenants"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-metrics"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-audit"] });
+    }
+  });
 
   const tenant = detail.data;
   const effectiveFlags = flags || JSON.stringify(usage.data?.featureFlags ?? tenant?.featureFlags ?? {}, null, 2);
@@ -264,6 +291,18 @@ function TenantDetail({ tenantId }: { tenantId: string }) {
     <Panel title={tenant?.businessName ?? "Tenant detail"} icon={ShieldCheck}>
       <div className="grid gap-4">
         <HealthPanel health={health.data} usage={usage.data} tenant={tenant} />
+        <BillingPanel
+          summary={billing.data}
+          type={billingType}
+          amount={billingAmount}
+          note={billingNote}
+          pending={createBillingEvent.isPending}
+          error={createBillingEvent.error}
+          onTypeChange={setBillingType}
+          onAmountChange={setBillingAmount}
+          onNoteChange={setBillingNote}
+          onSubmit={() => createBillingEvent.mutate()}
+        />
         <div className="grid gap-4 lg:grid-cols-2">
           <section className="rounded-[8px] bg-mist p-3">
             <p className="font-semibold text-ink">Feature flags and limits</p>
@@ -347,6 +386,118 @@ function HealthPanel({
         <span>{usage?._count.messages ?? 0} messages</span>
       </div>
     </section>
+  );
+}
+
+const billingEventTypes: PlatformBillingEventType[] = [
+  "SETUP_FEE_INVOICED",
+  "SETUP_FEE_PAID",
+  "SUBSCRIPTION_STARTED",
+  "SUBSCRIPTION_RENEWED",
+  "PAYMENT_FAILED",
+  "PAST_DUE",
+  "CANCELED",
+  "CREDIT_APPLIED"
+];
+
+function BillingPanel({
+  summary,
+  type,
+  amount,
+  note,
+  pending,
+  error,
+  onTypeChange,
+  onAmountChange,
+  onNoteChange,
+  onSubmit
+}: {
+  summary?: PlatformBillingSummary;
+  type: PlatformBillingEventType;
+  amount: string;
+  note: string;
+  pending: boolean;
+  error: unknown;
+  onTypeChange: (type: PlatformBillingEventType) => void;
+  onAmountChange: (value: string) => void;
+  onNoteChange: (value: string) => void;
+  onSubmit: () => void;
+}) {
+  const events = summary?.events ?? [];
+  return (
+    <section className="rounded-[8px] bg-mist p-3">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="font-semibold text-ink">Billing control</p>
+          <p className="mt-1 text-sm text-steel">Track subscription state, setup fees, failed payments, and manual collections.</p>
+        </div>
+        <Status label={summary?.subscriptionStatus ?? "TRIALING"} />
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <BillingStat label="Monthly price" value={money(summary?.monthlyPriceCents)} />
+        <BillingStat label="Setup fee" value={money(summary?.setupFeeCents)} />
+        <BillingStat label="Collected" value={money(summary?.collectedCents)} />
+        <BillingStat label="Failed payments" value={summary?.failedCount ?? 0} danger={(summary?.failedCount ?? 0) > 0} />
+        <BillingStat label="Next billing" value={summary?.nextBillingAt ? shortDate(summary.nextBillingAt) : "Not set"} />
+      </div>
+
+      <div className="mt-4 grid gap-3 rounded-[8px] bg-white p-3 lg:grid-cols-[1fr_0.6fr_1.4fr_auto] lg:items-end">
+        <label>
+          <span className="mb-2 block text-sm font-medium text-steel">Event type</span>
+          <select value={type} onChange={(event) => onTypeChange(event.target.value as PlatformBillingEventType)} className="h-10 w-full rounded-[8px] border border-ink/10 bg-mist px-2 text-sm outline-none focus:border-pine">
+            {billingEventTypes.map((item) => (
+              <option key={item} value={item}>{item.replaceAll("_", " ")}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span className="mb-2 block text-sm font-medium text-steel">Amount</span>
+          <input value={amount} onChange={(event) => onAmountChange(event.target.value)} inputMode="decimal" className="h-10 w-full rounded-[8px] border border-ink/10 bg-mist px-3 text-sm outline-none focus:border-pine" />
+        </label>
+        <label>
+          <span className="mb-2 block text-sm font-medium text-steel">Note</span>
+          <input value={note} onChange={(event) => onNoteChange(event.target.value)} className="h-10 w-full rounded-[8px] border border-ink/10 bg-mist px-3 text-sm outline-none focus:border-pine" />
+        </label>
+        <button onClick={onSubmit} disabled={pending} className="h-10 rounded-[8px] bg-pine px-4 text-sm font-semibold text-white disabled:opacity-50">
+          Record
+        </button>
+      </div>
+      {error ? <p className="mt-3 text-sm font-medium text-coral">{error instanceof Error ? error.message : "Unable to record billing event"}</p> : null}
+
+      <div className="mt-4 grid gap-2 lg:grid-cols-2">
+        {events.slice(0, 6).map((event) => (
+          <BillingEventRow key={event.id} event={event} />
+        ))}
+        {!events.length ? <Empty label="No billing events yet" /> : null}
+      </div>
+    </section>
+  );
+}
+
+function BillingStat({ label, value, danger }: { label: string; value: string | number; danger?: boolean }) {
+  return (
+    <div className={cn("rounded-[8px] bg-white p-3", danger ? "ring-1 ring-coral/30" : "")}>
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-steel">{label}</p>
+      <p className={cn("mt-2 text-lg font-semibold", danger ? "text-coral" : "text-ink")}>{value}</p>
+    </div>
+  );
+}
+
+function BillingEventRow({ event }: { event: PlatformBillingEvent }) {
+  return (
+    <div className="rounded-[8px] bg-white p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="font-semibold text-ink">{event.type.replaceAll("_", " ")}</p>
+          <p className="mt-1 text-sm text-steel">{event.note ?? "No note"}</p>
+        </div>
+        <p className="whitespace-nowrap text-sm font-semibold text-ink">{money(event.amountCents)}</p>
+      </div>
+      <p className="mt-2 text-xs font-medium text-steel">
+        {event.provider} · {event.actor?.email ?? "system"} · {shortDate(event.createdAt)}
+      </p>
+    </div>
   );
 }
 
