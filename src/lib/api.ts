@@ -172,6 +172,7 @@ export const api = {
     }),
   tenant: () => request<TenantProfile>("/tenant"),
   onboarding: () => request<OnboardingProfile>("/tenant/onboarding"),
+  activation: () => request<TenantActivationSummary>("/tenant/activation"),
   tenantBilling: () => request<TenantBillingSummary>("/tenant/billing"),
   createTenantBillingCheckout: () =>
     request<TenantBillingSession>("/tenant/billing/checkout", { method: "POST" }),
@@ -393,6 +394,26 @@ export type TenantBillingSession = {
   mock?: boolean;
   sessionId: string;
   url?: string | null;
+};
+
+export type TenantActivationStep = {
+  id: string;
+  label: string;
+  detail: string;
+  done: boolean;
+  target: string;
+};
+
+export type TenantActivationSummary = {
+  score: number;
+  completed: number;
+  total: number;
+  setupStatus: string;
+  launchReady: boolean;
+  nextStep?: TenantActivationStep | null;
+  steps: TenantActivationStep[];
+  counts: Record<string, number>;
+  biggestProblem?: string | null;
 };
 
 export type OnboardingProfile = {

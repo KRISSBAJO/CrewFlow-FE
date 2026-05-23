@@ -65,6 +65,7 @@ import {
   RetentionSummary,
   Service,
   StaffMember,
+  TenantActivationSummary,
   TenantBillingSummary,
   TenantProfile,
   WebhookEvent,
@@ -233,6 +234,7 @@ function Console() {
   const payments = useQuery({ queryKey: ["payments"], queryFn: api.payments });
   const health = useQuery({ queryKey: ["health"], queryFn: api.health });
   const tenant = useQuery({ queryKey: ["tenant"], queryFn: api.tenant });
+  const activation = useQuery({ queryKey: ["activation"], queryFn: api.activation });
   const tenantBilling = useQuery({ queryKey: ["tenant-billing"], queryFn: api.tenantBilling });
   const onboarding = useQuery({ queryKey: ["onboarding"], queryFn: api.onboarding });
   const customers = useQuery({ queryKey: ["customers"], queryFn: () => api.customers() });
@@ -382,6 +384,7 @@ function Console() {
                   services={services.data}
                   staff={staff.data}
                   onboarding={onboarding.data}
+                  activation={activation.data}
                   tenant={tenant.data}
                   loading={dashboard.isLoading}
                   onOpen={setDrawer}
@@ -431,6 +434,7 @@ function Overview({
   services,
   staff,
   onboarding,
+  activation,
   tenant,
   loading,
   onOpen,
@@ -442,6 +446,7 @@ function Overview({
   services?: unknown[];
   staff?: unknown[];
   onboarding?: OnboardingProfile;
+  activation?: TenantActivationSummary;
   tenant?: TenantProfile;
   loading: boolean;
   onOpen: (state: DrawerState) => void;
@@ -456,6 +461,7 @@ function Overview({
         staff={staff?.length ?? 0}
         bookings={data?.today.appointments.length ?? 0}
         onboarding={onboarding}
+        activation={activation}
         tenant={tenant}
         onOpen={onOpen}
         onView={onView}
@@ -1426,6 +1432,7 @@ function SetupChecklist({
   staff,
   bookings,
   onboarding,
+  activation,
   tenant,
   onOpen,
   onView
@@ -1435,6 +1442,7 @@ function SetupChecklist({
   staff: number;
   bookings: number;
   onboarding?: OnboardingProfile;
+  activation?: TenantActivationSummary;
   tenant?: TenantProfile;
   onOpen: (state: DrawerState) => void;
   onView: (view: View) => void;
@@ -1444,7 +1452,7 @@ function SetupChecklist({
     Boolean(onboarding?.whatsappNumber) ||
     completedSteps.has("whatsappPlanned") ||
     tenant?.onboardingProfile?.setupStatus === "READY";
-  const items = [
+  const localItems = [
     {
       label: "Business profile ready",
       detail: tenant ? `${tenant.businessName} · ${tenant.industry}` : "Tenant profile is active.",
@@ -1496,30 +1504,48 @@ function SetupChecklist({
       onClick: () => onView("settings")
     }
   ];
+  const items = activation?.steps.length
+    ? activation.steps.map((step) => ({
+        label: step.label,
+        detail: step.detail,
+        done: step.done,
+        icon: iconForActivationStep(step.id),
+        action: actionForActivationTarget(step.target),
+        onClick: () => handleActivationTarget(step.target, onView, onOpen)
+      }))
+    : localItems;
   const completed = items.filter((item) => item.done).length;
+  const total = activation?.total ?? items.length;
+  const score = activation?.score ?? Math.round((completed / items.length) * 100);
 
   return (
     <section className="overflow-hidden rounded-[8px] border border-white/80 bg-ink text-white shadow-soft">
       <div className="grid gap-5 p-5 xl:grid-cols-[0.8fr_1.2fr]">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-mint">First-run setup</p>
-          <h2 className="mt-3 text-2xl font-semibold">Get the tenant revenue-ready.</h2>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-mint">Activation playbook</p>
+          <h2 className="mt-3 text-2xl font-semibold">
+            {activation?.launchReady ? "Tenant is launch-ready." : "Get the tenant revenue-ready."}
+          </h2>
           <p className="mt-3 leading-7 text-white/68">
             This checklist keeps onboarding focused on the operating pieces that make a business pay:
             services, staff, bookings, customers, and automation.
           </p>
-          {onboarding?.biggestProblem ? (
+          {activation?.nextStep ? (
+            <p className="mt-3 rounded-[8px] bg-white/8 p-3 text-sm leading-6 text-white/72">
+              Next: {activation.nextStep.label}. {activation.nextStep.detail}
+            </p>
+          ) : onboarding?.biggestProblem ? (
             <p className="mt-3 rounded-[8px] bg-white/8 p-3 text-sm leading-6 text-white/72">
               Priority: {onboarding.biggestProblem}
             </p>
           ) : null}
           <div className="mt-5">
             <div className="mb-2 flex items-center justify-between text-sm font-semibold">
-              <span>{completed} of {items.length} complete</span>
-              <span>{Math.round((completed / items.length) * 100)}%</span>
+              <span>{activation?.completed ?? completed} of {total} complete</span>
+              <span>{score}%</span>
             </div>
             <div className="h-2 overflow-hidden rounded-full bg-white/12">
-              <div className="h-full rounded-full bg-mint" style={{ width: `${(completed / items.length) * 100}%` }} />
+              <div className="h-full rounded-full bg-mint" style={{ width: `${score}%` }} />
             </div>
           </div>
         </div>
@@ -1547,6 +1573,42 @@ function SetupChecklist({
       </div>
     </section>
   );
+}
+
+function iconForActivationStep(id: string) {
+  const icons: Record<string, typeof Building2> = {
+    business_profile: Building2,
+    service_catalog: Settings2,
+    staff_ready: UsersRound,
+    customer_base: ContactRound,
+    first_booking: CalendarDays,
+    automation_ready: MessageSquareText,
+    billing_active: CreditCard
+  };
+  return icons[id] ?? ClipboardCheck;
+}
+
+function actionForActivationTarget(target: string) {
+  const labels: Record<string, string> = {
+    settings: "Settings",
+    customers: "Customers",
+    bookings: "Create"
+  };
+  return labels[target] ?? "Open";
+}
+
+function handleActivationTarget(
+  target: string,
+  onView: (view: View) => void,
+  onOpen: (state: DrawerState) => void
+) {
+  if (target === "bookings") {
+    onOpen({ type: "new-booking" });
+    return;
+  }
+  if (target === "customers" || target === "settings") {
+    onView(target);
+  }
 }
 
 function FieldView({ items, onOpen }: { items?: Booking[]; onOpen: (state: DrawerState) => void }) {
@@ -1741,6 +1803,7 @@ function SettingsForm({
     mutationFn: api.createTenantBillingCheckout,
     onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: ["tenant-billing"] });
+      void queryClient.invalidateQueries({ queryKey: ["activation"] });
       if (data.url) window.open(data.url, "_blank", "noopener,noreferrer");
     }
   });
@@ -1756,6 +1819,7 @@ function SettingsForm({
       void queryClient.invalidateQueries({ queryKey: ["actions"] });
       void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       void queryClient.invalidateQueries({ queryKey: ["tenant-billing"] });
+      void queryClient.invalidateQueries({ queryKey: ["activation"] });
     }
   });
 
@@ -1788,6 +1852,7 @@ function SettingsForm({
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["tenant"] });
       void queryClient.invalidateQueries({ queryKey: ["onboarding"] });
+      void queryClient.invalidateQueries({ queryKey: ["activation"] });
     }
   });
 
