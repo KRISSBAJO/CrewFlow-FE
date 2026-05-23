@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   Banknote,
   Bot,
+  Building2,
   CalendarDays,
   Camera,
   CheckCircle2,
@@ -24,6 +25,7 @@ import {
   Route,
   Save,
   Send,
+  Settings2,
   ShieldCheck,
   Sparkles,
   UserCheck,
@@ -178,6 +180,9 @@ function Console() {
   const invoices = useQuery({ queryKey: ["invoices"], queryFn: api.invoices });
   const payments = useQuery({ queryKey: ["payments"], queryFn: api.payments });
   const health = useQuery({ queryKey: ["health"], queryFn: api.health });
+  const customers = useQuery({ queryKey: ["customers"], queryFn: api.customers });
+  const services = useQuery({ queryKey: ["services"], queryFn: api.services });
+  const staff = useQuery({ queryKey: ["staff"], queryFn: api.staff });
 
   const refreshAll = () => {
     void queryClient.invalidateQueries();
@@ -278,7 +283,16 @@ function Console() {
               transition={{ duration: 0.18 }}
             >
               {view === "overview" ? (
-                <Overview data={dashboard.data} actions={actions.data} loading={dashboard.isLoading} onOpen={setDrawer} />
+                <Overview
+                  data={dashboard.data}
+                  actions={actions.data}
+                  customers={customers.data}
+                  services={services.data}
+                  staff={staff.data}
+                  loading={dashboard.isLoading}
+                  onOpen={setDrawer}
+                  onView={setView}
+                />
               ) : null}
               {view === "inbox" ? <InboxView items={inbox.data} onOpen={setDrawer} /> : null}
               {view === "bookings" ? <BookingsView items={bookings.data} onOpen={setDrawer} /> : null}
@@ -297,17 +311,34 @@ function Console() {
 function Overview({
   data,
   actions,
+  customers,
+  services,
+  staff,
   loading,
-  onOpen
+  onOpen,
+  onView
 }: {
   data?: DashboardSummary;
   actions?: OperationalAction[];
+  customers?: unknown[];
+  services?: unknown[];
+  staff?: unknown[];
   loading: boolean;
   onOpen: (state: DrawerState) => void;
+  onView: (view: View) => void;
 }) {
   if (loading) return <LoadingPanel />;
   return (
     <div className="grid gap-4">
+      <SetupChecklist
+        customers={customers?.length ?? 0}
+        services={services?.length ?? 0}
+        staff={staff?.length ?? 0}
+        bookings={data?.today.appointments.length ?? 0}
+        onOpen={onOpen}
+        onView={onView}
+      />
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Metric icon={CalendarDays} label="Today" value={data?.today.appointments.length ?? 0} tone="pine" />
         <Metric icon={Banknote} label="Paid revenue" value={money(data?.revenue.paidTotalCents)} tone="mint" />
@@ -376,6 +407,119 @@ function BookingsView({ items, onOpen }: { items?: Booking[]; onOpen: (state: Dr
     >
       <BookingRows items={items} onOpen={onOpen} />
     </Panel>
+  );
+}
+
+function SetupChecklist({
+  customers,
+  services,
+  staff,
+  bookings,
+  onOpen,
+  onView
+}: {
+  customers: number;
+  services: number;
+  staff: number;
+  bookings: number;
+  onOpen: (state: DrawerState) => void;
+  onView: (view: View) => void;
+}) {
+  const items = [
+    {
+      label: "Business profile ready",
+      detail: "Tenant and sample company are active.",
+      done: true,
+      icon: Building2,
+      action: "Review",
+      onClick: () => onView("overview")
+    },
+    {
+      label: "Services loaded",
+      detail: services ? `${services} services available` : "Add your first service catalog",
+      done: services > 0,
+      icon: Settings2,
+      action: "Services",
+      onClick: () => onOpen({ type: "new-booking" })
+    },
+    {
+      label: "Staff added",
+      detail: staff ? `${staff} team members ready` : "Invite managers and field staff",
+      done: staff > 0,
+      icon: UsersRound,
+      action: "Staff",
+      onClick: () => onView("field")
+    },
+    {
+      label: "First booking created",
+      detail: bookings ? `${bookings} appointments today` : "Create a booking to prove the flow",
+      done: bookings > 0,
+      icon: CalendarDays,
+      action: "Create",
+      onClick: () => onOpen({ type: "new-booking" })
+    },
+    {
+      label: "Customer list started",
+      detail: customers ? `${customers} customers in the system` : "Import or add customer records",
+      done: customers > 0,
+      icon: UsersRound,
+      action: "Bookings",
+      onClick: () => onView("bookings")
+    },
+    {
+      label: "WhatsApp automation planned",
+      detail: "Connect reminders, on-the-way texts, invoice nudges, and review requests.",
+      done: false,
+      icon: MessageSquareText,
+      action: "Inbox",
+      onClick: () => onView("inbox")
+    }
+  ];
+  const completed = items.filter((item) => item.done).length;
+
+  return (
+    <section className="overflow-hidden rounded-[8px] border border-white/80 bg-ink text-white shadow-soft">
+      <div className="grid gap-5 p-5 xl:grid-cols-[0.8fr_1.2fr]">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-mint">First-run setup</p>
+          <h2 className="mt-3 text-2xl font-semibold">Get the tenant revenue-ready.</h2>
+          <p className="mt-3 leading-7 text-white/68">
+            This checklist keeps onboarding focused on the operating pieces that make a business pay:
+            services, staff, bookings, customers, and automation.
+          </p>
+          <div className="mt-5">
+            <div className="mb-2 flex items-center justify-between text-sm font-semibold">
+              <span>{completed} of {items.length} complete</span>
+              <span>{Math.round((completed / items.length) * 100)}%</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-white/12">
+              <div className="h-full rounded-full bg-mint" style={{ width: `${(completed / items.length) * 100}%` }} />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-2 md:grid-cols-2">
+          {items.map((item) => (
+            <button
+              key={item.label}
+              onClick={item.onClick}
+              className="flex min-h-[104px] gap-3 rounded-[8px] bg-white p-3 text-left text-ink transition hover:bg-mint"
+            >
+              <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px]", item.done ? "bg-pine text-white" : "bg-mist text-pine")}>
+                {item.done ? <CheckCircle2 className="h-5 w-5" /> : <item.icon className="h-5 w-5" />}
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-semibold">{item.label}</p>
+                  <span className="rounded-[8px] bg-mist px-2 py-1 text-xs font-bold text-steel">{item.action}</span>
+                </div>
+                <p className="mt-1 text-sm leading-6 text-steel">{item.detail}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
 

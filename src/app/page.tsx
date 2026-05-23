@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, Banknote, CheckCircle2, Headphones, Sparkles } from "lucide-react";
+import { ConversionSection } from "@/components/Conversion";
 import { FeatureSection } from "@/components/Feature";
 import hero from "@/public/images/hero.png";
 import heroSecondary from "@/public/images/hero-2.png";
@@ -47,6 +48,9 @@ export default function LandingPage() {
             <a href="#proof" className="transition hover:text-white">
               Proof
             </a>
+            <a href="#setup" className="transition hover:text-white">
+              Setup
+            </a>
           </nav>
           <Link
             href="/app"
@@ -77,6 +81,12 @@ export default function LandingPage() {
                 Open console
                 <ArrowRight className="h-4 w-4" />
               </Link>
+              <a
+                href="#setup"
+                className="flex h-12 items-center rounded-[8px] border border-white/28 px-5 font-semibold text-white transition hover:bg-white/10"
+              >
+                Start setup
+              </a>
               <p className="text-sm font-medium text-white/64">Built to reduce lost revenue and admin chaos.</p>
             </div>
           </div>
@@ -132,6 +142,8 @@ export default function LandingPage() {
           </Link>
         </div>
       </section>
+
+      <ConversionSection />
 
       <footer className="border-t border-ink/10 bg-white">
         <div className="mx-auto grid max-w-7xl gap-8 px-5 py-10 md:grid-cols-[1.2fr_0.8fr_0.8fr] md:px-8">
