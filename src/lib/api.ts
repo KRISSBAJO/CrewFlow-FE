@@ -99,7 +99,24 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input)
     }),
-  customers: () => request<Customer[]>("/customers"),
+  customers: (search?: string) =>
+    request<Customer[]>(search ? `/customers?search=${encodeURIComponent(search)}` : "/customers"),
+  customerTimeline: (id: string) => request<CustomerTimeline>(`/customers/${id}/timeline`),
+  createCustomer: (input: CustomerInput) =>
+    request<Customer>("/customers", {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
+  updateCustomer: (id: string, input: Partial<CustomerInput>) =>
+    request<Customer>(`/customers/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(input)
+    }),
+  importCustomers: (customers: CustomerInput[]) =>
+    request<CustomerImportResult>("/customers/import", {
+      method: "POST",
+      body: JSON.stringify({ customers })
+    }),
   services: () => request<Service[]>("/services"),
   createService: (input: ServiceInput) =>
     request<Service>("/services", {
@@ -253,6 +270,13 @@ export type StaffInput = {
   role: "OWNER" | "MANAGER" | "STAFF";
 };
 
+export type CustomerInput = {
+  name: string;
+  phone: string;
+  email?: string;
+  notes?: string;
+};
+
 export type DashboardSummary = {
   today: {
     appointments: Booking[];
@@ -287,6 +311,30 @@ export type Customer = {
   name: string;
   phone: string;
   email?: string | null;
+  notes?: string | null;
+  updatedAt?: string;
+};
+
+export type CustomerImportResult = {
+  created: number;
+  updated: number;
+  skipped: number;
+  total: number;
+  results: Array<{
+    phone: string;
+    status: "created" | "updated" | "skipped";
+    id?: string;
+    reason?: string;
+  }>;
+};
+
+export type CustomerTimeline = {
+  customerId: string;
+  items: Array<{
+    type: string;
+    occurredAt: string;
+    item: unknown;
+  }>;
 };
 
 export type StaffMember = {

@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   ClipboardCheck,
   Clock3,
+  ContactRound,
   CreditCard,
   ExternalLink,
   FileText,
@@ -40,6 +41,7 @@ import {
   api,
   Booking,
   Conversation,
+  Customer,
   DashboardSummary,
   Invoice,
   OnboardingProfile,
@@ -55,6 +57,7 @@ import { useAuth } from "@/store/auth";
 const nav = [
   { id: "overview", label: "Overview", icon: HeartPulse },
   { id: "inbox", label: "Inbox", icon: Inbox },
+  { id: "customers", label: "Customers", icon: ContactRound },
   { id: "bookings", label: "Bookings", icon: CalendarDays },
   { id: "field", label: "Field", icon: Route },
   { id: "money", label: "Money", icon: CreditCard },
@@ -67,6 +70,7 @@ type DrawerState =
   | { type: "booking"; item: Booking }
   | { type: "field-job"; item: Booking }
   | { type: "conversation"; item: Conversation }
+  | { type: "customer"; item: Customer }
   | { type: "invoice"; item: Invoice }
   | { type: "action"; item: OperationalAction }
   | { type: "new-booking" }
@@ -186,7 +190,7 @@ function Console() {
   const health = useQuery({ queryKey: ["health"], queryFn: api.health });
   const tenant = useQuery({ queryKey: ["tenant"], queryFn: api.tenant });
   const onboarding = useQuery({ queryKey: ["onboarding"], queryFn: api.onboarding });
-  const customers = useQuery({ queryKey: ["customers"], queryFn: api.customers });
+  const customers = useQuery({ queryKey: ["customers"], queryFn: () => api.customers() });
   const services = useQuery({ queryKey: ["services"], queryFn: api.services });
   const staff = useQuery({ queryKey: ["staff"], queryFn: api.staff });
 
@@ -305,6 +309,7 @@ function Console() {
                 />
               ) : null}
               {view === "inbox" ? <InboxView items={inbox.data} onOpen={setDrawer} /> : null}
+              {view === "customers" ? <CustomersView items={customers.data} onOpen={setDrawer} /> : null}
               {view === "bookings" ? <BookingsView items={bookings.data} onOpen={setDrawer} /> : null}
               {view === "field" ? <FieldView items={field.data} onOpen={setDrawer} /> : null}
               {view === "money" ? <MoneyView invoices={invoices.data} payments={payments.data} onOpen={setDrawer} /> : null}
@@ -417,6 +422,170 @@ function InboxView({ items, onOpen }: { items?: Conversation[]; onOpen: (state: 
   );
 }
 
+function CustomersView({ items, onOpen }: { items?: Customer[]; onOpen: (state: DrawerState) => void }) {
+  const queryClient = useQueryClient();
+  const [search, setSearch] = useState("");
+  const [editing, setEditing] = useState<Customer | null>(null);
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [notes, setNotes] = useState("");
+  const [csv, setCsv] = useState("name,phone,email,notes\nAva Carter,+15550102020,ava@example.com,Prefers WhatsApp");
+  const [importResult, setImportResult] = useState<string>("");
+
+  const filtered = useMemo(() => {
+    const value = search.trim().toLowerCase();
+    if (!value) return items ?? [];
+    return (items ?? []).filter((customer) =>
+      [customer.name, customer.phone, customer.email ?? "", customer.notes ?? ""]
+        .join(" ")
+        .toLowerCase()
+        .includes(value)
+    );
+  }, [items, search]);
+
+  function reset(customer?: Customer | null) {
+    setEditing(customer ?? null);
+    setName(customer?.name ?? "");
+    setPhone(customer?.phone ?? "");
+    setEmail(customer?.email ?? "");
+    setNotes(customer?.notes ?? "");
+  }
+
+  const save = useMutation({
+    mutationFn: () =>
+      editing
+        ? api.updateCustomer(editing.id, { name, phone, email, notes })
+        : api.createCustomer({ name, phone, email, notes }),
+    onSuccess: () => {
+      reset();
+      void queryClient.invalidateQueries({ queryKey: ["customers"] });
+    }
+  });
+
+  const importCustomers = useMutation({
+    mutationFn: () => api.importCustomers(parseCustomerCsv(csv)),
+    onSuccess: (result) => {
+      setImportResult(`${result.created} created, ${result.updated} updated, ${result.skipped} skipped`);
+      void queryClient.invalidateQueries({ queryKey: ["customers"] });
+    }
+  });
+
+  const canSave = name.trim() && phone.trim();
+  const preview = parseCustomerCsv(csv).slice(0, 5);
+
+  return (
+    <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+      <Panel title="Customer manager" icon={ContactRound}>
+        <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search customers..."
+            className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine md:max-w-sm"
+          />
+          <button
+            onClick={() => reset()}
+            className="flex h-11 items-center gap-2 rounded-[8px] bg-pine px-4 font-semibold text-white"
+          >
+            <Plus className="h-4 w-4" />
+            New customer
+          </button>
+        </div>
+
+        <div className="grid gap-3">
+          {filtered.map((customer) => (
+            <Row key={customer.id} onClick={() => onOpen({ type: "customer", item: customer })}>
+              <Avatar name={customer.name} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-semibold text-ink">{customer.name}</p>
+                <p className="truncate text-sm text-steel">
+                  {customer.phone} · {customer.email ?? "No email"}
+                </p>
+              </div>
+              <button
+                onClick={(event) => {
+                  event.stopPropagation();
+                  reset(customer);
+                }}
+                className="h-9 rounded-[8px] bg-white px-3 text-sm font-semibold text-ink"
+              >
+                Edit
+              </button>
+            </Row>
+          ))}
+          <Empty show={!filtered.length} label="No customers found" />
+        </div>
+      </Panel>
+
+      <div className="grid gap-4">
+        <Panel title={editing ? "Edit customer" : "Add customer"} icon={UserCheck}>
+          <div className="grid gap-3 md:grid-cols-2">
+            <InputField label="Name" value={name} onChange={setName} />
+            <InputField label="Phone" value={phone} onChange={setPhone} />
+            <InputField label="Email" value={email} onChange={setEmail} />
+          </div>
+          <label className="mt-3 block">
+            <span className="mb-2 block text-sm font-medium text-ink">Notes</span>
+            <textarea
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              className="min-h-24 w-full rounded-[8px] border border-ink/10 bg-mist p-3 outline-none focus:border-pine"
+            />
+          </label>
+          {save.error ? <ErrorText error={save.error} /> : null}
+          <div className="mt-3 flex gap-2">
+            <button
+              onClick={() => save.mutate()}
+              disabled={!canSave || save.isPending}
+              className="flex h-10 items-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              {editing ? "Save customer" : "Add customer"}
+            </button>
+            {editing ? (
+              <button onClick={() => reset()} className="h-10 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink">
+                Cancel
+              </button>
+            ) : null}
+          </div>
+        </Panel>
+
+        <Panel title="CSV import" icon={FileText}>
+          <textarea
+            value={csv}
+            onChange={(event) => setCsv(event.target.value)}
+            className="min-h-36 w-full rounded-[8px] border border-ink/10 bg-mist p-3 text-sm outline-none focus:border-pine"
+          />
+          <div className="mt-3 rounded-[8px] bg-mist p-3">
+            <p className="text-sm font-semibold text-ink">Preview</p>
+            <div className="mt-2 grid gap-2">
+              {preview.map((row, index) => (
+                <p key={`${row.phone}-${index}`} className="truncate text-sm text-steel">
+                  {row.name} · {row.phone} · {row.email || "No email"}
+                </p>
+              ))}
+              <Empty show={!preview.length} label="Paste CSV with name and phone" />
+            </div>
+          </div>
+          {importCustomers.error ? <ErrorText error={importCustomers.error} /> : null}
+          {importResult ? (
+            <p className="mt-3 rounded-[8px] bg-mint/30 px-3 py-2 text-sm font-semibold text-ink">{importResult}</p>
+          ) : null}
+          <button
+            onClick={() => importCustomers.mutate()}
+            disabled={!preview.length || importCustomers.isPending}
+            className="mt-3 flex h-10 items-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {importCustomers.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            Import customers
+          </button>
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
 function BookingsView({ items, onOpen }: { items?: Booking[]; onOpen: (state: DrawerState) => void }) {
   return (
     <Panel
@@ -496,8 +665,8 @@ function SetupChecklist({
       detail: customers ? `${customers} customers in the system` : "Import or add customer records",
       done: customers > 0,
       icon: UsersRound,
-      action: "Bookings",
-      onClick: () => onView("bookings")
+      action: "Customers",
+      onClick: () => onView("customers")
     },
     {
       label: "WhatsApp automation planned",
@@ -1301,6 +1470,7 @@ function DetailDrawer({
               {state.type === "booking" ? <BookingDetail item={state.item} /> : null}
               {state.type === "field-job" ? <FieldJobDetail item={state.item} onDone={onClose} /> : null}
               {state.type === "conversation" ? <ConversationDetail item={state.item} /> : null}
+              {state.type === "customer" ? <CustomerDetail item={state.item} /> : null}
               {state.type === "invoice" ? <InvoiceDetail item={state.item} /> : null}
               {state.type === "action" ? <ActionDetail item={state.item} onDone={onClose} /> : null}
             </div>
@@ -1313,7 +1483,7 @@ function DetailDrawer({
 
 function NewBookingForm({ onDone }: { onDone: () => void }) {
   const queryClient = useQueryClient();
-  const customers = useQuery({ queryKey: ["customers"], queryFn: api.customers });
+  const customers = useQuery({ queryKey: ["customers"], queryFn: () => api.customers() });
   const services = useQuery({ queryKey: ["services"], queryFn: api.services });
   const staff = useQuery({ queryKey: ["staff"], queryFn: api.staff });
   const [customerId, setCustomerId] = useState("");
@@ -1660,6 +1830,54 @@ function ConversationDetail({ item }: { item: Conversation }) {
   );
 }
 
+function CustomerDetail({ item }: { item: Customer }) {
+  const timeline = useQuery({
+    queryKey: ["customer-timeline", item.id],
+    queryFn: () => api.customerTimeline(item.id)
+  });
+
+  return (
+    <div className="grid gap-4">
+      <DetailCard icon={ContactRound} title={item.name}>
+        <Info label="Phone" value={item.phone} />
+        <Info label="Email" value={item.email ?? "Not captured"} />
+        {item.notes ? <Info label="Notes" value={item.notes} /> : null}
+      </DetailCard>
+
+      <DetailCard icon={Clock3} title="Timeline">
+        {timeline.isLoading ? (
+          <div className="flex min-h-24 items-center justify-center">
+            <Loader2 className="h-5 w-5 animate-spin text-pine" />
+          </div>
+        ) : null}
+        {(timeline.data?.items ?? []).slice(0, 12).map((event, index) => (
+          <div key={`${event.type}-${event.occurredAt}-${index}`} className="rounded-[8px] bg-white p-3">
+            <p className="text-sm font-semibold text-ink">{event.type.replaceAll("_", " ")}</p>
+            <p className="mt-1 text-xs text-steel">{shortDate(event.occurredAt)}</p>
+          </div>
+        ))}
+        <Empty show={!timeline.isLoading && !(timeline.data?.items.length)} label="No customer activity yet" />
+      </DetailCard>
+    </div>
+  );
+}
+
+function parseCustomerCsv(value: string) {
+  const lines = value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const hasHeader = lines[0]?.toLowerCase().includes("name") && lines[0]?.toLowerCase().includes("phone");
+  const rows = hasHeader ? lines.slice(1) : lines;
+
+  return rows
+    .map((line) => {
+      const [name = "", phone = "", email = "", notes = ""] = line.split(",").map((item) => item.trim());
+      return { name, phone, email, notes };
+    })
+    .filter((row) => row.name && row.phone);
+}
+
 function InvoiceDetail({ item }: { item: Invoice }) {
   const queryClient = useQueryClient();
   const paymentLink = useMutation({
@@ -1816,6 +2034,7 @@ function drawerTitle(state: NonNullable<DrawerState>) {
   if (state.type === "booking") return "Booking details";
   if (state.type === "field-job") return "Field job";
   if (state.type === "conversation") return "Conversation";
+  if (state.type === "customer") return "Customer profile";
   if (state.type === "invoice") return "Invoice";
   return "Action";
 }
@@ -1839,6 +2058,7 @@ function titleFor(view: View) {
   return {
     overview: "Operations overview",
     inbox: "Customer inbox",
+    customers: "Customer manager",
     bookings: "Booking board",
     field: "Field operations",
     money: "Invoices and payments",
