@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, Banknote, CheckCircle2, Headphones, MessageSquareText, Route, Sparkles, UsersRound } from "lucide-react";
+import { ArrowRight, Banknote, CheckCircle2, Headphones, Sparkles } from "lucide-react";
+import { FeatureSection } from "@/components/Feature";
 import hero from "@/public/images/hero.png";
 import heroSecondary from "@/public/images/hero-2.png";
 
@@ -8,29 +9,6 @@ const outcomes = [
   { label: "Answer inquiries while your team is busy", value: "24/7", icon: Headphones },
   { label: "Reduce repetitive admin follow-up", value: "40%", icon: CheckCircle2 },
   { label: "Surface unpaid and at-risk revenue", value: "$", icon: Banknote }
-];
-
-const features = [
-  {
-    title: "AI receptionist",
-    body: "Capture questions, quote services, collect details, and turn messages into booking-ready conversations.",
-    icon: MessageSquareText
-  },
-  {
-    title: "Field operations",
-    body: "Give crews a mobile job flow for start, notes, photos, checklist, signature, and completion.",
-    icon: Route
-  },
-  {
-    title: "Money follow-up",
-    body: "Create invoices, payment links, overdue reminders, and manager actions before revenue goes cold.",
-    icon: Banknote
-  },
-  {
-    title: "Staff visibility",
-    body: "Track assignments, attendance, active jobs, and daily operational bottlenecks from one console.",
-    icon: UsersRound
-  }
 ];
 
 export default function LandingPage() {
@@ -113,23 +91,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section id="engine" className="mx-auto grid max-w-7xl gap-8 px-5 py-16 md:grid-cols-[0.95fr_1.05fr] md:px-8">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-pine">Money engine</p>
-          <h2 className="mt-3 text-4xl font-semibold leading-tight text-ink md:text-5xl">
-            Built around operational pain, not dashboard theater.
-          </h2>
-          <p className="mt-5 text-lg leading-8 text-steel">
-            Every screen points at a revenue problem: missed calls, slow replies, unassigned jobs,
-            no-shows, unpaid invoices, and confused staff.
-          </p>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {features.map((feature) => (
-            <Feature key={feature.title} {...feature} />
-          ))}
-        </div>
-      </section>
+      <FeatureSection />
 
       <section id="workflow" className="mx-auto grid max-w-7xl gap-8 px-5 pb-16 md:grid-cols-[1.1fr_0.9fr] md:px-8">
         <div className="relative min-h-[420px] overflow-hidden rounded-[8px] shadow-soft">
@@ -234,26 +196,6 @@ function Outcome({
         <p className="text-2xl font-semibold text-ink">{value}</p>
         <p className="text-sm font-medium text-steel">{label}</p>
       </div>
-    </div>
-  );
-}
-
-function Feature({
-  title,
-  body,
-  icon: Icon
-}: {
-  title: string;
-  body: string;
-  icon: typeof Headphones;
-}) {
-  return (
-    <div className="rounded-[8px] border border-ink/8 bg-white p-5 shadow-soft">
-      <div className="mb-5 flex h-10 w-10 items-center justify-center rounded-[8px] bg-mist text-pine">
-        <Icon className="h-5 w-5" />
-      </div>
-      <h3 className="text-lg font-semibold text-ink">{title}</h3>
-      <p className="mt-2 leading-7 text-steel">{body}</p>
     </div>
   );
 }
