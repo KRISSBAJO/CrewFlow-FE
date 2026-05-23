@@ -589,40 +589,38 @@ function LeadsView({
           />
         }
       >
-        <div className="-mx-4 overflow-x-auto px-4 pb-2">
-          <div className="grid min-w-[1680px] grid-cols-6 gap-4">
-            {leadStatuses.map((stage) => {
-              const stageLeads = filtered.filter((lead) => lead.status === stage.value);
-              const stageValue = stageLeads.reduce(
-                (sum, lead) => sum + (lead.estimatedValueCents ?? 0),
-                0
-              );
-              return (
-                <section key={stage.value} className="min-h-[520px] rounded-[8px] bg-mist p-4">
-                  <div className="mb-4 flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-semibold text-ink">{stage.label}</p>
-                      <p className="mt-1 text-sm font-medium text-steel">
-                        {stageLeads.length} leads · {money(stageValue)}
-                      </p>
-                    </div>
-                    <Status label={stage.value} />
+        <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+          {leadStatuses.map((stage) => {
+            const stageLeads = filtered.filter((lead) => lead.status === stage.value);
+            const stageValue = stageLeads.reduce(
+              (sum, lead) => sum + (lead.estimatedValueCents ?? 0),
+              0
+            );
+            return (
+              <section key={stage.value} className="min-h-[420px] rounded-[8px] bg-mist p-4">
+                <div className="mb-4 flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-ink">{stage.label}</p>
+                    <p className="mt-1 text-sm font-medium text-steel">
+                      {stageLeads.length} leads · {money(stageValue)}
+                    </p>
                   </div>
-                  <div className="grid gap-3">
-                    {stageLeads.map((lead) => (
-                      <LeadCard
-                        key={lead.id}
-                        lead={lead}
-                        staff={staff ?? []}
-                        onOpen={onOpen}
-                      />
-                    ))}
-                    <Empty show={!stageLeads.length} label="No leads here" />
-                  </div>
-                </section>
-              );
-            })}
-          </div>
+                  <Status label={stage.value} />
+                </div>
+                <div className="grid gap-3">
+                  {stageLeads.map((lead) => (
+                    <LeadCard
+                      key={lead.id}
+                      lead={lead}
+                      staff={staff ?? []}
+                      onOpen={onOpen}
+                    />
+                  ))}
+                  <Empty show={!stageLeads.length} label="No leads here" />
+                </div>
+              </section>
+            );
+          })}
         </div>
       </Panel>
 
