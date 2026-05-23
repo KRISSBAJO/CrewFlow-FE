@@ -516,48 +516,71 @@ function InboxView({ items, onOpen }: { items?: Conversation[]; onOpen: (state: 
   }, [items, filter]);
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
-      <ReceptionistSimulator onOpen={onOpen} />
-      <Panel title="Customer inbox" icon={MessageSquareText}>
-        <div className="mb-4 flex gap-2 overflow-x-auto">
-          {[
-            ["active", "Active"],
-            ["intent", "Revenue intent"],
-            ["BOOKING_READY", "Booking ready"],
-            ["WAITING_ON_CUSTOMER", "Waiting"],
-            ["RESOLVED", "Resolved"]
-          ].map(([value, label]) => (
-            <button
-              key={value}
-              onClick={() => setFilter(value)}
-              className={cn(
-                "h-9 shrink-0 rounded-[8px] px-3 text-sm font-semibold",
-                filter === value ? "bg-pine text-white" : "bg-mist text-steel"
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        <div className="grid gap-3">
-          {filtered.map((item) => (
-            <Row key={item.id} onClick={() => onOpen({ type: "conversation", item })}>
-              <Avatar name={item.customer?.name} />
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-semibold text-ink">{item.customer?.name ?? "New inquiry"}</p>
-                <p className="truncate text-sm text-steel">{item.messages?.[0]?.content ?? item.channel}</p>
-              </div>
-              {item.bookingIntents?.[0] ? (
-                <Status label={item.bookingIntents[0].status} />
-              ) : null}
-              <Status label={item.status} />
-              <p className="hidden text-sm text-steel md:block">{shortDate(item.lastMessageAt)}</p>
-            </Row>
-          ))}
-          <Empty show={!filtered.length} label="No conversations found" />
-        </div>
-      </Panel>
+    <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(360px,420px)_minmax(0,1fr)]">
+      <div className="min-w-0">
+        <ReceptionistSimulator onOpen={onOpen} />
+      </div>
+      <div className="min-w-0">
+        <Panel title="Customer inbox" icon={MessageSquareText}>
+          <div className="mb-4 flex flex-wrap gap-2">
+            {[
+              ["active", "Active"],
+              ["intent", "Revenue intent"],
+              ["BOOKING_READY", "Booking ready"],
+              ["WAITING_ON_CUSTOMER", "Waiting"],
+              ["RESOLVED", "Resolved"]
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                onClick={() => setFilter(value)}
+                className={cn(
+                  "h-9 shrink-0 rounded-[8px] px-3 text-sm font-semibold",
+                  filter === value ? "bg-pine text-white" : "bg-mist text-steel"
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="grid min-w-0 gap-3">
+            {filtered.map((item) => (
+              <ConversationRow
+                key={item.id}
+                item={item}
+                onClick={() => onOpen({ type: "conversation", item })}
+              />
+            ))}
+            <Empty show={!filtered.length} label="No conversations found" />
+          </div>
+        </Panel>
+      </div>
     </div>
+  );
+}
+
+function ConversationRow({ item, onClick }: { item: Conversation; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="grid min-h-[72px] min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 rounded-[8px] border border-ink/5 bg-mist/80 p-3 text-left transition hover:border-pine/30 hover:bg-white lg:grid-cols-[auto_minmax(0,1fr)_auto]"
+    >
+      <Avatar name={item.customer?.name} />
+      <div className="min-w-0">
+        <div className="flex min-w-0 items-center gap-2">
+          <p className="truncate font-semibold text-ink">{item.customer?.name ?? "New inquiry"}</p>
+          <span className="hidden shrink-0 text-xs font-medium text-steel sm:inline">
+            {shortDate(item.lastMessageAt)}
+          </span>
+        </div>
+        <p className="mt-1 truncate text-sm text-steel">
+          {item.messages?.[0]?.content ?? item.channel}
+        </p>
+      </div>
+      <div className="hidden shrink-0 flex-wrap justify-end gap-2 lg:flex">
+        {item.bookingIntents?.[0] ? <Status label={item.bookingIntents[0].status} /> : null}
+        <Status label={item.status} />
+      </div>
+    </button>
   );
 }
 
