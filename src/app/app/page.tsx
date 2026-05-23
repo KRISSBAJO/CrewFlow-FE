@@ -377,6 +377,8 @@ function Overview({
         <Metric icon={UsersRound} label="Active crew" value={data?.activeStaff ?? 0} tone="amber" />
       </div>
 
+      <RevenuePipeline data={data} actions={actions} />
+
       <div className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
         <Panel title="Revenue-risk alerts" icon={AlertTriangle}>
           <div className="grid gap-3">
@@ -404,12 +406,44 @@ function Overview({
 }
 
 function InboxView({ items, onOpen }: { items?: Conversation[]; onOpen: (state: DrawerState) => void }) {
+  const [filter, setFilter] = useState("active");
+  const filtered = useMemo(() => {
+    const source = items ?? [];
+    if (filter === "active") {
+      return source.filter((item) => !["RESOLVED", "CLOSED"].includes(item.status));
+    }
+    if (filter === "intent") {
+      return source.filter((item) => item.bookingIntents?.some((intent) => intent.status !== "BOOKED"));
+    }
+    return source.filter((item) => item.status === filter);
+  }, [items, filter]);
+
   return (
     <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
       <ReceptionistSimulator onOpen={onOpen} />
       <Panel title="Customer inbox" icon={MessageSquareText}>
+        <div className="mb-4 flex gap-2 overflow-x-auto">
+          {[
+            ["active", "Active"],
+            ["intent", "Revenue intent"],
+            ["BOOKING_READY", "Booking ready"],
+            ["WAITING_ON_CUSTOMER", "Waiting"],
+            ["RESOLVED", "Resolved"]
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              onClick={() => setFilter(value)}
+              className={cn(
+                "h-9 shrink-0 rounded-[8px] px-3 text-sm font-semibold",
+                filter === value ? "bg-pine text-white" : "bg-mist text-steel"
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <div className="grid gap-3">
-          {(items ?? []).map((item) => (
+          {filtered.map((item) => (
             <Row key={item.id} onClick={() => onOpen({ type: "conversation", item })}>
               <Avatar name={item.customer?.name} />
               <div className="min-w-0 flex-1">
@@ -423,10 +457,55 @@ function InboxView({ items, onOpen }: { items?: Conversation[]; onOpen: (state: 
               <p className="hidden text-sm text-steel md:block">{shortDate(item.lastMessageAt)}</p>
             </Row>
           ))}
-          <Empty show={!items?.length} label="No active conversations" />
+          <Empty show={!filtered.length} label="No conversations found" />
         </div>
       </Panel>
     </div>
+  );
+}
+
+function RevenuePipeline({
+  data,
+  actions
+}: {
+  data?: DashboardSummary;
+  actions?: OperationalAction[];
+}) {
+  const hotLeadActions = (actions ?? []).filter((action) =>
+    ["FOLLOW_UP_STALE_INQUIRY", "CONFIRM_BOOKING"].includes(action.type)
+  ).length;
+  const dispatchActions = (actions ?? []).filter((action) => action.type === "DISPATCH_STAFF").length;
+  const collectActions = (actions ?? []).filter((action) => action.type === "COLLECT_PAYMENT").length;
+  const reviewActions = (actions ?? []).filter((action) => action.type === "REQUEST_REVIEW").length;
+  const stages = [
+    { label: "Leads", value: hotLeadActions, icon: Inbox, tone: "bg-coral/10 text-coral" },
+    { label: "Booked", value: data?.today.confirmed ?? 0, icon: CalendarDays, tone: "bg-pine/10 text-pine" },
+    { label: "Dispatch", value: dispatchActions, icon: Route, tone: "bg-amber/20 text-ink" },
+    { label: "Collect", value: collectActions || data?.pendingInvoices || 0, icon: CreditCard, tone: "bg-mint/40 text-ink" },
+    { label: "Review", value: reviewActions, icon: Sparkles, tone: "bg-mist text-pine" }
+  ];
+
+  return (
+    <section className="rounded-[8px] border border-white/80 bg-white/90 p-4 shadow-soft backdrop-blur">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pine">Revenue pipeline</p>
+          <h2 className="mt-1 text-lg font-semibold text-ink">Lead to paid job</h2>
+        </div>
+        <p className="text-sm font-semibold text-steel">{money(data?.revenue.atRiskTotalCents)} at risk</p>
+      </div>
+      <div className="grid gap-2 md:grid-cols-5">
+        {stages.map((stage) => (
+          <div key={stage.label} className="min-h-24 rounded-[8px] bg-mist p-3">
+            <div className={cn("flex h-9 w-9 items-center justify-center rounded-[8px]", stage.tone)}>
+              <stage.icon className="h-4 w-4" />
+            </div>
+            <p className="mt-3 text-2xl font-semibold text-ink">{stage.value}</p>
+            <p className="text-sm font-medium text-steel">{stage.label}</p>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -2334,6 +2413,7 @@ function CustomerDetail({ item }: { item: Customer }) {
     queryKey: ["customer-timeline", item.id],
     queryFn: () => api.customerTimeline(item.id)
   });
+  const summary = timeline.data?.summary;
 
   return (
     <div className="grid gap-4">
@@ -2342,6 +2422,31 @@ function CustomerDetail({ item }: { item: Customer }) {
         <Info label="Email" value={item.email ?? "Not captured"} />
         {item.notes ? <Info label="Notes" value={item.notes} /> : null}
       </DetailCard>
+
+      {summary ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-[8px] bg-mist p-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-steel">Paid revenue</p>
+            <p className="mt-2 text-2xl font-semibold text-ink">{money(summary.paidTotalCents)}</p>
+          </div>
+          <div className="rounded-[8px] bg-coral/10 p-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-coral">Open invoices</p>
+            <p className="mt-2 text-2xl font-semibold text-ink">{money(summary.openInvoiceCents)}</p>
+          </div>
+          <div className="rounded-[8px] bg-mist p-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-steel">Last booking</p>
+            <p className="mt-2 text-sm font-semibold text-ink">
+              {summary.lastBooking ? `${summary.lastBooking.service.title} · ${shortDate(summary.lastBooking.startTime)}` : "None yet"}
+            </p>
+          </div>
+          <div className="rounded-[8px] bg-mint/40 p-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-steel">Next booking</p>
+            <p className="mt-2 text-sm font-semibold text-ink">
+              {summary.nextBooking ? `${summary.nextBooking.service.title} · ${shortDate(summary.nextBooking.startTime)}` : "Not scheduled"}
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       <DetailCard icon={Clock3} title="Timeline">
         {timeline.isLoading ? (
@@ -2399,6 +2504,7 @@ function InvoiceDetail({ item }: { item: Invoice }) {
     <div className="grid gap-4">
       <DetailCard icon={CreditCard} title={current.invoiceNo}>
         <Info label="Customer" value={current.customer.name} />
+        {current.booking?.service ? <Info label="Booking" value={current.booking.service.title} /> : null}
         <Info label="Due" value={shortDate(current.dueDate)} />
         <Info label="Subtotal" value={money(current.subtotalCents ?? current.totalCents)} />
         <Info label="Tax" value={money(current.taxCents ?? 0)} />

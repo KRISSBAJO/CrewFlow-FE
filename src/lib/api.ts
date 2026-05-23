@@ -385,6 +385,14 @@ export type CustomerImportResult = {
 
 export type CustomerTimeline = {
   customerId: string;
+  summary?: {
+    paidTotalCents: number;
+    openInvoiceCents: number;
+    bookingCount: number;
+    invoiceCount: number;
+    lastBooking?: Booking | null;
+    nextBooking?: Booking | null;
+  };
   items: Array<{
     type: string;
     occurredAt: string;
