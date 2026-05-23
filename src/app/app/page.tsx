@@ -45,6 +45,7 @@ import {
   OnboardingProfile,
   OperationalAction,
   Payment,
+  Service,
   StaffMember,
   TenantProfile
 } from "@/lib/api";
@@ -308,7 +309,14 @@ function Console() {
               {view === "field" ? <FieldView items={field.data} onOpen={setDrawer} /> : null}
               {view === "money" ? <MoneyView invoices={invoices.data} payments={payments.data} onOpen={setDrawer} /> : null}
               {view === "actions" ? <ActionsView items={actions.data} onOpen={setDrawer} /> : null}
-              {view === "settings" ? <SettingsView tenant={tenant.data} onboarding={onboarding.data} /> : null}
+              {view === "settings" ? (
+                <SettingsView
+                  tenant={tenant.data}
+                  onboarding={onboarding.data}
+                  services={services.data}
+                  staff={staff.data}
+                />
+              ) : null}
             </motion.div>
           </AnimatePresence>
         </section>
@@ -661,22 +669,38 @@ function MoneyView({
 
 function SettingsView({
   tenant,
-  onboarding
+  onboarding,
+  services,
+  staff
 }: {
   tenant?: TenantProfile;
   onboarding?: OnboardingProfile;
+  services?: Service[];
+  staff?: StaffMember[];
 }) {
   if (!tenant) return <LoadingPanel />;
 
-  return <SettingsForm key={`${tenant.id}-${onboarding?.updatedAt ?? "new"}`} tenant={tenant} onboarding={onboarding} />;
+  return (
+    <SettingsForm
+      key={`${tenant.id}-${onboarding?.updatedAt ?? "new"}`}
+      tenant={tenant}
+      onboarding={onboarding}
+      services={services ?? []}
+      staff={staff ?? []}
+    />
+  );
 }
 
 function SettingsForm({
   tenant,
-  onboarding
+  onboarding,
+  services,
+  staff
 }: {
   tenant: TenantProfile;
   onboarding?: OnboardingProfile;
+  services: Service[];
+  staff: StaffMember[];
 }) {
   const queryClient = useQueryClient();
   const [businessName, setBusinessName] = useState(tenant.businessName);
@@ -726,8 +750,9 @@ function SettingsForm({
   });
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[1fr_0.8fr]">
-      <Panel title="Tenant settings" icon={Settings2}>
+    <div className="grid gap-4">
+      <div className="grid gap-4 xl:grid-cols-[1fr_0.8fr]">
+        <Panel title="Tenant settings" icon={Settings2}>
         <div className="grid gap-4 md:grid-cols-2">
           <InputField label="Business name" value={businessName} onChange={setBusinessName} />
           <InputField label="Industry" value={industry} onChange={setIndustry} />
@@ -768,9 +793,9 @@ function SettingsForm({
           {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           Save settings
         </button>
-      </Panel>
+        </Panel>
 
-      <Panel title="Setup readiness" icon={ClipboardCheck}>
+        <Panel title="Setup readiness" icon={ClipboardCheck}>
         <div className="grid gap-3">
           <ReadinessRow label="Business profile" done={Boolean(tenant?.businessName && tenant?.industry)} />
           <ReadinessRow label="Operating area" done={Boolean(serviceArea)} />
@@ -787,8 +812,229 @@ function SettingsForm({
             Settings here drive the first-run checklist and give the AI receptionist the business context it needs.
           </p>
         </div>
-      </Panel>
+        </Panel>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <ServiceManager services={services} />
+        <StaffManager staff={staff} />
+      </div>
     </div>
+  );
+}
+
+function ServiceManager({ services }: { services: Service[] }) {
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState<Service | null>(null);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [durationMinutes, setDurationMinutes] = useState("120");
+  const [price, setPrice] = useState("199");
+
+  function reset(service?: Service | null) {
+    setEditing(service ?? null);
+    setTitle(service?.title ?? "");
+    setDescription(service?.description ?? "");
+    setDurationMinutes(String(service?.durationMinutes ?? 120));
+    setPrice(service ? String(service.priceCents / 100) : "199");
+  }
+
+  const save = useMutation({
+    mutationFn: () => {
+      const input = {
+        title,
+        description,
+        durationMinutes: Number(durationMinutes),
+        price: Number(price)
+      };
+      return editing ? api.updateService(editing.id, input) : api.createService(input);
+    },
+    onSuccess: () => {
+      reset();
+      void queryClient.invalidateQueries({ queryKey: ["services"] });
+      void queryClient.invalidateQueries({ queryKey: ["tenant"] });
+    }
+  });
+
+  const toggle = useMutation({
+    mutationFn: (service: Service) => api.updateService(service.id, { active: !service.active }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["services"] });
+    }
+  });
+
+  const canSave = title.trim() && Number(durationMinutes) >= 5 && Number(price) >= 0;
+
+  return (
+    <Panel title="Service catalog" icon={Settings2}>
+      <div className="grid gap-3">
+        {services.map((service) => (
+          <Row key={service.id}>
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-semibold text-ink">{service.title}</p>
+              <p className="truncate text-sm text-steel">
+                {service.durationMinutes} min · {money(service.priceCents)}
+              </p>
+            </div>
+            <Status label={service.active === false ? "INACTIVE" : "ACTIVE"} />
+            <button
+              onClick={() => reset(service)}
+              className="h-9 rounded-[8px] bg-white px-3 text-sm font-semibold text-ink"
+            >
+              Edit
+            </button>
+            <button
+              onClick={() => toggle.mutate(service)}
+              className="h-9 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink"
+            >
+              {service.active === false ? "Activate" : "Pause"}
+            </button>
+          </Row>
+        ))}
+        <Empty show={!services.length} label="No services yet" />
+      </div>
+
+      <div className="mt-4 rounded-[8px] bg-mist p-4">
+        <p className="mb-3 font-semibold text-ink">{editing ? "Edit service" : "Add service"}</p>
+        <div className="grid gap-3 md:grid-cols-2">
+          <InputField label="Title" value={title} onChange={setTitle} />
+          <InputField label="Price" value={price} onChange={setPrice} />
+          <InputField label="Duration minutes" value={durationMinutes} onChange={setDurationMinutes} />
+          <InputField label="Description" value={description} onChange={setDescription} />
+        </div>
+        {save.error ? <ErrorText error={save.error} /> : null}
+        <div className="mt-3 flex gap-2">
+          <button
+            onClick={() => save.mutate()}
+            disabled={!canSave || save.isPending}
+            className="flex h-10 items-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {editing ? "Save service" : "Add service"}
+          </button>
+          {editing ? (
+            <button
+              onClick={() => reset()}
+              className="h-10 rounded-[8px] bg-white px-3 text-sm font-semibold text-ink"
+            >
+              Cancel
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function StaffManager({ staff }: { staff: StaffMember[] }) {
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState<StaffMember | null>(null);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [role, setRole] = useState<StaffMember["role"]>("STAFF");
+  const [password, setPassword] = useState("Password123!");
+
+  function reset(member?: StaffMember | null) {
+    setEditing(member ?? null);
+    setName(member?.name ?? "");
+    setEmail(member?.email ?? "");
+    setPhone(member?.phone ?? "");
+    setRole(member?.role ?? "STAFF");
+    setPassword("Password123!");
+  }
+
+  const save = useMutation({
+    mutationFn: () =>
+      editing
+        ? api.updateStaff(editing.id, { name, email, phone, role })
+        : api.createStaff({ name, email, phone, role, password }),
+    onSuccess: () => {
+      reset();
+      void queryClient.invalidateQueries({ queryKey: ["staff"] });
+      void queryClient.invalidateQueries({ queryKey: ["tenant"] });
+    }
+  });
+
+  const toggle = useMutation({
+    mutationFn: (member: StaffMember) => api.updateStaff(member.id, { active: !member.active }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["staff"] });
+    }
+  });
+
+  const canSave = name.trim() && /^\S+@\S+\.\S+$/.test(email) && (editing || password.length >= 8);
+
+  return (
+    <Panel title="Team roster" icon={UsersRound}>
+      <div className="grid gap-3">
+        {staff.map((member) => (
+          <Row key={member.id}>
+            <Avatar name={member.name} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-semibold text-ink">{member.name}</p>
+              <p className="truncate text-sm text-steel">{member.email}</p>
+            </div>
+            <Status label={member.role} />
+            <Status label={member.active === false ? "INACTIVE" : "ACTIVE"} />
+            <button
+              onClick={() => reset(member)}
+              className="h-9 rounded-[8px] bg-white px-3 text-sm font-semibold text-ink"
+            >
+              Edit
+            </button>
+            <button
+              onClick={() => toggle.mutate(member)}
+              className="h-9 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink"
+            >
+              {member.active === false ? "Activate" : "Deactivate"}
+            </button>
+          </Row>
+        ))}
+        <Empty show={!staff.length} label="No staff yet" />
+      </div>
+
+      <div className="mt-4 rounded-[8px] bg-mist p-4">
+        <p className="mb-3 font-semibold text-ink">{editing ? "Edit staff" : "Add staff"}</p>
+        <div className="grid gap-3 md:grid-cols-2">
+          <InputField label="Name" value={name} onChange={setName} />
+          <InputField label="Email" value={email} onChange={setEmail} />
+          <InputField label="Phone" value={phone} onChange={setPhone} />
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-ink">Role</span>
+            <select
+              value={role}
+              onChange={(event) => setRole(event.target.value as StaffMember["role"])}
+              className="h-11 w-full rounded-[8px] border border-ink/10 bg-white px-3 outline-none focus:border-pine"
+            >
+              <option value="STAFF">Staff</option>
+              <option value="MANAGER">Manager</option>
+              <option value="OWNER">Owner</option>
+            </select>
+          </label>
+          {!editing ? <InputField label="Temporary password" value={password} onChange={setPassword} /> : null}
+        </div>
+        {save.error ? <ErrorText error={save.error} /> : null}
+        <div className="mt-3 flex gap-2">
+          <button
+            onClick={() => save.mutate()}
+            disabled={!canSave || save.isPending}
+            className="flex h-10 items-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {editing ? "Save staff" : "Add staff"}
+          </button>
+          {editing ? (
+            <button
+              onClick={() => reset()}
+              className="h-10 rounded-[8px] bg-white px-3 text-sm font-semibold text-ink"
+            >
+              Cancel
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </Panel>
   );
 }
 

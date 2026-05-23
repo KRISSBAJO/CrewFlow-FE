@@ -101,6 +101,16 @@ export const api = {
     }),
   customers: () => request<Customer[]>("/customers"),
   services: () => request<Service[]>("/services"),
+  createService: (input: ServiceInput) =>
+    request<Service>("/services", {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
+  updateService: (id: string, input: Partial<ServiceInput> & { active?: boolean }) =>
+    request<Service>(`/services/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(input)
+    }),
   tenant: () => request<TenantProfile>("/tenant"),
   onboarding: () => request<OnboardingProfile>("/tenant/onboarding"),
   updateTenant: (input: UpdateTenantInput) =>
@@ -109,6 +119,16 @@ export const api = {
       body: JSON.stringify(input)
     }),
   staff: () => request<StaffMember[]>("/tenant/staff"),
+  createStaff: (input: StaffInput) =>
+    request<StaffMember>("/tenant/staff", {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
+  updateStaff: (id: string, input: Partial<Omit<StaffInput, "password">> & { active?: boolean }) =>
+    request<StaffMember>(`/tenant/staff/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(input)
+    }),
   fieldJobs: () => request<Booking[]>("/field/jobs"),
   startFieldJob: (bookingId: string) =>
     request<Booking>(`/field/jobs/${bookingId}/start`, { method: "POST" }),
@@ -218,6 +238,21 @@ export type UpdateTenantInput = {
   whatsappPlanned?: boolean;
 };
 
+export type ServiceInput = {
+  title: string;
+  description?: string;
+  durationMinutes: number;
+  price: number;
+};
+
+export type StaffInput = {
+  name: string;
+  email: string;
+  password: string;
+  phone?: string;
+  role: "OWNER" | "MANAGER" | "STAFF";
+};
+
 export type DashboardSummary = {
   today: {
     appointments: Booking[];
@@ -260,13 +295,16 @@ export type StaffMember = {
   email: string;
   role: "OWNER" | "MANAGER" | "STAFF";
   phone?: string | null;
+  active?: boolean;
 };
 
 export type Service = {
   id: string;
   title: string;
+  description?: string | null;
   priceCents: number;
   durationMinutes: number;
+  active?: boolean;
 };
 
 export type Booking = {
