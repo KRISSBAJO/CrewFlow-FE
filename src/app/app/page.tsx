@@ -2051,7 +2051,11 @@ function ConversationDetail({ item }: { item: Conversation }) {
     queryKey: ["conversation", item.id],
     queryFn: () => api.conversation(item.id)
   });
+  const staff = useQuery({ queryKey: ["staff"], queryFn: api.staff });
   const [reply, setReply] = useState("");
+  const [startTime, setStartTime] = useState("");
+  const [assignedStaffId, setAssignedStaffId] = useState("");
+  const [bookingNotes, setBookingNotes] = useState("");
   const sendReply = useMutation({
     mutationFn: () => api.replyConversation(item.id, reply),
     onSuccess: () => {
@@ -2064,6 +2068,25 @@ function ConversationDetail({ item }: { item: Conversation }) {
     onSuccess: (data) => setReply(data.reply)
   });
   const conversation = full.data ?? item;
+  const activeIntent = conversation.bookingIntents?.find((intent) =>
+    ["READY", "COLLECTING"].includes(intent.status)
+  );
+  const bookIntent = useMutation({
+    mutationFn: () =>
+      api.bookConversationIntent(conversation.id, activeIntent!.id, {
+        startTime: new Date(startTime).toISOString(),
+        assignedStaffId: assignedStaffId || undefined,
+        status: "CONFIRMED",
+        notes: bookingNotes || undefined
+      }),
+    onSuccess: () => {
+      setStartTime("");
+      setAssignedStaffId("");
+      setBookingNotes("");
+      void queryClient.invalidateQueries();
+    }
+  });
+  const canBook = Boolean(activeIntent?.service && conversation.customer && startTime);
 
   return (
     <div className="grid gap-4">
@@ -2072,6 +2095,82 @@ function ConversationDetail({ item }: { item: Conversation }) {
         <Info label="Status" value={conversation.status} />
         <Info label="Last message" value={shortDate(conversation.lastMessageAt)} />
       </DetailCard>
+
+      {activeIntent ? (
+        <section className="rounded-[8px] bg-ink p-4 text-white">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-mint">Revenue intake</p>
+              <h3 className="mt-2 text-xl font-semibold">
+                {activeIntent.service?.title ?? "Service not selected"}
+              </h3>
+              <p className="mt-2 text-sm leading-6 text-white/72">
+                {activeIntent.quotedPriceCents ? `${money(activeIntent.quotedPriceCents)} quote captured` : "Quote pending"} · {activeIntent.preferredWindow ?? "No preferred window"}
+              </p>
+            </div>
+            <Status label={activeIntent.status} />
+          </div>
+          <div className="mt-4 grid gap-3">
+            {activeIntent.missingFields?.length ? (
+              <p className="rounded-[8px] bg-white/10 px-3 py-2 text-sm font-medium text-white">
+                Missing: {activeIntent.missingFields.join(", ")}
+              </p>
+            ) : null}
+            {activeIntent.address ? (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/50">Address</p>
+                <p className="mt-1 text-sm font-medium text-white">{activeIntent.address}</p>
+              </div>
+            ) : null}
+            {activeIntent.notes ? (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/50">Notes</p>
+                <p className="mt-1 text-sm font-medium text-white">{activeIntent.notes}</p>
+              </div>
+            ) : null}
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-white">Confirmed start time</span>
+              <input
+                type="datetime-local"
+                value={startTime}
+                onChange={(event) => setStartTime(event.target.value)}
+                className="h-11 w-full rounded-[8px] border border-white/10 bg-white px-3 text-ink outline-none focus:border-mint"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-white">Assign staff</span>
+              <select
+                value={assignedStaffId}
+                onChange={(event) => setAssignedStaffId(event.target.value)}
+                className="h-11 w-full rounded-[8px] border border-white/10 bg-white px-3 text-ink outline-none focus:border-mint"
+              >
+                <option value="">Unassigned</option>
+                {(staff.data ?? []).map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.name} · {member.role}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <textarea
+              value={bookingNotes}
+              onChange={(event) => setBookingNotes(event.target.value)}
+              placeholder="Booking notes for crew..."
+              className="min-h-20 w-full rounded-[8px] border border-white/10 bg-white p-3 text-ink outline-none focus:border-mint"
+            />
+            <button
+              onClick={() => bookIntent.mutate()}
+              disabled={!canBook || bookIntent.isPending}
+              className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-mint px-4 font-semibold text-ink disabled:opacity-50"
+            >
+              {bookIntent.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarDays className="h-4 w-4" />}
+              Book this lead
+            </button>
+            {bookIntent.error ? <ErrorText error={bookIntent.error} /> : null}
+          </div>
+        </section>
+      ) : null}
+
       <div className="grid gap-2">
         {(conversation.messages ?? []).map((message) => (
           <div

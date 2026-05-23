@@ -81,6 +81,23 @@ export const api = {
     request<{ reply: string; mode: string }>(`/inbox/${id}/ai-suggest`, {
       method: "POST"
     }),
+  bookConversationIntent: (
+    conversationId: string,
+    intentId: string,
+    input: {
+      startTime: string;
+      assignedStaffId?: string;
+      status?: BookingStatus;
+      notes?: string;
+    }
+  ) =>
+    request<{ booking: Booking; bookingIntent: BookingIntent; conversation: Conversation }>(
+      `/inbox/${conversationId}/booking-intents/${intentId}/book`,
+      {
+        method: "POST",
+        body: JSON.stringify(input)
+      }
+    ),
   actions: () => request<OperationalAction[]>("/actions"),
   updateAction: (id: string, status: "IN_PROGRESS" | "COMPLETED" | "DISMISSED") =>
     request<OperationalAction>(`/actions/${id}`, {
@@ -458,7 +475,21 @@ export type Conversation = {
   lastMessageAt: string;
   customer?: Customer | null;
   messages?: Array<{ id?: string; content: string; role: string; createdAt: string }>;
-  bookingIntents?: unknown[];
+  bookingIntents?: BookingIntent[];
+};
+
+export type BookingIntent = {
+  id: string;
+  status: "COLLECTING" | "READY" | "BOOKED" | "HANDED_OFF" | "CANCELLED";
+  requestedDate?: string | null;
+  preferredWindow?: string | null;
+  address?: string | null;
+  notes?: string | null;
+  quotedPriceCents?: number | null;
+  missingFields: string[];
+  customer?: Customer | null;
+  service?: Service | null;
+  booking?: Booking | null;
 };
 
 export type OperationalAction = {
