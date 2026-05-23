@@ -277,6 +277,15 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input)
     }),
+  createPlatformBillingCheckout: (id: string, input: PlatformBillingCheckoutInput) =>
+    request<PlatformBillingCheckout>(`/platform/tenants/${id}/billing/checkout`, {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
+  createPlatformBillingPortal: (id: string) =>
+    request<PlatformBillingPortal>(`/platform/tenants/${id}/billing/portal`, {
+      method: "POST"
+    }),
   platformAutomationFailures: () => request<PlatformAutomationFailure[]>("/platform/automation-failures"),
   platformWebhookFailures: () => request<PlatformWebhookFailure[]>("/platform/webhook-failures"),
   platformAudit: () => request<PlatformAuditLog[]>("/platform/audit"),
@@ -671,11 +680,38 @@ export type PlatformBillingEvent = {
   actor?: { id: string; email: string; role: string } | null;
 };
 
+export type PlatformBillingCheckoutInput = {
+  monthlyPriceCents?: number;
+  setupFeeCents?: number;
+  collectSetupFee?: boolean;
+  successUrl?: string;
+  cancelUrl?: string;
+};
+
+export type PlatformBillingCheckout = {
+  provider: string;
+  mock: boolean;
+  url?: string | null;
+  sessionId: string;
+  customerId?: string | null;
+  subscriptionId?: string | null;
+};
+
+export type PlatformBillingPortal = {
+  provider: string;
+  sessionId: string;
+  url?: string | null;
+};
+
 export type PlatformBillingSummary = {
   tenantId: string;
   subscriptionStatus: string;
   monthlyPriceCents?: number | null;
   setupFeeCents?: number | null;
+  billingEmail?: string | null;
+  stripeCustomerId?: string | null;
+  stripeSubscriptionId?: string | null;
+  stripeConfigured: boolean;
   trialEndsAt?: string | null;
   currentPeriodEnd?: string | null;
   nextBillingAt?: string | null;

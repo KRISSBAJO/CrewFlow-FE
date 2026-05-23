@@ -234,6 +234,7 @@ function TenantDetail({ tenantId }: { tenantId: string }) {
   const [limits, setLimits] = useState("");
   const [billingType, setBillingType] = useState<PlatformBillingEventType>("SUBSCRIPTION_RENEWED");
   const [billingAmount, setBillingAmount] = useState("299");
+  const [setupAmount, setSetupAmount] = useState("1000");
   const [billingNote, setBillingNote] = useState("Manual payment recorded.");
 
   const saveConfig = useMutation({
@@ -282,6 +283,30 @@ function TenantDetail({ tenantId }: { tenantId: string }) {
       void queryClient.invalidateQueries({ queryKey: ["platform-audit"] });
     }
   });
+  const createCheckout = useMutation({
+    mutationFn: () => {
+      const monthly = Number(billingAmount);
+      const setup = Number(setupAmount);
+      return api.createPlatformBillingCheckout(tenantId, {
+        monthlyPriceCents: billingAmount.trim() && Number.isFinite(monthly) ? Math.round(monthly * 100) : undefined,
+        setupFeeCents: setupAmount.trim() && Number.isFinite(setup) ? Math.round(setup * 100) : undefined,
+        collectSetupFee: true
+      });
+    },
+    onSuccess: (data) => {
+      void queryClient.invalidateQueries({ queryKey: ["platform-billing", tenantId] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-tenant", tenantId] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-tenants"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-metrics"] });
+      if (data.url) window.open(data.url, "_blank", "noopener,noreferrer");
+    }
+  });
+  const createPortal = useMutation({
+    mutationFn: () => api.createPlatformBillingPortal(tenantId),
+    onSuccess: (data) => {
+      if (data.url) window.open(data.url, "_blank", "noopener,noreferrer");
+    }
+  });
 
   const tenant = detail.data;
   const effectiveFlags = flags || JSON.stringify(usage.data?.featureFlags ?? tenant?.featureFlags ?? {}, null, 2);
@@ -295,13 +320,19 @@ function TenantDetail({ tenantId }: { tenantId: string }) {
           summary={billing.data}
           type={billingType}
           amount={billingAmount}
+          setupAmount={setupAmount}
           note={billingNote}
           pending={createBillingEvent.isPending}
-          error={createBillingEvent.error}
+          checkoutPending={createCheckout.isPending}
+          portalPending={createPortal.isPending}
+          error={createBillingEvent.error ?? createCheckout.error ?? createPortal.error}
           onTypeChange={setBillingType}
           onAmountChange={setBillingAmount}
+          onSetupAmountChange={setSetupAmount}
           onNoteChange={setBillingNote}
           onSubmit={() => createBillingEvent.mutate()}
+          onCheckout={() => createCheckout.mutate()}
+          onPortal={() => createPortal.mutate()}
         />
         <div className="grid gap-4 lg:grid-cols-2">
           <section className="rounded-[8px] bg-mist p-3">
@@ -404,24 +435,36 @@ function BillingPanel({
   summary,
   type,
   amount,
+  setupAmount,
   note,
   pending,
+  checkoutPending,
+  portalPending,
   error,
   onTypeChange,
   onAmountChange,
+  onSetupAmountChange,
   onNoteChange,
-  onSubmit
+  onSubmit,
+  onCheckout,
+  onPortal
 }: {
   summary?: PlatformBillingSummary;
   type: PlatformBillingEventType;
   amount: string;
+  setupAmount: string;
   note: string;
   pending: boolean;
+  checkoutPending: boolean;
+  portalPending: boolean;
   error: unknown;
   onTypeChange: (type: PlatformBillingEventType) => void;
   onAmountChange: (value: string) => void;
+  onSetupAmountChange: (value: string) => void;
   onNoteChange: (value: string) => void;
   onSubmit: () => void;
+  onCheckout: () => void;
+  onPortal: () => void;
 }) {
   const events = summary?.events ?? [];
   return (
@@ -442,7 +485,29 @@ function BillingPanel({
         <BillingStat label="Next billing" value={summary?.nextBillingAt ? shortDate(summary.nextBillingAt) : "Not set"} />
       </div>
 
-      <div className="mt-4 grid gap-3 rounded-[8px] bg-white p-3 lg:grid-cols-[1fr_0.6fr_1.4fr_auto] lg:items-end">
+      <div className="mt-4 grid gap-3 rounded-[8px] bg-white p-3 lg:grid-cols-[1fr_0.7fr_0.7fr_auto_auto] lg:items-end">
+        <label>
+          <span className="mb-2 block text-sm font-medium text-steel">Monthly</span>
+          <input value={amount} onChange={(event) => onAmountChange(event.target.value)} inputMode="decimal" className="h-10 w-full rounded-[8px] border border-ink/10 bg-mist px-3 text-sm outline-none focus:border-pine" />
+        </label>
+        <label>
+          <span className="mb-2 block text-sm font-medium text-steel">Setup</span>
+          <input value={setupAmount} onChange={(event) => onSetupAmountChange(event.target.value)} inputMode="decimal" className="h-10 w-full rounded-[8px] border border-ink/10 bg-mist px-3 text-sm outline-none focus:border-pine" />
+        </label>
+        <div className="rounded-[8px] bg-mist px-3 py-2 text-xs font-semibold text-steel">
+          {summary?.stripeConfigured ? "Stripe live" : "Mock checkout"}
+          <br />
+          {summary?.stripeCustomerId ? "Customer linked" : "No customer yet"}
+        </div>
+        <button onClick={onCheckout} disabled={checkoutPending} className="h-10 rounded-[8px] bg-ink px-4 text-sm font-semibold text-white disabled:opacity-50">
+          Checkout
+        </button>
+        <button onClick={onPortal} disabled={portalPending || !summary?.stripeCustomerId || !summary?.stripeConfigured} className="h-10 rounded-[8px] bg-pine px-4 text-sm font-semibold text-white disabled:opacity-50">
+          Portal
+        </button>
+      </div>
+
+      <div className="mt-3 grid gap-3 rounded-[8px] bg-white p-3 lg:grid-cols-[1fr_1.4fr_auto] lg:items-end">
         <label>
           <span className="mb-2 block text-sm font-medium text-steel">Event type</span>
           <select value={type} onChange={(event) => onTypeChange(event.target.value as PlatformBillingEventType)} className="h-10 w-full rounded-[8px] border border-ink/10 bg-mist px-2 text-sm outline-none focus:border-pine">
@@ -450,10 +515,6 @@ function BillingPanel({
               <option key={item} value={item}>{item.replaceAll("_", " ")}</option>
             ))}
           </select>
-        </label>
-        <label>
-          <span className="mb-2 block text-sm font-medium text-steel">Amount</span>
-          <input value={amount} onChange={(event) => onAmountChange(event.target.value)} inputMode="decimal" className="h-10 w-full rounded-[8px] border border-ink/10 bg-mist px-3 text-sm outline-none focus:border-pine" />
         </label>
         <label>
           <span className="mb-2 block text-sm font-medium text-steel">Note</span>
