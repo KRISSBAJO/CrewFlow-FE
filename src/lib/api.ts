@@ -9,13 +9,14 @@ type LoginResponse = {
     sub: string;
     tenantId: string;
     email: string;
-    role: "OWNER" | "MANAGER" | "STAFF";
+    role: "PLATFORM_ADMIN" | "OWNER" | "MANAGER" | "STAFF";
   };
   tenant?: {
     id: string;
     businessName: string;
     slug: string;
     industry: string;
+    status?: string;
   };
   onboardingProfile?: {
     id: string;
@@ -227,6 +228,16 @@ export const api = {
       "/workflows/scan-lead-follow-ups",
       { method: "POST" }
     ),
+  platformMetrics: () => request<PlatformMetrics>("/platform/metrics"),
+  platformTenants: () => request<PlatformTenant[]>("/platform/tenants"),
+  updatePlatformTenant: (id: string, input: Partial<Pick<PlatformTenant, "status" | "subscriptionPlan" | "billingEmail" | "monthlyPriceCents" | "setupFeeCents">>) =>
+    request<PlatformTenant>(`/platform/tenants/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(input)
+    }),
+  platformAutomationFailures: () => request<PlatformAutomationFailure[]>("/platform/automation-failures"),
+  platformWebhookFailures: () => request<PlatformWebhookFailure[]>("/platform/webhook-failures"),
+  platformAudit: () => request<PlatformAuditLog[]>("/platform/audit"),
   completeFieldJob: (
     bookingId: string,
     input?: {
@@ -496,9 +507,73 @@ export type StaffMember = {
   id: string;
   name: string;
   email: string;
-  role: "OWNER" | "MANAGER" | "STAFF";
+  role: "PLATFORM_ADMIN" | "OWNER" | "MANAGER" | "STAFF";
   phone?: string | null;
   active?: boolean;
+};
+
+export type PlatformMetrics = {
+  tenantStatus: Record<string, number>;
+  activeUsers: number;
+  bookings: number;
+  leads: number;
+  openActions: number;
+  failedAutomations: number;
+  failedWebhooks: number;
+  paidRevenueCents: number;
+};
+
+export type PlatformTenant = {
+  id: string;
+  businessName: string;
+  slug: string;
+  industry: string;
+  status: "TRIAL" | "ACTIVE" | "SUSPENDED" | "CHURNED";
+  subscriptionPlan: string;
+  billingEmail?: string | null;
+  monthlyPriceCents?: number | null;
+  setupFeeCents?: number | null;
+  suspendedAt?: string | null;
+  createdAt: string;
+  _count?: {
+    users: number;
+    customers: number;
+    bookings: number;
+    leads: number;
+    invoices: number;
+    operationalActions: number;
+  };
+};
+
+export type PlatformAutomationFailure = {
+  id: string;
+  trigger: string;
+  provider: string;
+  status: string;
+  error?: string | null;
+  createdAt: string;
+  tenant?: PlatformTenant | null;
+  customer?: Customer | null;
+};
+
+export type PlatformWebhookFailure = {
+  id: string;
+  provider: string;
+  status: string;
+  error?: string | null;
+  createdAt: string;
+  tenant?: PlatformTenant | null;
+};
+
+export type PlatformAuditLog = {
+  id: string;
+  action: string;
+  entityType: string;
+  entityId?: string | null;
+  summary: string;
+  createdAt: string;
+  tenant?: PlatformTenant | null;
+  actor?: { id: string; email: string; role: string } | null;
 };
 
 export type Service = {

@@ -24,6 +24,7 @@ Default URLs:
 ```text
 Landing: http://localhost:3000
 Console: http://localhost:3000/app
+Admin:   http://localhost:3000/admin
 API:     http://localhost:3002/api
 ```
 
@@ -33,6 +34,7 @@ Demo login:
 owner@sparkle.test / Password123!
 manager@sparkle.test / Password123!
 crew@sparkle.test / Password123!
+admin@crewflow.test / Password123! (platform admin)
 ```
 
 ## Environment
@@ -51,6 +53,7 @@ For deployment, set `NEXT_PUBLIC_API_URL` to the public backend API URL.
 - Receptionist simulator and inbox
 - Lead pipeline CRM
 - Customer retention engine
+- Platform admin control center
 - Booking board
 - Customer manager and CSV import
 - Field job packet

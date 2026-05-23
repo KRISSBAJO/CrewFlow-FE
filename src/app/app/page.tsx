@@ -2064,7 +2064,7 @@ function StaffManager({ staff }: { staff: StaffMember[] }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [role, setRole] = useState<StaffMember["role"]>("STAFF");
+  const [role, setRole] = useState<"OWNER" | "MANAGER" | "STAFF">("STAFF");
   const [password, setPassword] = useState("Password123!");
 
   function reset(member?: StaffMember | null) {
@@ -2072,7 +2072,7 @@ function StaffManager({ staff }: { staff: StaffMember[] }) {
     setName(member?.name ?? "");
     setEmail(member?.email ?? "");
     setPhone(member?.phone ?? "");
-    setRole(member?.role ?? "STAFF");
+    setRole(member?.role === "PLATFORM_ADMIN" ? "STAFF" : (member?.role ?? "STAFF"));
     setPassword("Password123!");
   }
 
@@ -2136,7 +2136,7 @@ function StaffManager({ staff }: { staff: StaffMember[] }) {
             <span className="mb-2 block text-sm font-medium text-ink">Role</span>
             <select
               value={role}
-              onChange={(event) => setRole(event.target.value as StaffMember["role"])}
+              onChange={(event) => setRole(event.target.value as "OWNER" | "MANAGER" | "STAFF")}
               className="h-11 w-full rounded-[8px] border border-ink/10 bg-white px-3 outline-none focus:border-pine"
             >
               <option value="STAFF">Staff</option>
