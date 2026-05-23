@@ -49,6 +49,8 @@ For deployment, set `NEXT_PUBLIC_API_URL` to the public backend API URL.
 - Signup/onboarding conversion flow
 - Operations overview
 - Receptionist simulator and inbox
+- Lead pipeline CRM
+- Customer retention engine
 - Booking board
 - Customer manager and CSV import
 - Field job packet
@@ -61,6 +63,7 @@ For deployment, set `NEXT_PUBLIC_API_URL` to the public backend API URL.
 ```bash
 yarn lint
 yarn build
+yarn preflight
 ```
 
 After starting the app:
@@ -77,7 +80,9 @@ curl -I http://localhost:3000/app
 3. Open `/app`.
 4. Login with the seeded owner account.
 5. Open Inbox and use the receptionist simulator.
-6. Book the lead from the intake drawer.
-7. Complete a field job.
-8. Create a payment link and mark the invoice paid.
-9. Check the revenue command center and WhatsApp operations panel.
+6. Review Leads and scan follow-ups from Actions.
+7. Review Retention and run a retention scan.
+8. Book the lead from the intake drawer.
+9. Complete a field job.
+10. Create a payment link and mark the invoice paid.
+11. Check the revenue command center and WhatsApp operations panel.
