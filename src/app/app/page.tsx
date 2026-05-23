@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   Banknote,
@@ -43,7 +44,7 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   api,
   AutomationRun,
@@ -119,7 +120,27 @@ type DrawerState =
 
 export default function Home() {
   const token = useAuth((state) => state.token);
-  return token ? <Console /> : <Login />;
+  const user = useAuth((state) => state.user);
+  if (!token) return <Login />;
+  if (user?.role === "PLATFORM_ADMIN") return <AdminRedirect />;
+  return <Console />;
+}
+
+function AdminRedirect() {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace("/admin");
+  }, [router]);
+
+  return (
+    <main className="flex min-h-screen items-center justify-center px-5">
+      <div className="rounded-[8px] border border-white/80 bg-white/90 p-6 text-center shadow-soft">
+        <Loader2 className="mx-auto h-6 w-6 animate-spin text-pine" />
+        <p className="mt-3 font-semibold text-ink">Opening platform admin</p>
+        <p className="mt-1 text-sm text-steel">Admin accounts use the platform control center.</p>
+      </div>
+    </main>
+  );
 }
 
 function Login() {
