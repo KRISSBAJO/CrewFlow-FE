@@ -214,6 +214,12 @@ export const api = {
       body: JSON.stringify({ provider: "MOCK" })
     }),
   payments: () => request<Payment[]>("/payments"),
+  retention: () => request<RetentionSummary>("/retention"),
+  scanRetention: () =>
+    request<{ scannedAt: string; repeatCandidates: number; winBackCandidates: number; actionsCreatedOrUpdated: number }>(
+      "/retention/scan",
+      { method: "POST" }
+    ),
   health: () => request<Health>("/health"),
   schedulerRun: () => request<unknown>("/scheduler/run-now", { method: "POST" }),
   scanLeadFollowUps: () =>
@@ -454,6 +460,36 @@ export type CustomerTimeline = {
     occurredAt: string;
     item: unknown;
   }>;
+};
+
+export type RetentionCustomer = {
+  customer: {
+    id: string;
+    name: string;
+    phone: string;
+    email?: string | null;
+  };
+  completedBookings: number;
+  paidTotalCents: number;
+  openInvoiceCents: number;
+  lastBookingAt?: string | null;
+  lastBookingId?: string | null;
+  serviceTitle: string;
+  daysSinceLastBooking: number;
+  hasFutureBooking: boolean;
+  estimatedNextValueCents: number;
+  lifetimeValueCents: number;
+  recommendation: string;
+};
+
+export type RetentionSummary = {
+  retainedRevenueCents: number;
+  paidRevenueCents: number;
+  repeatOpportunityCents: number;
+  winBackOpportunityCents: number;
+  repeatCandidates: RetentionCustomer[];
+  winBackCandidates: RetentionCustomer[];
+  topCustomers: RetentionCustomer[];
 };
 
 export type StaffMember = {

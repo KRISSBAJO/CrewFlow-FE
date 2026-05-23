@@ -26,6 +26,7 @@ import {
   PanelLeftOpen,
   Play,
   Plus,
+  Repeat2,
   RefreshCw,
   Route,
   Save,
@@ -60,6 +61,8 @@ import {
   OnboardingProfile,
   OperationalAction,
   Payment,
+  RetentionCustomer,
+  RetentionSummary,
   Service,
   StaffMember,
   TenantProfile,
@@ -74,6 +77,7 @@ const nav = [
   { id: "overview", label: "Overview", icon: HeartPulse },
   { id: "inbox", label: "Inbox", icon: Inbox },
   { id: "leads", label: "Leads", icon: Target },
+  { id: "retention", label: "Retention", icon: Repeat2 },
   { id: "customers", label: "Customers", icon: ContactRound },
   { id: "bookings", label: "Bookings", icon: CalendarDays },
   { id: "field", label: "Field", icon: Route },
@@ -220,6 +224,7 @@ function Console() {
   const inbox = useQuery({ queryKey: ["inbox"], queryFn: api.inbox });
   const leads = useQuery({ queryKey: ["leads"], queryFn: api.leads });
   const leadAnalytics = useQuery({ queryKey: ["lead-analytics"], queryFn: api.leadAnalytics });
+  const retention = useQuery({ queryKey: ["retention"], queryFn: api.retention });
   const actions = useQuery({ queryKey: ["actions"], queryFn: api.actions });
   const bookings = useQuery({ queryKey: ["bookings"], queryFn: api.bookings });
   const field = useQuery({ queryKey: ["field"], queryFn: api.fieldJobs });
@@ -390,6 +395,9 @@ function Console() {
                   staff={staff.data}
                   onOpen={setDrawer}
                 />
+              ) : null}
+              {view === "retention" ? (
+                <RetentionView data={retention.data} onOpen={setDrawer} />
               ) : null}
               {view === "customers" ? <CustomersView items={customers.data} onOpen={setDrawer} /> : null}
               {view === "bookings" ? <BookingsView items={bookings.data} onOpen={setDrawer} /> : null}
@@ -735,6 +743,164 @@ function LeadsView({
         </Panel>
       </div>
     </div>
+  );
+}
+
+function RetentionView({
+  data,
+  onOpen
+}: {
+  data?: RetentionSummary;
+  onOpen: (state: DrawerState) => void;
+}) {
+  const queryClient = useQueryClient();
+  const scan = useMutation({
+    mutationFn: api.scanRetention,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["retention"] });
+      void queryClient.invalidateQueries({ queryKey: ["actions"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    }
+  });
+
+  return (
+    <div className="grid gap-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Metric icon={Banknote} label="Retained revenue" value={money(data?.retainedRevenueCents)} tone="pine" />
+        <Metric icon={Repeat2} label="Repeat opportunity" value={money(data?.repeatOpportunityCents)} tone="mint" />
+        <Metric icon={HeartPulse} label="Win-back value" value={money(data?.winBackOpportunityCents)} tone="amber" />
+        <Metric icon={UsersRound} label="Customers to act on" value={(data?.repeatCandidates.length ?? 0) + (data?.winBackCandidates.length ?? 0)} tone="coral" />
+      </div>
+
+      <Panel
+        title="Retention engine"
+        icon={Repeat2}
+        action={
+          <button
+            onClick={() => scan.mutate()}
+            disabled={scan.isPending}
+            className="flex h-9 items-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {scan.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            Scan retention
+          </button>
+        }
+      >
+        {scan.isSuccess ? (
+          <p className="mb-3 rounded-[8px] bg-mint/30 px-3 py-2 text-sm font-semibold text-ink">
+            Retention scan found {scan.data.repeatCandidates} repeat and {scan.data.winBackCandidates} win-back opportunities.
+          </p>
+        ) : null}
+        {scan.error ? <ErrorText error={scan.error} /> : null}
+        <div className="grid gap-4 xl:grid-cols-2">
+          <RetentionList
+            title="Ready to rebook"
+            icon={Repeat2}
+            items={data?.repeatCandidates}
+            empty="No repeat opportunities right now"
+            onOpen={onOpen}
+          />
+          <RetentionList
+            title="Win-back customers"
+            icon={HeartPulse}
+            items={data?.winBackCandidates}
+            empty="No inactive customers to win back"
+            onOpen={onOpen}
+          />
+        </div>
+      </Panel>
+
+      <Panel title="Top customers" icon={UsersRound}>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {(data?.topCustomers ?? []).map((item) => (
+            <RetentionCustomerCard key={item.customer.id} item={item} onOpen={onOpen} />
+          ))}
+          <Empty show={!data?.topCustomers.length} label="No paid customer history yet" />
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function RetentionList({
+  title,
+  icon: Icon,
+  items,
+  empty,
+  onOpen
+}: {
+  title: string;
+  icon: typeof Inbox;
+  items?: RetentionCustomer[];
+  empty: string;
+  onOpen: (state: DrawerState) => void;
+}) {
+  return (
+    <section className="rounded-[8px] bg-mist p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <div className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-white text-pine">
+          <Icon className="h-5 w-5" />
+        </div>
+        <h3 className="font-semibold text-ink">{title}</h3>
+      </div>
+      <div className="grid gap-3">
+        {(items ?? []).map((item) => (
+          <RetentionCustomerCard key={item.customer.id} item={item} onOpen={onOpen} />
+        ))}
+        <Empty show={!items?.length} label={empty} />
+      </div>
+    </section>
+  );
+}
+
+function RetentionCustomerCard({
+  item,
+  onOpen
+}: {
+  item: RetentionCustomer;
+  onOpen: (state: DrawerState) => void;
+}) {
+  return (
+    <article className="rounded-[8px] bg-white p-3 shadow-soft">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-semibold text-ink">{item.customer.name}</p>
+          <p className="mt-1 truncate text-sm text-steel">
+            {item.serviceTitle} · {item.daysSinceLastBooking} days ago
+          </p>
+        </div>
+        <Status label={item.recommendation} />
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <MiniStat label="Lifetime" value={money(item.lifetimeValueCents)} />
+        <MiniStat label="Next value" value={money(item.estimatedNextValueCents)} />
+      </div>
+      <div className="mt-3 flex gap-2">
+        <button
+          onClick={() =>
+            onOpen({
+              type: "customer",
+              item: {
+                id: item.customer.id,
+                name: item.customer.name,
+                phone: item.customer.phone,
+                email: item.customer.email
+              }
+            })
+          }
+          className="flex h-9 flex-1 items-center justify-center gap-2 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink"
+        >
+          <ContactRound className="h-4 w-4" />
+          Customer
+        </button>
+        <a
+          href={`tel:${item.customer.phone}`}
+          className="flex h-9 items-center justify-center rounded-[8px] bg-pine px-3 text-sm font-semibold text-white"
+        >
+          Call
+        </a>
+      </div>
+    </article>
   );
 }
 
@@ -3311,6 +3477,7 @@ function titleFor(view: View) {
     overview: "Operations overview",
     inbox: "Customer inbox",
     leads: "Lead pipeline CRM",
+    retention: "Customer retention",
     customers: "Customer manager",
     bookings: "Booking board",
     field: "Field operations",
