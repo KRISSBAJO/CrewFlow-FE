@@ -13,6 +13,7 @@ import {
   Clock3,
   ContactRound,
   CreditCard,
+  DollarSign,
   ExternalLink,
   FileText,
   Headphones,
@@ -30,6 +31,8 @@ import {
   Settings2,
   ShieldCheck,
   Sparkles,
+  Target,
+  TrendingUp,
   UserCheck,
   UsersRound,
   Wrench,
@@ -48,6 +51,10 @@ import {
   DashboardSummary,
   Invoice,
   InvoiceStatus,
+  Lead,
+  LeadAnalytics,
+  LeadSource,
+  LeadStatus,
   OnboardingProfile,
   OperationalAction,
   Payment,
@@ -64,6 +71,7 @@ import logoMark from "@/public/images/logo.png";
 const nav = [
   { id: "overview", label: "Overview", icon: HeartPulse },
   { id: "inbox", label: "Inbox", icon: Inbox },
+  { id: "leads", label: "Leads", icon: Target },
   { id: "customers", label: "Customers", icon: ContactRound },
   { id: "bookings", label: "Bookings", icon: CalendarDays },
   { id: "field", label: "Field", icon: Route },
@@ -73,6 +81,24 @@ const nav = [
 ] as const;
 
 type View = (typeof nav)[number]["id"];
+const leadStatuses: Array<{ value: LeadStatus; label: string }> = [
+  { value: "NEW", label: "New" },
+  { value: "CONTACTED", label: "Contacted" },
+  { value: "QUALIFIED", label: "Qualified" },
+  { value: "BOOKING_READY", label: "Booking ready" },
+  { value: "WON", label: "Won" },
+  { value: "LOST", label: "Lost" }
+];
+const leadSources: LeadSource[] = [
+  "AI_RECEPTIONIST",
+  "WEB_CHAT",
+  "WHATSAPP",
+  "SMS",
+  "EMAIL",
+  "PHONE",
+  "REFERRAL",
+  "MANUAL"
+];
 type DrawerState =
   | { type: "booking"; item: Booking }
   | { type: "field-job"; item: Booking }
@@ -189,6 +215,8 @@ function Console() {
 
   const dashboard = useQuery({ queryKey: ["dashboard"], queryFn: api.dashboard });
   const inbox = useQuery({ queryKey: ["inbox"], queryFn: api.inbox });
+  const leads = useQuery({ queryKey: ["leads"], queryFn: api.leads });
+  const leadAnalytics = useQuery({ queryKey: ["lead-analytics"], queryFn: api.leadAnalytics });
   const actions = useQuery({ queryKey: ["actions"], queryFn: api.actions });
   const bookings = useQuery({ queryKey: ["bookings"], queryFn: api.bookings });
   const field = useQuery({ queryKey: ["field"], queryFn: api.fieldJobs });
@@ -316,6 +344,15 @@ function Console() {
                 />
               ) : null}
               {view === "inbox" ? <InboxView items={inbox.data} onOpen={setDrawer} /> : null}
+              {view === "leads" ? (
+                <LeadsView
+                  items={leads.data}
+                  analytics={leadAnalytics.data}
+                  customers={customers.data}
+                  staff={staff.data}
+                  onOpen={setDrawer}
+                />
+              ) : null}
               {view === "customers" ? <CustomersView items={customers.data} onOpen={setDrawer} /> : null}
               {view === "bookings" ? <BookingsView items={bookings.data} onOpen={setDrawer} /> : null}
               {view === "field" ? <FieldView items={field.data} onOpen={setDrawer} /> : null}
@@ -469,6 +506,335 @@ function InboxView({ items, onOpen }: { items?: Conversation[]; onOpen: (state: 
   );
 }
 
+function LeadsView({
+  items,
+  analytics,
+  customers,
+  staff,
+  onOpen
+}: {
+  items?: Lead[];
+  analytics?: LeadAnalytics;
+  customers?: Customer[];
+  staff?: StaffMember[];
+  onOpen: (state: DrawerState) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [query, setQuery] = useState("");
+  const [title, setTitle] = useState("");
+  const [customerId, setCustomerId] = useState("");
+  const [assignedToId, setAssignedToId] = useState("");
+  const [source, setSource] = useState<LeadSource>("MANUAL");
+  const [estimatedValue, setEstimatedValue] = useState("299");
+  const [followUpAt, setFollowUpAt] = useState("");
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return items ?? [];
+    return (items ?? []).filter((lead) =>
+      [
+        lead.title,
+        lead.status,
+        lead.source,
+        lead.customer?.name ?? "",
+        lead.customer?.phone ?? "",
+        lead.assignedTo?.name ?? "",
+        lead.notes ?? ""
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(needle)
+    );
+  }, [items, query]);
+
+  const create = useMutation({
+    mutationFn: () =>
+      api.createLead({
+        title,
+        source,
+        customerId: customerId || undefined,
+        assignedToId: assignedToId || undefined,
+        estimatedValueCents: Math.round(Number(estimatedValue || 0) * 100),
+        followUpAt: followUpAt ? new Date(followUpAt).toISOString() : undefined,
+        conversionProbability: 25
+      }),
+    onSuccess: () => {
+      setTitle("");
+      setCustomerId("");
+      setAssignedToId("");
+      setEstimatedValue("299");
+      setFollowUpAt("");
+      void queryClient.invalidateQueries({ queryKey: ["leads"] });
+      void queryClient.invalidateQueries({ queryKey: ["lead-analytics"] });
+    }
+  });
+
+  return (
+    <div className="grid gap-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Metric icon={Target} label="Open pipeline" value={money(analytics?.openPipelineCents)} tone="pine" />
+        <Metric icon={TrendingUp} label="Weighted value" value={money(analytics?.weightedPipelineCents)} tone="mint" />
+        <Metric icon={Clock3} label="Follow-ups due" value={analytics?.followUpsDue ?? 0} tone="amber" />
+        <Metric icon={DollarSign} label="Lead conversion" value={`${analytics?.conversionRate ?? 0}%`} tone="coral" />
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[1fr_0.75fr]">
+        <Panel
+          title="Pipeline board"
+          icon={Target}
+          action={
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search leads..."
+              className="h-10 w-52 rounded-[8px] border border-ink/10 bg-mist px-3 text-sm outline-none focus:border-pine"
+            />
+          }
+        >
+          <div className="grid gap-3 xl:grid-cols-3 2xl:grid-cols-6">
+            {leadStatuses.map((stage) => {
+              const stageLeads = filtered.filter((lead) => lead.status === stage.value);
+              const stageValue = stageLeads.reduce(
+                (sum, lead) => sum + (lead.estimatedValueCents ?? 0),
+                0
+              );
+              return (
+                <section key={stage.value} className="min-h-[320px] rounded-[8px] bg-mist p-3">
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <div>
+                      <p className="font-semibold text-ink">{stage.label}</p>
+                      <p className="text-xs font-medium text-steel">{stageLeads.length} · {money(stageValue)}</p>
+                    </div>
+                    <Status label={stage.value} />
+                  </div>
+                  <div className="grid gap-3">
+                    {stageLeads.map((lead) => (
+                      <LeadCard
+                        key={lead.id}
+                        lead={lead}
+                        staff={staff ?? []}
+                        onOpen={onOpen}
+                      />
+                    ))}
+                    <Empty show={!stageLeads.length} label="No leads here" />
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+        </Panel>
+
+        <div className="grid gap-4">
+          <Panel title="New lead" icon={Plus}>
+            <div className="grid gap-3">
+              <InputField label="Lead title" value={title} onChange={setTitle} />
+              <SelectField label="Customer" value={customerId} onChange={setCustomerId}>
+                <option value="">Unlinked lead</option>
+                {(customers ?? []).map((customer) => (
+                  <option key={customer.id} value={customer.id}>
+                    {customer.name} · {customer.phone}
+                  </option>
+                ))}
+              </SelectField>
+              <SelectField label="Assigned to" value={assignedToId} onChange={setAssignedToId}>
+                <option value="">Unassigned</option>
+                {(staff ?? []).map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.name} · {member.role}
+                  </option>
+                ))}
+              </SelectField>
+              <SelectField label="Source" value={source} onChange={(value) => setSource(value as LeadSource)}>
+                {leadSources.map((item) => (
+                  <option key={item} value={item}>
+                    {item.replaceAll("_", " ")}
+                  </option>
+                ))}
+              </SelectField>
+              <InputField label="Estimated value" value={estimatedValue} onChange={setEstimatedValue} />
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-ink">Follow-up</span>
+                <input
+                  type="datetime-local"
+                  value={followUpAt}
+                  onChange={(event) => setFollowUpAt(event.target.value)}
+                  className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
+                />
+              </label>
+              {create.error ? <ErrorText error={create.error} /> : null}
+              <button
+                onClick={() => create.mutate()}
+                disabled={!title.trim() || create.isPending}
+                className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 font-semibold text-white disabled:opacity-50"
+              >
+                {create.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                Add lead
+              </button>
+            </div>
+          </Panel>
+
+          <Panel title="Lead-to-booking" icon={TrendingUp}>
+            <div className="grid gap-3">
+              <MiniStat label="Won leads" value={analytics?.wonCount ?? 0} />
+              <MiniStat label="Lost leads" value={analytics?.lostCount ?? 0} danger={(analytics?.lostCount ?? 0) > 0} />
+              <MiniStat label="Booked value" value={money(analytics?.leadToBooking.bookingValueCents)} />
+              <div className="rounded-[8px] bg-mist p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-steel">Best sources</p>
+                <div className="mt-3 grid gap-2">
+                  {Object.entries(analytics?.bySource ?? {})
+                    .filter(([, count]) => count > 0)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 4)
+                    .map(([sourceName, count]) => (
+                      <div key={sourceName} className="flex items-center justify-between text-sm">
+                        <span className="font-medium text-ink">{sourceName.replaceAll("_", " ")}</span>
+                        <span className="font-semibold text-steel">{count}</span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            </div>
+          </Panel>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LeadCard({
+  lead,
+  staff,
+  onOpen
+}: {
+  lead: Lead;
+  staff: StaffMember[];
+  onOpen: (state: DrawerState) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [status, setStatus] = useState<LeadStatus>(lead.status);
+  const [assignedToId, setAssignedToId] = useState(lead.assignedTo?.id ?? "");
+  const [probability, setProbability] = useState(String(lead.conversionProbability));
+  const [followUpAt, setFollowUpAt] = useState(
+    lead.followUpAt ? toDateTimeLocal(lead.followUpAt) : ""
+  );
+  const [now] = useState(() => Date.now());
+  const update = useMutation({
+    mutationFn: () =>
+      api.updateLead(lead.id, {
+        status,
+        assignedToId: assignedToId || undefined,
+        conversionProbability: Number(probability),
+        followUpAt: followUpAt ? new Date(followUpAt).toISOString() : undefined
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["leads"] });
+      void queryClient.invalidateQueries({ queryKey: ["lead-analytics"] });
+    }
+  });
+  const isDue = lead.followUpAt ? new Date(lead.followUpAt).getTime() <= now : false;
+
+  return (
+    <article className="rounded-[8px] border border-ink/5 bg-white p-3 shadow-soft">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="line-clamp-2 font-semibold leading-5 text-ink">{lead.title}</p>
+          <p className="mt-1 truncate text-sm text-steel">
+            {lead.customer?.name ?? "Unlinked"} · {lead.source.replaceAll("_", " ")}
+          </p>
+        </div>
+        <Status label={`${lead.conversionProbability}%`} />
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+        <div className="rounded-[8px] bg-mist p-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-steel">Value</p>
+          <p className="mt-1 font-semibold text-ink">{money(lead.estimatedValueCents)}</p>
+        </div>
+        <div className={cn("rounded-[8px] p-2", isDue ? "bg-coral/10" : "bg-mist")}>
+          <p className={cn("text-xs font-semibold uppercase tracking-[0.14em]", isDue ? "text-coral" : "text-steel")}>
+            Follow-up
+          </p>
+          <p className="mt-1 truncate font-semibold text-ink">{shortDate(lead.followUpAt)}</p>
+        </div>
+      </div>
+      <div className="mt-3 grid gap-2">
+        <select
+          value={status}
+          onChange={(event) => setStatus(event.target.value as LeadStatus)}
+          className="h-9 rounded-[8px] border border-ink/10 bg-mist px-2 text-sm outline-none focus:border-pine"
+        >
+          {leadStatuses.map((stage) => (
+            <option key={stage.value} value={stage.value}>
+              {stage.label}
+            </option>
+          ))}
+        </select>
+        <select
+          value={assignedToId}
+          onChange={(event) => setAssignedToId(event.target.value)}
+          className="h-9 rounded-[8px] border border-ink/10 bg-mist px-2 text-sm outline-none focus:border-pine"
+        >
+          <option value="">Unassigned</option>
+          {staff.map((member) => (
+            <option key={member.id} value={member.id}>
+              {member.name}
+            </option>
+          ))}
+        </select>
+        <div className="grid grid-cols-[1fr_88px] gap-2">
+          <input
+            type="datetime-local"
+            value={followUpAt}
+            onChange={(event) => setFollowUpAt(event.target.value)}
+            className="h-9 min-w-0 rounded-[8px] border border-ink/10 bg-mist px-2 text-sm outline-none focus:border-pine"
+          />
+          <input
+            type="number"
+            min={0}
+            max={100}
+            value={probability}
+            onChange={(event) => setProbability(event.target.value)}
+            className="h-9 rounded-[8px] border border-ink/10 bg-mist px-2 text-sm outline-none focus:border-pine"
+          />
+        </div>
+      </div>
+      {lead.wonLostReason ? (
+        <p className="mt-3 rounded-[8px] bg-mist p-2 text-sm text-steel">{lead.wonLostReason}</p>
+      ) : null}
+      {update.error ? <ErrorText error={update.error} /> : null}
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <button
+          onClick={() => update.mutate()}
+          disabled={update.isPending}
+          className="flex h-9 items-center justify-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+        >
+          {update.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          Save
+        </button>
+        {lead.conversation ? (
+          <button
+            onClick={() => onOpen({ type: "conversation", item: lead.conversation! })}
+            className="flex h-9 items-center justify-center gap-2 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink"
+          >
+            <Inbox className="h-4 w-4" />
+            Inbox
+          </button>
+        ) : lead.booking ? (
+          <button
+            onClick={() => onOpen({ type: "booking", item: lead.booking! })}
+            className="flex h-9 items-center justify-center gap-2 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink"
+          >
+            <CalendarDays className="h-4 w-4" />
+            Job
+          </button>
+        ) : (
+          <span className="flex h-9 items-center justify-center rounded-[8px] bg-mist px-3 text-sm font-semibold text-steel">
+            Manual
+          </span>
+        )}
+      </div>
+    </article>
+  );
+}
+
 function RevenuePipeline({
   data,
   actions
@@ -543,6 +909,8 @@ function ReceptionistSimulator({ onOpen }: { onOpen: (state: DrawerState) => voi
       setConversationId(result.conversationId);
       setLastResult(result);
       void queryClient.invalidateQueries({ queryKey: ["inbox"] });
+      void queryClient.invalidateQueries({ queryKey: ["leads"] });
+      void queryClient.invalidateQueries({ queryKey: ["lead-analytics"] });
       void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     }
   });
@@ -2857,6 +3225,7 @@ function titleFor(view: View) {
   return {
     overview: "Operations overview",
     inbox: "Customer inbox",
+    leads: "Lead pipeline CRM",
     customers: "Customer manager",
     bookings: "Booking board",
     field: "Field operations",

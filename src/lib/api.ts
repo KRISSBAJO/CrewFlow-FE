@@ -117,6 +117,18 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ status })
     }),
+  leads: () => request<Lead[]>("/leads"),
+  leadAnalytics: () => request<LeadAnalytics>("/leads/analytics"),
+  createLead: (input: LeadInput) =>
+    request<Lead>("/leads", {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
+  updateLead: (id: string, input: Partial<LeadInput> & { wonLostReason?: string }) =>
+    request<Lead>(`/leads/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(input)
+    }),
   bookings: () => request<Booking[]>("/bookings"),
   createBooking: (input: BookingInput) =>
     request<Booking>("/bookings", {
@@ -326,6 +338,37 @@ export type BookingStatus =
 export type RepeatFrequency = "none" | "weekly" | "biweekly" | "monthly";
 
 export type InvoiceStatus = "DRAFT" | "SENT" | "PAID" | "OVERDUE" | "VOID";
+
+export type LeadStatus =
+  | "NEW"
+  | "CONTACTED"
+  | "QUALIFIED"
+  | "BOOKING_READY"
+  | "WON"
+  | "LOST";
+
+export type LeadSource =
+  | "AI_RECEPTIONIST"
+  | "WEB_CHAT"
+  | "WHATSAPP"
+  | "SMS"
+  | "EMAIL"
+  | "PHONE"
+  | "REFERRAL"
+  | "MANUAL";
+
+export type LeadInput = {
+  title: string;
+  status?: LeadStatus;
+  source?: LeadSource;
+  customerId?: string;
+  conversationId?: string;
+  assignedToId?: string;
+  estimatedValueCents?: number;
+  conversionProbability?: number;
+  followUpAt?: string;
+  notes?: string;
+};
 
 export type BookingInput = {
   customerId?: string;
@@ -545,6 +588,43 @@ export type Conversation = {
   customer?: Customer | null;
   messages?: Array<{ id?: string; content: string; role: string; createdAt: string }>;
   bookingIntents?: BookingIntent[];
+};
+
+export type Lead = {
+  id: string;
+  title: string;
+  status: LeadStatus;
+  source: LeadSource;
+  estimatedValueCents?: number | null;
+  conversionProbability: number;
+  followUpAt?: string | null;
+  wonLostReason?: string | null;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  customer?: Customer | null;
+  conversation?: Conversation | null;
+  bookingIntent?: BookingIntent | null;
+  booking?: Booking | null;
+  assignedTo?: StaffMember | null;
+};
+
+export type LeadAnalytics = {
+  total: number;
+  open: number;
+  byStatus: Record<LeadStatus, number>;
+  bySource: Record<LeadSource, number>;
+  openPipelineCents: number;
+  weightedPipelineCents: number;
+  wonValueCents: number;
+  wonCount: number;
+  lostCount: number;
+  conversionRate: number;
+  followUpsDue: number;
+  leadToBooking: {
+    wonBookings: number;
+    bookingValueCents: number;
+  };
 };
 
 export type BookingIntent = {
