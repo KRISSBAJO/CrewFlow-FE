@@ -230,10 +230,25 @@ export const api = {
     ),
   platformMetrics: () => request<PlatformMetrics>("/platform/metrics"),
   platformTenants: () => request<PlatformTenant[]>("/platform/tenants"),
-  updatePlatformTenant: (id: string, input: Partial<Pick<PlatformTenant, "status" | "subscriptionPlan" | "billingEmail" | "monthlyPriceCents" | "setupFeeCents">>) =>
+  platformTenant: (id: string) => request<PlatformTenantDetail>(`/platform/tenants/${id}`),
+  platformTenantHealth: (id: string) => request<PlatformTenantHealth>(`/platform/tenants/${id}/health`),
+  platformTenantUsage: (id: string) => request<PlatformTenantUsage>(`/platform/tenants/${id}/usage`),
+  updatePlatformTenant: (id: string, input: Partial<Pick<PlatformTenant, "status" | "subscriptionPlan" | "billingEmail" | "monthlyPriceCents" | "setupFeeCents" | "featureFlags" | "planLimits">>) =>
     request<PlatformTenant>(`/platform/tenants/${id}`, {
       method: "PATCH",
       body: JSON.stringify(input)
+    }),
+  platformSupportNotes: (id: string) => request<PlatformSupportNote[]>(`/platform/tenants/${id}/support-notes`),
+  addPlatformSupportNote: (id: string, note: string) =>
+    request<PlatformSupportNote>(`/platform/tenants/${id}/support-notes`, {
+      method: "POST",
+      body: JSON.stringify({ note })
+    }),
+  platformSupportAccess: (id: string) => request<PlatformSupportAccess[]>(`/platform/tenants/${id}/support-access`),
+  createPlatformSupportAccess: (id: string, reason: string) =>
+    request<PlatformSupportAccess>(`/platform/tenants/${id}/support-access`, {
+      method: "POST",
+      body: JSON.stringify({ reason })
     }),
   platformAutomationFailures: () => request<PlatformAutomationFailure[]>("/platform/automation-failures"),
   platformWebhookFailures: () => request<PlatformWebhookFailure[]>("/platform/webhook-failures"),
@@ -533,6 +548,8 @@ export type PlatformTenant = {
   billingEmail?: string | null;
   monthlyPriceCents?: number | null;
   setupFeeCents?: number | null;
+  featureFlags?: Record<string, boolean> | null;
+  planLimits?: Record<string, number> | null;
   suspendedAt?: string | null;
   createdAt: string;
   _count?: {
@@ -543,6 +560,50 @@ export type PlatformTenant = {
     invoices: number;
     operationalActions: number;
   };
+};
+
+export type PlatformTenantDetail = PlatformTenant & {
+  users?: StaffMember[];
+  receptionistConfig?: unknown;
+  onboardingProfile?: OnboardingProfile | null;
+};
+
+export type PlatformTenantHealth = {
+  score: number;
+  status: string;
+  openActions: number;
+  failedAutomations: number;
+  failedWebhooks: number;
+  overdueInvoices: number;
+  hotLeads: number;
+  recentBookings: number;
+  activeUsers: number;
+  lastActivityAt: string;
+};
+
+export type PlatformTenantUsage = {
+  id: string;
+  businessName: string;
+  featureFlags?: Record<string, boolean> | null;
+  planLimits?: Record<string, number> | null;
+  _count: Record<string, number>;
+};
+
+export type PlatformSupportNote = {
+  id: string;
+  note: string;
+  createdAt: string;
+  author?: { id: string; email: string; role: string } | null;
+};
+
+export type PlatformSupportAccess = {
+  id: string;
+  reason: string;
+  token: string;
+  expiresAt: string;
+  usedAt?: string | null;
+  createdAt: string;
+  admin?: { id: string; email: string; role: string } | null;
 };
 
 export type PlatformAutomationFailure = {

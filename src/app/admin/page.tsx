@@ -17,7 +17,12 @@ import {
   PlatformAuditLog,
   PlatformAutomationFailure,
   PlatformMetrics,
+  PlatformSupportAccess,
+  PlatformSupportNote,
   PlatformTenant,
+  PlatformTenantDetail,
+  PlatformTenantHealth,
+  PlatformTenantUsage,
   PlatformWebhookFailure
 } from "@/lib/api";
 import { cn, money, shortDate } from "@/lib/utils";
@@ -87,6 +92,7 @@ function AdminLogin() {
 
 function AdminConsole() {
   const logout = useAuth((state) => state.logout);
+  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const metrics = useQuery({ queryKey: ["platform-metrics"], queryFn: api.platformMetrics });
   const tenants = useQuery({ queryKey: ["platform-tenants"], queryFn: api.platformTenants });
@@ -122,13 +128,22 @@ function AdminConsole() {
           <Panel title="Tenants" icon={Building2}>
             <div className="grid gap-3">
               {(tenants.data ?? []).map((tenant) => (
-                <TenantRow key={tenant.id} tenant={tenant} />
+                <TenantRow
+                  key={tenant.id}
+                  tenant={tenant}
+                  selected={selectedTenantId === tenant.id}
+                  onSelect={() => setSelectedTenantId(tenant.id)}
+                />
               ))}
             </div>
           </Panel>
-          <Panel title="Failures" icon={AlertTriangle}>
-            <FailureList automation={automationFailures.data} webhooks={webhookFailures.data} />
-          </Panel>
+          {selectedTenantId ? (
+            <TenantDetail tenantId={selectedTenantId} />
+          ) : (
+            <Panel title="Failures" icon={AlertTriangle}>
+              <FailureList automation={automationFailures.data} webhooks={webhookFailures.data} />
+            </Panel>
+          )}
         </section>
 
         <Panel title="Audit stream" icon={ShieldCheck}>
@@ -150,7 +165,15 @@ function Metrics({ data }: { data?: PlatformMetrics }) {
   );
 }
 
-function TenantRow({ tenant }: { tenant: PlatformTenant }) {
+function TenantRow({
+  tenant,
+  selected,
+  onSelect
+}: {
+  tenant: PlatformTenant;
+  selected: boolean;
+  onSelect: () => void;
+}) {
   const queryClient = useQueryClient();
   const update = useMutation({
     mutationFn: (status: PlatformTenant["status"]) => api.updatePlatformTenant(tenant.id, { status }),
@@ -160,12 +183,12 @@ function TenantRow({ tenant }: { tenant: PlatformTenant }) {
     }
   });
   return (
-    <div className="rounded-[8px] bg-mist p-3">
+    <div className={cn("rounded-[8px] p-3", selected ? "bg-pine/10 ring-1 ring-pine/30" : "bg-mist")}>
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
+        <button onClick={onSelect} className="min-w-0 text-left">
           <p className="font-semibold text-ink">{tenant.businessName}</p>
           <p className="text-sm text-steel">{tenant.slug} · {tenant.industry}</p>
-        </div>
+        </button>
         <div className="flex flex-wrap items-center gap-2">
           <Status label={tenant.status} />
           <Status label={tenant.subscriptionPlan} />
@@ -189,6 +212,151 @@ function TenantRow({ tenant }: { tenant: PlatformTenant }) {
         <span>{tenant._count?.operationalActions ?? 0} actions</span>
         <span>{money(tenant.monthlyPriceCents)} / mo</span>
       </div>
+    </div>
+  );
+}
+
+function TenantDetail({ tenantId }: { tenantId: string }) {
+  const queryClient = useQueryClient();
+  const detail = useQuery({ queryKey: ["platform-tenant", tenantId], queryFn: () => api.platformTenant(tenantId) });
+  const health = useQuery({ queryKey: ["platform-tenant-health", tenantId], queryFn: () => api.platformTenantHealth(tenantId) });
+  const usage = useQuery({ queryKey: ["platform-tenant-usage", tenantId], queryFn: () => api.platformTenantUsage(tenantId) });
+  const notes = useQuery({ queryKey: ["platform-support-notes", tenantId], queryFn: () => api.platformSupportNotes(tenantId) });
+  const access = useQuery({ queryKey: ["platform-support-access", tenantId], queryFn: () => api.platformSupportAccess(tenantId) });
+  const [note, setNote] = useState("");
+  const [reason, setReason] = useState("Support troubleshooting for tenant setup.");
+  const [flags, setFlags] = useState("");
+  const [limits, setLimits] = useState("");
+
+  const saveConfig = useMutation({
+    mutationFn: () =>
+      api.updatePlatformTenant(tenantId, {
+        featureFlags: flags ? JSON.parse(flags) as Record<string, boolean> : undefined,
+        planLimits: limits ? JSON.parse(limits) as Record<string, number> : undefined
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["platform-tenant"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-tenant-usage"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-tenants"] });
+    }
+  });
+  const addNote = useMutation({
+    mutationFn: () => api.addPlatformSupportNote(tenantId, note),
+    onSuccess: () => {
+      setNote("");
+      void queryClient.invalidateQueries({ queryKey: ["platform-support-notes", tenantId] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-audit"] });
+    }
+  });
+  const createAccess = useMutation({
+    mutationFn: () => api.createPlatformSupportAccess(tenantId, reason),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["platform-support-access", tenantId] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-audit"] });
+    }
+  });
+
+  const tenant = detail.data;
+  const effectiveFlags = flags || JSON.stringify(usage.data?.featureFlags ?? tenant?.featureFlags ?? {}, null, 2);
+  const effectiveLimits = limits || JSON.stringify(usage.data?.planLimits ?? tenant?.planLimits ?? {}, null, 2);
+
+  return (
+    <Panel title={tenant?.businessName ?? "Tenant detail"} icon={ShieldCheck}>
+      <div className="grid gap-4">
+        <HealthPanel health={health.data} usage={usage.data} tenant={tenant} />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <section className="rounded-[8px] bg-mist p-3">
+            <p className="font-semibold text-ink">Feature flags and limits</p>
+            <label className="mt-3 block">
+              <span className="mb-2 block text-sm font-medium text-steel">Feature flags JSON</span>
+              <textarea value={effectiveFlags} onChange={(event) => setFlags(event.target.value)} className="min-h-28 w-full rounded-[8px] border border-ink/10 bg-white p-3 text-sm outline-none focus:border-pine" />
+            </label>
+            <label className="mt-3 block">
+              <span className="mb-2 block text-sm font-medium text-steel">Plan limits JSON</span>
+              <textarea value={effectiveLimits} onChange={(event) => setLimits(event.target.value)} className="min-h-28 w-full rounded-[8px] border border-ink/10 bg-white p-3 text-sm outline-none focus:border-pine" />
+            </label>
+            {saveConfig.error ? <p className="mt-3 text-sm font-medium text-coral">{saveConfig.error instanceof Error ? saveConfig.error.message : "Invalid JSON"}</p> : null}
+            <button onClick={() => saveConfig.mutate()} className="mt-3 h-10 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white">
+              Save config
+            </button>
+          </section>
+
+          <section className="rounded-[8px] bg-mist p-3">
+            <p className="font-semibold text-ink">Support access</p>
+            <textarea value={reason} onChange={(event) => setReason(event.target.value)} className="mt-3 min-h-20 w-full rounded-[8px] border border-ink/10 bg-white p-3 text-sm outline-none focus:border-pine" />
+            <button onClick={() => createAccess.mutate()} disabled={createAccess.isPending} className="mt-3 h-10 rounded-[8px] bg-ink px-3 text-sm font-semibold text-white disabled:opacity-50">
+              Create audited token
+            </button>
+            {createAccess.data ? (
+              <p className="mt-3 break-all rounded-[8px] bg-white p-2 text-xs font-semibold text-ink">{createAccess.data.token}</p>
+            ) : null}
+            <div className="mt-3 grid gap-2">
+              {(access.data ?? []).slice(0, 4).map((item) => (
+                <p key={item.id} className="rounded-[8px] bg-white p-2 text-xs text-steel">
+                  {item.admin?.email} · expires {shortDate(item.expiresAt)}
+                </p>
+              ))}
+            </div>
+          </section>
+        </div>
+
+        <section className="rounded-[8px] bg-mist p-3">
+          <p className="font-semibold text-ink">Support notes</p>
+          <div className="mt-3 flex gap-2">
+            <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Add support note..." className="h-10 min-w-0 flex-1 rounded-[8px] border border-ink/10 bg-white px-3 text-sm outline-none focus:border-pine" />
+            <button onClick={() => addNote.mutate()} disabled={!note.trim() || addNote.isPending} className="h-10 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50">
+              Add
+            </button>
+          </div>
+          <div className="mt-3 grid gap-2">
+            {(notes.data ?? []).map((item) => (
+              <SupportNote key={item.id} item={item} />
+            ))}
+            {!notes.data?.length ? <Empty label="No support notes" /> : null}
+          </div>
+        </section>
+      </div>
+    </Panel>
+  );
+}
+
+function HealthPanel({
+  health,
+  usage,
+  tenant
+}: {
+  health?: PlatformTenantHealth;
+  usage?: PlatformTenantUsage;
+  tenant?: PlatformTenantDetail;
+}) {
+  return (
+    <section className="rounded-[8px] bg-mist p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium text-steel">Health score</p>
+          <p className="mt-1 text-3xl font-semibold text-ink">{health?.score ?? 0}</p>
+        </div>
+        <Status label={tenant?.status ?? "loading"} />
+      </div>
+      <div className="mt-3 grid gap-2 text-sm text-steel sm:grid-cols-2">
+        <span>{health?.activeUsers ?? 0} active users</span>
+        <span>{health?.recentBookings ?? 0} bookings in 30 days</span>
+        <span>{health?.openActions ?? 0} open actions</span>
+        <span>{health?.overdueInvoices ?? 0} overdue invoices</span>
+        <span>{health?.hotLeads ?? 0} hot leads</span>
+        <span>{usage?._count.messages ?? 0} messages</span>
+      </div>
+    </section>
+  );
+}
+
+function SupportNote({ item }: { item: PlatformSupportNote }) {
+  return (
+    <div className="rounded-[8px] bg-white p-3">
+      <p className="text-sm text-ink">{item.note}</p>
+      <p className="mt-2 text-xs font-medium text-steel">
+        {item.author?.email ?? "system"} · {shortDate(item.createdAt)}
+      </p>
     </div>
   );
 }
