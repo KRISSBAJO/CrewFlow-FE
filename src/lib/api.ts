@@ -84,6 +84,22 @@ export const api = {
     }),
   whatsappStatus: () => request<WhatsappStatus>("/webhooks/whatsapp/status"),
   whatsappEvents: () => request<WebhookEvent[]>("/webhooks/whatsapp/events"),
+  whatsappOnboarding: () => request<WhatsappOnboarding>("/tenant/whatsapp/onboarding"),
+  whatsappTemplates: () => request<WhatsappTemplate[]>("/automations/whatsapp-templates"),
+  seedWhatsappTemplates: () =>
+    request<{ count: number; templates: WhatsappTemplate[] }>("/automations/whatsapp-templates/defaults", {
+      method: "POST"
+    }),
+  submitWhatsappTemplate: (id: string) =>
+    request<{ mode: "live" | "mock"; template: WhatsappTemplate; payload?: unknown; raw?: unknown }>(
+      `/automations/whatsapp-templates/${id}/submit`,
+      { method: "POST" }
+    ),
+  linkWhatsappTemplate: (id: string, trigger: AutomationTrigger) =>
+    request<AutomationRule>(`/automations/whatsapp-templates/${id}/link`, {
+      method: "POST",
+      body: JSON.stringify({ trigger })
+    }),
   automationRuns: () => request<AutomationRun[]>("/automations/runs"),
   retryAutomationRun: (id: string, reason?: string) =>
     request<AutomationRun>(`/automations/runs/${id}/retry`, {
@@ -1183,6 +1199,62 @@ export type WebhookEvent = {
   error?: string | null;
   createdAt: string;
   processedAt?: string | null;
+};
+
+export type AutomationTrigger =
+  | "BOOKING_CONFIRMED"
+  | "STAFF_ON_THE_WAY"
+  | "MISSED_APPOINTMENT"
+  | "INVOICE_DUE"
+  | "REVIEW_REQUEST"
+  | "LEAD_FOLLOW_UP"
+  | "REBOOKING_REMINDER"
+  | "CUSTOMER_WINBACK";
+
+export type WhatsappTemplate = {
+  id: string;
+  tenantId: string;
+  trigger?: AutomationTrigger | null;
+  name: string;
+  language: string;
+  category: "UTILITY" | "MARKETING" | "AUTHENTICATION";
+  status: "DRAFT" | "PENDING_REVIEW" | "APPROVED" | "REJECTED" | "PAUSED";
+  body: string;
+  sampleValues?: Record<string, string> | null;
+  variableKeys: string[];
+  metaTemplateId?: string | null;
+  rejectionReason?: string | null;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AutomationRule = {
+  id: string;
+  trigger: AutomationTrigger;
+  provider: string;
+  template: string;
+  whatsappTemplateId?: string | null;
+  active: boolean;
+  delayMinutes: number;
+  whatsappTemplate?: WhatsappTemplate | null;
+};
+
+export type WhatsappOnboarding = {
+  liveReady: boolean;
+  webhookUrl: string;
+  verifyTokenConfigured: boolean;
+  appSecretConfigured: boolean;
+  businessAccountConfigured: boolean;
+  templates: WhatsappTemplate[];
+  automationRules: AutomationRule[];
+  score: number;
+  steps: Array<{
+    id: string;
+    label: string;
+    detail: string;
+    done: boolean;
+  }>;
 };
 
 export type AutomationRun = {

@@ -70,6 +70,7 @@ import {
   TenantBillingSummary,
   TenantProfile,
   WebhookEvent,
+  WhatsappOnboarding,
   WhatsappStatus
 } from "@/lib/api";
 import { cn, initials, money, shortDate } from "@/lib/utils";
@@ -1841,6 +1842,7 @@ function SettingsForm({
   );
   const [whatsappPlanned, setWhatsappPlanned] = useState(Boolean(onboarding?.whatsappNumber));
   const whatsappStatus = useQuery({ queryKey: ["whatsapp-status"], queryFn: api.whatsappStatus });
+  const whatsappOnboarding = useQuery({ queryKey: ["whatsapp-onboarding"], queryFn: api.whatsappOnboarding });
   const automationRuns = useQuery({ queryKey: ["automation-runs"], queryFn: api.automationRuns });
   const webhookEvents = useQuery({ queryKey: ["whatsapp-events"], queryFn: api.whatsappEvents });
   const createCheckout = useMutation({
@@ -1984,6 +1986,7 @@ function SettingsForm({
 
       <WhatsAppOpsPanel
         status={whatsappStatus.data}
+        onboarding={whatsappOnboarding.data}
         runs={automationRuns.data}
         events={webhookEvents.data}
       />
@@ -2100,14 +2103,36 @@ function UsageBar({ label, used, limit }: { label: string; used: number; limit?:
 
 function WhatsAppOpsPanel({
   status,
+  onboarding,
   runs,
   events
 }: {
   status?: WhatsappStatus;
+  onboarding?: WhatsappOnboarding;
   runs?: AutomationRun[];
   events?: WebhookEvent[];
 }) {
   const queryClient = useQueryClient();
+  const seedTemplates = useMutation({
+    mutationFn: api.seedWhatsappTemplates,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["whatsapp-onboarding"] });
+      void queryClient.invalidateQueries({ queryKey: ["automation-runs"] });
+    }
+  });
+  const submitTemplate = useMutation({
+    mutationFn: api.submitWhatsappTemplate,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["whatsapp-onboarding"] });
+    }
+  });
+  const linkTemplate = useMutation({
+    mutationFn: (input: { id: string; trigger: NonNullable<WhatsappOnboarding["templates"][number]["trigger"]> }) =>
+      api.linkWhatsappTemplate(input.id, input.trigger),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["whatsapp-onboarding"] });
+    }
+  });
   const retry = useMutation({
     mutationFn: (id: string) => api.retryAutomationRun(id, "Manual retry from WhatsApp operations panel"),
     onSuccess: () => {
@@ -2118,6 +2143,8 @@ function WhatsAppOpsPanel({
   const recentRuns = (runs ?? []).slice(0, 8);
   const recentEvents = (events ?? []).slice(0, 6);
   const failedRuns = (runs ?? []).filter((run) => run.status === "FAILED").length;
+  const templates = onboarding?.templates ?? [];
+  const approvedTemplates = templates.filter((template) => template.status === "APPROVED").length;
 
   return (
     <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
@@ -2145,6 +2172,24 @@ function WhatsAppOpsPanel({
             <MiniStat label="Inbound" value={status?.messages.inbound ?? 0} />
             <MiniStat label="Outbound" value={status?.messages.outbound ?? 0} />
             <MiniStat label="Webhook fails" value={status?.webhook.failedEvents ?? 0} danger />
+          </div>
+          <div className="rounded-[8px] bg-mist p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-ink">Production onboarding</p>
+                <p className="text-sm text-steel">{onboarding?.score ?? 0}% WhatsApp launch readiness</p>
+              </div>
+              <Status label={onboarding?.liveReady ? "LIVE" : "MOCK"} />
+            </div>
+            <div className="grid gap-2">
+              {(onboarding?.steps ?? []).map((step) => (
+                <ReadinessRow key={step.id} label={step.label} done={step.done} />
+              ))}
+            </div>
+            <div className="mt-3 rounded-[8px] bg-white p-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-steel">Webhook URL</p>
+              <p className="mt-1 break-all text-sm font-medium text-ink">{onboarding?.webhookUrl ?? "Loading..."}</p>
+            </div>
           </div>
         </div>
       </Panel>
@@ -2197,6 +2242,64 @@ function WhatsAppOpsPanel({
             <Empty show={!recentEvents.length} label="No WhatsApp webhook events yet" />
           </div>
         </div>
+      </Panel>
+      <Panel title="WhatsApp production templates" icon={FileText}>
+        <div className="mb-4 grid gap-3 sm:grid-cols-3">
+          <MiniStat label="Templates" value={templates.length} />
+          <MiniStat label="Approved" value={approvedTemplates} />
+          <MiniStat label="Linked rules" value={(onboarding?.automationRules ?? []).filter((rule) => rule.whatsappTemplateId).length} />
+        </div>
+        <button
+          onClick={() => seedTemplates.mutate()}
+          disabled={seedTemplates.isPending}
+          className="mb-4 flex h-10 w-full items-center justify-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+        >
+          {seedTemplates.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+          Create default templates
+        </button>
+        <div className="grid gap-3">
+          {templates.map((template) => (
+            <div key={template.id} className="rounded-[8px] bg-mist p-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-ink">{template.name}</p>
+                  <p className="mt-1 text-sm text-steel">{template.trigger?.replaceAll("_", " ") ?? "Reusable"} · {template.language}</p>
+                </div>
+                <Status label={template.status} />
+              </div>
+              <p className="mt-3 line-clamp-3 text-sm leading-6 text-steel">{template.body}</p>
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                <button
+                  onClick={() => submitTemplate.mutate(template.id)}
+                  disabled={submitTemplate.isPending}
+                  className="flex h-9 flex-1 items-center justify-center gap-2 rounded-[8px] bg-white px-3 text-sm font-semibold text-ink disabled:opacity-50"
+                >
+                  {submitTemplate.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  Submit to Meta
+                </button>
+                {template.trigger ? (
+                  <button
+                    onClick={() =>
+                      linkTemplate.mutate({
+                        id: template.id,
+                        trigger: template.trigger as NonNullable<typeof template.trigger>
+                      })
+                    }
+                    disabled={linkTemplate.isPending}
+                    className="flex h-9 flex-1 items-center justify-center gap-2 rounded-[8px] bg-ink px-3 text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    <Wrench className="h-4 w-4" />
+                    Link automation
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ))}
+          <Empty show={!templates.length} label="No WhatsApp templates yet" />
+        </div>
+        {seedTemplates.error || submitTemplate.error || linkTemplate.error ? (
+          <ErrorText error={seedTemplates.error ?? submitTemplate.error ?? linkTemplate.error} />
+        ) : null}
       </Panel>
     </div>
   );
