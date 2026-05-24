@@ -242,6 +242,13 @@ export const api = {
     ),
   platformMetrics: () => request<PlatformMetrics>("/platform/metrics"),
   platformTenants: () => request<PlatformTenant[]>("/platform/tenants"),
+  platformUsers: () => request<PlatformUser[]>("/platform/users"),
+  updatePlatformUser: (id: string, input: Partial<Pick<PlatformUser, "name" | "email" | "phone" | "role" | "active">>) =>
+    request<PlatformUser>(`/platform/users/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(input)
+    }),
+  platformActions: () => request<PlatformAction[]>("/platform/actions"),
   platformTenant: (id: string) => request<PlatformTenantDetail>(`/platform/tenants/${id}`),
   platformTenantHealth: (id: string) => request<PlatformTenantHealth>(`/platform/tenants/${id}/health`),
   platformTenantUsage: (id: string) => request<PlatformTenantUsage>(`/platform/tenants/${id}/usage`),
@@ -722,6 +729,24 @@ export type PlatformTenantDetail = PlatformTenant & {
   onboardingProfile?: OnboardingProfile | null;
 };
 
+export type PlatformUser = {
+  id: string;
+  tenantId: string;
+  name: string;
+  email: string;
+  role: "PLATFORM_ADMIN" | "OWNER" | "MANAGER" | "STAFF";
+  phone?: string | null;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+  tenant?: Pick<PlatformTenant, "id" | "businessName" | "slug" | "status" | "subscriptionStatus">;
+};
+
+export type PlatformAction = OperationalAction & {
+  tenant?: PlatformTenant;
+  assignedTo?: { id: string; name: string; email: string; role: string } | null;
+};
+
 export type PlatformTenantHealth = {
   score: number;
   status: string;
@@ -1068,6 +1093,7 @@ export type OperationalAction = {
   title: string;
   description?: string | null;
   dueAt?: string | null;
+  createdAt?: string;
   customer?: Customer | null;
   invoice?: Invoice | null;
   booking?: Booking | null;

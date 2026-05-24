@@ -30,6 +30,8 @@ import {
   PlatformBillingEventType,
   PlatformBillingSummary,
   PlatformMetrics,
+  PlatformAction,
+  PlatformUser,
   Readiness,
   PlatformSupportAccess,
   PlatformSupportNote,
@@ -42,16 +44,19 @@ import {
 import { cn, money, shortDate } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
 
-type AdminSection = "overview" | "tenants" | "failures" | "audit";
+type AdminSection = "overview" | "tenants" | "users" | "actions" | "failures" | "audit";
 
 const adminNav: Array<{ id: AdminSection; label: string; icon: typeof ShieldCheck }> = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "tenants", label: "Tenants", icon: Building2 },
+  { id: "users", label: "Users", icon: UsersRound },
+  { id: "actions", label: "Actions", icon: LifeBuoy },
   { id: "failures", label: "Failures", icon: AlertTriangle },
   { id: "audit", label: "Audit", icon: ShieldCheck }
 ];
 
 const tenantStatuses: PlatformTenant["status"][] = ["TRIAL", "ACTIVE", "SUSPENDED", "CHURNED"];
+const userRoles: PlatformUser["role"][] = ["PLATFORM_ADMIN", "OWNER", "MANAGER", "STAFF"];
 const subscriptionStatuses: NonNullable<PlatformTenant["subscriptionStatus"]>[] = [
   "TRIALING",
   "ACTIVE",
@@ -130,6 +135,8 @@ function AdminConsole() {
   const queryClient = useQueryClient();
   const metrics = useQuery({ queryKey: ["platform-metrics"], queryFn: api.platformMetrics });
   const tenants = useQuery({ queryKey: ["platform-tenants"], queryFn: api.platformTenants });
+  const users = useQuery({ queryKey: ["platform-users"], queryFn: api.platformUsers });
+  const platformActions = useQuery({ queryKey: ["platform-actions"], queryFn: api.platformActions });
   const automationFailures = useQuery({ queryKey: ["platform-automation-failures"], queryFn: api.platformAutomationFailures });
   const webhookFailures = useQuery({ queryKey: ["platform-webhook-failures"], queryFn: api.platformWebhookFailures });
   const audit = useQuery({ queryKey: ["platform-audit"], queryFn: api.platformAudit });
@@ -226,8 +233,8 @@ function AdminConsole() {
               <Metrics data={metrics.data} readiness={readiness.data} />
               <div className="grid gap-4 xl:grid-cols-[1fr_0.9fr]">
                 <PlatformSummary data={metrics.data} tenants={tenants.data} />
-                <Panel title="Failure monitor" icon={AlertTriangle}>
-                  <FailureList automation={automationFailures.data} webhooks={webhookFailures.data} />
+                <Panel title="Admin workload" icon={LifeBuoy}>
+                  <ActionList items={platformActions.data} />
                 </Panel>
               </div>
             </>
@@ -271,6 +278,18 @@ function AdminConsole() {
                 </Panel>
               )}
             </section>
+          ) : null}
+
+          {section === "users" ? (
+            <Panel title="Platform users" icon={UsersRound}>
+              <UserAdminList items={users.data} />
+            </Panel>
+          ) : null}
+
+          {section === "actions" ? (
+            <Panel title="Platform action queue" icon={LifeBuoy}>
+              <ActionList items={platformActions.data} expanded />
+            </Panel>
           ) : null}
 
           {section === "failures" ? (
@@ -1038,6 +1057,85 @@ function SupportNote({ item }: { item: PlatformSupportNote }) {
       <p className="mt-2 text-xs font-medium text-steel">
         {item.author?.email ?? "system"} · {shortDate(item.createdAt)}
       </p>
+    </div>
+  );
+}
+
+function UserAdminList({ items }: { items?: PlatformUser[] }) {
+  const queryClient = useQueryClient();
+  const update = useMutation({
+    mutationFn: ({ id, input }: { id: string; input: Partial<PlatformUser> }) => api.updatePlatformUser(id, input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["platform-users"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-audit"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-metrics"] });
+    }
+  });
+
+  return (
+    <div className="grid gap-3">
+      {(items ?? []).map((user) => (
+        <div key={user.id} className="grid gap-3 rounded-[8px] bg-mist p-4 xl:grid-cols-[minmax(0,1fr)_220px_160px_auto] xl:items-center">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <KeyRound className="h-4 w-4 text-pine" />
+              <p className="truncate font-semibold text-ink">{user.name}</p>
+              {!user.active ? <Status label="INACTIVE" /> : null}
+            </div>
+            <p className="mt-1 truncate text-sm text-steel">{user.email}</p>
+            <p className="mt-1 truncate text-xs font-medium text-steel">
+              {user.tenant?.businessName ?? "No tenant"} · {user.phone ?? "No phone"}
+            </p>
+          </div>
+          <select
+            value={user.role}
+            onChange={(event) => update.mutate({ id: user.id, input: { role: event.target.value as PlatformUser["role"] } })}
+            className="h-10 rounded-[8px] border border-ink/10 bg-white px-2 text-sm outline-none focus:border-pine"
+          >
+            {userRoles.map((role) => (
+              <option key={role} value={role}>{role.replaceAll("_", " ")}</option>
+            ))}
+          </select>
+          <Status label={user.tenant?.status ?? "NO TENANT"} />
+          <button
+            onClick={() => update.mutate({ id: user.id, input: { active: !user.active } })}
+            className={cn("h-10 rounded-[8px] px-3 text-sm font-semibold", user.active ? "bg-coral text-white" : "bg-pine text-white")}
+          >
+            {user.active ? "Deactivate" : "Activate"}
+          </button>
+        </div>
+      ))}
+      {!items?.length ? <Empty label="No platform users" /> : null}
+      {update.error ? <p className="text-sm font-medium text-coral">{update.error instanceof Error ? update.error.message : "Unable to update user"}</p> : null}
+    </div>
+  );
+}
+
+function ActionList({ items, expanded }: { items?: PlatformAction[]; expanded?: boolean }) {
+  const visible = (items ?? []).slice(0, expanded ? 80 : 8);
+  return (
+    <div className="grid gap-3">
+      {visible.map((item) => (
+        <div key={item.id} className="rounded-[8px] bg-mist p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <Status label={item.priority} />
+                <Status label={item.status} />
+                <Status label={item.type} />
+              </div>
+              <p className="mt-3 font-semibold text-ink">{item.title}</p>
+              {item.description ? <p className="mt-1 line-clamp-2 text-sm text-steel">{item.description}</p> : null}
+            </div>
+            <div className="shrink-0 text-sm text-steel lg:text-right">
+              <p className="font-semibold text-ink">{item.tenant?.businessName ?? "No tenant"}</p>
+              <p>{item.assignedTo?.email ?? "Unassigned"}</p>
+              <p>{item.dueAt ? shortDate(item.dueAt) : shortDate(item.createdAt ?? null)}</p>
+            </div>
+          </div>
+        </div>
+      ))}
+      {!visible.length ? <Empty label="No platform actions" /> : null}
     </div>
   );
 }
