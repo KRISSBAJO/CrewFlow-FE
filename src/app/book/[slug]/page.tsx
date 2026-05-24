@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
@@ -40,6 +40,7 @@ function toInputDateTime(date: Date) {
 
 export default function BookingPage() {
   const params = useParams<{ slug: string }>();
+  const router = useRouter();
   const slug = params.slug;
   const [selectedServiceId, setSelectedServiceId] = useState<string>("");
   const [startTime, setStartTime] = useState(() => nextSlot(1, 9));
@@ -65,6 +66,9 @@ export default function BookingPage() {
 
   const booking = useMutation({
     mutationFn: (input: PublicBookingInput) => api.createPortalBooking(slug, input),
+    onSuccess: (data) => {
+      router.push(data.links?.successPath ?? `/book/${slug}/success?bookingId=${data.booking.id}`);
+    },
   });
 
   const canSubmit =

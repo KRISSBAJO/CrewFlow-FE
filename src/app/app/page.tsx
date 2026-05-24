@@ -13,6 +13,7 @@ import {
   ClipboardCheck,
   Clock3,
   ContactRound,
+  Copy,
   CreditCard,
   DollarSign,
   ExternalLink,
@@ -1916,6 +1917,8 @@ function SettingsForm({
           onScan={() => scanBilling.mutate()}
         />
 
+        <PortalLinkPanel tenant={tenant} />
+
         <Panel title="Tenant settings" icon={Settings2}>
         <div className="grid gap-4 md:grid-cols-2">
           <InputField label="Business name" value={businessName} onChange={setBusinessName} />
@@ -1991,6 +1994,47 @@ function SettingsForm({
         events={webhookEvents.data}
       />
     </div>
+  );
+}
+
+function PortalLinkPanel({ tenant }: { tenant: TenantProfile }) {
+  const [copied, setCopied] = useState(false);
+  const portalPath = `/book/${tenant.slug}`;
+  const portalUrl =
+    typeof window === "undefined" ? portalPath : `${window.location.origin}${portalPath}`;
+
+  async function copyLink() {
+    await navigator.clipboard.writeText(portalUrl);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1800);
+  }
+
+  return (
+    <Panel title="Customer booking link" icon={CalendarDays}>
+      <div className="rounded-[8px] bg-mist p-4">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-steel">Public portal</p>
+        <p className="mt-2 break-all text-lg font-semibold text-ink">{portalUrl}</p>
+      </div>
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        <button
+          onClick={copyLink}
+          className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 text-sm font-semibold text-white"
+        >
+          {copied ? <CheckCircle2 className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+          {copied ? "Copied" : "Copy link"}
+        </button>
+        <a
+          href={portalPath}
+          target="_blank"
+          rel="noreferrer"
+          className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-ink px-4 text-sm font-semibold text-white"
+        >
+          <ExternalLink className="h-4 w-4" />
+          Open portal
+        </a>
+      </div>
+      <p className="mt-3 text-sm leading-6 text-steel">Bookings from this page enter the same operations queue.</p>
+    </Panel>
   );
 }
 

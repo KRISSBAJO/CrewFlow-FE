@@ -170,6 +170,10 @@ export const api = {
       body: JSON.stringify(input)
     }),
   portal: (slug: string) => request<PublicBookingPortal>(`/portal/${slug}`),
+  portalBooking: (slug: string, bookingId: string) =>
+    request<PublicBookingStatus>(`/portal/${slug}/bookings/${bookingId}`),
+  portalInvoice: (slug: string, invoiceId: string) =>
+    request<PublicInvoiceStatus>(`/portal/${slug}/invoices/${invoiceId}`),
   createPortalBooking: (slug: string, input: PublicBookingInput) =>
     request<PublicBookingResult>(`/portal/${slug}/book`, {
       method: "POST",
@@ -730,6 +734,25 @@ export type PublicBookingResult = {
   customer: Customer;
   invoice?: Invoice | null;
   payment?: Payment | null;
+  links?: {
+    successPath: string;
+    invoicePath?: string | null;
+  };
+};
+
+export type PublicBookingStatus = {
+  tenant: PublicBookingPortal["tenant"];
+  booking: Booking;
+  invoice?: Invoice | null;
+  payment?: Payment | null;
+  nextSteps: string[];
+};
+
+export type PublicInvoiceStatus = {
+  tenant: PublicBookingPortal["tenant"];
+  invoice: Invoice;
+  payment?: Payment | null;
+  checkoutUrl?: string | null;
 };
 
 export type DashboardSummary = {
