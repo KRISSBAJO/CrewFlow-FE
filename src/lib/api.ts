@@ -242,13 +242,28 @@ export const api = {
     ),
   platformMetrics: () => request<PlatformMetrics>("/platform/metrics"),
   platformTenants: () => request<PlatformTenant[]>("/platform/tenants"),
+  createPlatformTenant: (input: PlatformTenantCreateInput) =>
+    request<PlatformTenantDetail>("/platform/tenants", {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
   platformUsers: () => request<PlatformUser[]>("/platform/users"),
+  createPlatformUser: (input: PlatformUserCreateInput) =>
+    request<PlatformUser>("/platform/users", {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
   updatePlatformUser: (id: string, input: Partial<Pick<PlatformUser, "name" | "email" | "phone" | "role" | "active">>) =>
     request<PlatformUser>(`/platform/users/${id}`, {
       method: "PATCH",
       body: JSON.stringify(input)
     }),
   platformActions: () => request<PlatformAction[]>("/platform/actions"),
+  updatePlatformAction: (id: string, input: Partial<Pick<PlatformAction, "status" | "priority" | "assignedToId" | "dueAt">> & { note?: string }) =>
+    request<PlatformAction>(`/platform/actions/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(input)
+    }),
   platformTenant: (id: string) => request<PlatformTenantDetail>(`/platform/tenants/${id}`),
   platformTenantHealth: (id: string) => request<PlatformTenantHealth>(`/platform/tenants/${id}/health`),
   platformTenantUsage: (id: string) => request<PlatformTenantUsage>(`/platform/tenants/${id}/usage`),
@@ -723,6 +738,23 @@ export type PlatformTenant = {
   };
 };
 
+export type PlatformTenantCreateInput = {
+  businessName: string;
+  industry: string;
+  ownerName: string;
+  ownerEmail: string;
+  ownerPassword: string;
+  ownerPhone?: string;
+  slug?: string;
+  status?: PlatformTenant["status"];
+  subscriptionStatus?: PlatformTenant["subscriptionStatus"];
+  subscriptionPlan?: string;
+  monthlyPriceCents?: number;
+  setupFeeCents?: number;
+  featureFlags?: Record<string, boolean>;
+  planLimits?: Record<string, number>;
+};
+
 export type PlatformTenantDetail = PlatformTenant & {
   users?: StaffMember[];
   receptionistConfig?: unknown;
@@ -742,9 +774,19 @@ export type PlatformUser = {
   tenant?: Pick<PlatformTenant, "id" | "businessName" | "slug" | "status" | "subscriptionStatus">;
 };
 
+export type PlatformUserCreateInput = {
+  tenantId: string;
+  name: string;
+  email: string;
+  password: string;
+  phone?: string;
+  role: PlatformUser["role"];
+};
+
 export type PlatformAction = OperationalAction & {
   tenant?: PlatformTenant;
   assignedTo?: { id: string; name: string; email: string; role: string } | null;
+  assignedToId?: string | null;
 };
 
 export type PlatformTenantHealth = {

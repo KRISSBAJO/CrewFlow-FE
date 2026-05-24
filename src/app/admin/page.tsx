@@ -36,9 +36,11 @@ import {
   PlatformSupportAccess,
   PlatformSupportNote,
   PlatformTenant,
+  PlatformTenantCreateInput,
   PlatformTenantDetail,
   PlatformTenantHealth,
   PlatformTenantUsage,
+  PlatformUserCreateInput,
   PlatformWebhookFailure
 } from "@/lib/api";
 import { cn, money, shortDate } from "@/lib/utils";
@@ -235,6 +237,7 @@ function AdminConsole() {
           {section === "tenants" ? (
             <section className="grid min-w-0 gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
               <Panel title="Tenants" icon={Building2}>
+                <CreateTenantBox />
                 <div className="mb-4 flex h-11 items-center gap-2 rounded-[8px] bg-mist px-3">
                   <Search className="h-4 w-4 text-steel" />
                   <input
@@ -274,7 +277,7 @@ function AdminConsole() {
 
           {section === "users" ? (
             <Panel title="Platform users" icon={UsersRound}>
-              <UserAdminList items={users.data} />
+              <UserAdminList items={users.data} tenants={tenants.data} />
             </Panel>
           ) : null}
 
@@ -509,6 +512,76 @@ function TenantRow({
         <TenantMiniStat label="Leads" value={tenant._count?.leads ?? 0} />
         <TenantMiniStat label="Actions" value={tenant._count?.operationalActions ?? 0} />
         <TenantMiniStat label="Monthly" value={money(tenant.monthlyPriceCents)} />
+      </div>
+    </div>
+  );
+}
+
+function CreateTenantBox() {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [businessName, setBusinessName] = useState("");
+  const [industry, setIndustry] = useState("Cleaning + Home Services");
+  const [ownerName, setOwnerName] = useState("");
+  const [ownerEmail, setOwnerEmail] = useState("");
+  const [ownerPassword, setOwnerPassword] = useState("Password123!");
+  const [monthlyPrice, setMonthlyPrice] = useState("299");
+  const [setupFee, setSetupFee] = useState("1000");
+  const create = useMutation({
+    mutationFn: () =>
+      api.createPlatformTenant({
+        businessName,
+        industry,
+        ownerName,
+        ownerEmail,
+        ownerPassword,
+        monthlyPriceCents: Math.round(Number(monthlyPrice || 0) * 100),
+        setupFeeCents: Math.round(Number(setupFee || 0) * 100),
+        subscriptionPlan: "pilot"
+      } satisfies PlatformTenantCreateInput),
+    onSuccess: () => {
+      setBusinessName("");
+      setOwnerName("");
+      setOwnerEmail("");
+      setOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ["platform-tenants"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-users"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-metrics"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-audit"] });
+    }
+  });
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className="mb-4 flex h-11 w-full items-center justify-center gap-2 rounded-[8px] bg-ink px-3 text-sm font-semibold text-white">
+        <Building2 className="h-4 w-4" />
+        Create tenant
+      </button>
+    );
+  }
+
+  return (
+    <div className="mb-4 rounded-[8px] bg-mist p-3">
+      <p className="font-semibold text-ink">Create tenant</p>
+      <div className="mt-3 grid gap-3">
+        <AdminInput label="Business" value={businessName} onChange={setBusinessName} />
+        <AdminInput label="Industry" value={industry} onChange={setIndustry} />
+        <AdminInput label="Owner name" value={ownerName} onChange={setOwnerName} />
+        <AdminInput label="Owner email" value={ownerEmail} onChange={setOwnerEmail} />
+        <AdminInput label="Owner password" value={ownerPassword} onChange={setOwnerPassword} />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <AdminInput label="Monthly $" value={monthlyPrice} onChange={setMonthlyPrice} inputMode="decimal" />
+          <AdminInput label="Setup $" value={setupFee} onChange={setSetupFee} inputMode="decimal" />
+        </div>
+      </div>
+      {create.error ? <p className="mt-3 text-sm font-medium text-coral">{create.error instanceof Error ? create.error.message : "Unable to create tenant"}</p> : null}
+      <div className="mt-3 flex gap-2">
+        <button onClick={() => create.mutate()} disabled={create.isPending || !businessName || !ownerEmail} className="h-10 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50">
+          Create
+        </button>
+        <button onClick={() => setOpen(false)} className="h-10 rounded-[8px] bg-white px-3 text-sm font-semibold text-ink">
+          Cancel
+        </button>
       </div>
     </div>
   );
@@ -1053,8 +1126,14 @@ function SupportNote({ item }: { item: PlatformSupportNote }) {
   );
 }
 
-function UserAdminList({ items }: { items?: PlatformUser[] }) {
+function UserAdminList({ items, tenants }: { items?: PlatformUser[]; tenants?: PlatformTenant[] }) {
   const queryClient = useQueryClient();
+  const [showCreate, setShowCreate] = useState(false);
+  const [tenantId, setTenantId] = useState("");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("Password123!");
+  const [role, setRole] = useState<PlatformUser["role"]>("MANAGER");
   const update = useMutation({
     mutationFn: ({ id, input }: { id: string; input: Partial<PlatformUser> }) => api.updatePlatformUser(id, input),
     onSuccess: () => {
@@ -1063,9 +1142,59 @@ function UserAdminList({ items }: { items?: PlatformUser[] }) {
       void queryClient.invalidateQueries({ queryKey: ["platform-metrics"] });
     }
   });
+  const create = useMutation({
+    mutationFn: () =>
+      api.createPlatformUser({
+        tenantId,
+        name,
+        email,
+        password,
+        role
+      } satisfies PlatformUserCreateInput),
+    onSuccess: () => {
+      setShowCreate(false);
+      setName("");
+      setEmail("");
+      void queryClient.invalidateQueries({ queryKey: ["platform-users"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-tenants"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-audit"] });
+    }
+  });
 
   return (
     <div className="grid gap-3">
+      <div className="rounded-[8px] bg-mist p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="font-semibold text-ink">User control</p>
+            <p className="text-sm text-steel">Create users, change roles, and disable access.</p>
+          </div>
+          <button onClick={() => setShowCreate((value) => !value)} className="h-10 rounded-[8px] bg-ink px-3 text-sm font-semibold text-white">
+            {showCreate ? "Close" : "Create user"}
+          </button>
+        </div>
+        {showCreate ? (
+          <div className="mt-4 grid gap-3 rounded-[8px] bg-white p-3 md:grid-cols-2 xl:grid-cols-5">
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-steel">Tenant</span>
+              <select value={tenantId} onChange={(event) => setTenantId(event.target.value)} className="h-10 w-full rounded-[8px] border border-ink/10 bg-mist px-2 text-sm outline-none focus:border-pine">
+                <option value="">Select tenant</option>
+                {(tenants ?? []).map((tenant) => (
+                  <option key={tenant.id} value={tenant.id}>{tenant.businessName}</option>
+                ))}
+              </select>
+            </label>
+            <AdminInput label="Name" value={name} onChange={setName} />
+            <AdminInput label="Email" value={email} onChange={setEmail} />
+            <AdminInput label="Password" value={password} onChange={setPassword} />
+            <AdminSelect label="Role" value={role} options={userRoles} onChange={(value) => setRole(value as PlatformUser["role"])} />
+            <button onClick={() => create.mutate()} disabled={create.isPending || !tenantId || !name || !email} className="h-10 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50">
+              Create
+            </button>
+          </div>
+        ) : null}
+        {create.error ? <p className="mt-3 text-sm font-medium text-coral">{create.error instanceof Error ? create.error.message : "Unable to create user"}</p> : null}
+      </div>
       {(items ?? []).map((user) => (
         <div key={user.id} className="grid gap-3 rounded-[8px] bg-mist p-4 xl:grid-cols-[minmax(0,1fr)_220px_160px_auto] xl:items-center">
           <div className="min-w-0">
@@ -1104,6 +1233,16 @@ function UserAdminList({ items }: { items?: PlatformUser[] }) {
 }
 
 function ActionList({ items, expanded }: { items?: PlatformAction[]; expanded?: boolean }) {
+  const queryClient = useQueryClient();
+  const update = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      api.updatePlatformAction(id, { status, note: `Platform marked ${status.toLowerCase()}` }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["platform-actions"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-audit"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-metrics"] });
+    }
+  });
   const visible = (items ?? []).slice(0, expanded ? 80 : 8);
   return (
     <div className="grid gap-3">
@@ -1123,11 +1262,20 @@ function ActionList({ items, expanded }: { items?: PlatformAction[]; expanded?: 
               <p className="font-semibold text-ink">{item.tenant?.businessName ?? "No tenant"}</p>
               <p>{item.assignedTo?.email ?? "Unassigned"}</p>
               <p>{item.dueAt ? shortDate(item.dueAt) : shortDate(item.createdAt ?? null)}</p>
+              <div className="mt-3 flex gap-2 lg:justify-end">
+                <button onClick={() => update.mutate({ id: item.id, status: "COMPLETED" })} className="h-9 rounded-[8px] bg-pine px-3 text-xs font-semibold text-white">
+                  Complete
+                </button>
+                <button onClick={() => update.mutate({ id: item.id, status: "DISMISSED" })} className="h-9 rounded-[8px] bg-white px-3 text-xs font-semibold text-ink">
+                  Dismiss
+                </button>
+              </div>
             </div>
           </div>
         </div>
       ))}
       {!visible.length ? <Empty label="No platform actions" /> : null}
+      {update.error ? <p className="text-sm font-medium text-coral">{update.error instanceof Error ? update.error.message : "Unable to update action"}</p> : null}
     </div>
   );
 }
