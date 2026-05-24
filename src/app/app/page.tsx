@@ -478,6 +478,16 @@ function Overview({
   onOpen: (state: DrawerState) => void;
   onView: (view: View) => void;
 }) {
+  const queryClient = useQueryClient();
+  const weeklyDigest = useQuery({ queryKey: ["weekly-digest"], queryFn: api.weeklyDigest });
+  const sendDigest = useMutation({
+    mutationFn: api.sendWeeklyDigest,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["weekly-digest"] });
+      void queryClient.invalidateQueries({ queryKey: ["messages"] });
+    }
+  });
+
   if (loading) return <LoadingPanel />;
   return (
     <div className="grid gap-4">
@@ -501,6 +511,57 @@ function Overview({
       </div>
 
       <RevenuePipeline data={data} actions={actions} />
+
+      <Panel
+        title="Owner weekly digest"
+        icon={FileText}
+        action={
+          <button
+            onClick={() => sendDigest.mutate()}
+            disabled={sendDigest.isPending || weeklyDigest.isLoading}
+            className="flex h-9 items-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {sendDigest.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            Send digest
+          </button>
+        }
+      >
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,0.85fr)_minmax(360px,1.15fr)]">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-1">
+            <MiniStat label="Collected this week" value={money(weeklyDigest.data?.metrics.collectedCents)} />
+            <MiniStat label="Open invoices" value={money(weeklyDigest.data?.metrics.openInvoiceCents)} />
+            <MiniStat label="Booking-ready lead value" value={money(weeklyDigest.data?.metrics.bookingReadyLeadValueCents)} />
+            <MiniStat label="Owner actions" value={weeklyDigest.data?.recommendedActions.length ?? 0} />
+          </div>
+          <div className="rounded-[8px] bg-mist p-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="font-semibold text-ink">{weeklyDigest.data?.businessName ?? "Weekly digest"}</p>
+                <p className="text-sm text-steel">{weeklyDigest.data?.recipient ?? "Owner recipient"}</p>
+              </div>
+              {sendDigest.data ? <Status label="sent" /> : null}
+            </div>
+            <pre className="max-h-[300px] overflow-auto whitespace-pre-wrap rounded-[8px] bg-white p-4 text-sm leading-6 text-ink">
+              {weeklyDigest.data?.text ?? "Preparing owner digest..."}
+            </pre>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {(weeklyDigest.data?.topRisks ?? []).slice(0, 4).map((risk) => (
+            <div key={risk.title} className="flex items-center justify-between rounded-[8px] bg-mist p-3">
+              <div>
+                <p className="font-semibold text-ink">{risk.title}</p>
+                <p className="text-sm text-steel">
+                  {risk.amountCents ? money(risk.amountCents) : risk.count ? `${risk.count} items` : "Clear"}
+                </p>
+              </div>
+              <Severity severity={risk.severity} />
+            </div>
+          ))}
+        </div>
+        {weeklyDigest.error ? <ErrorText error={weeklyDigest.error} /> : null}
+        {sendDigest.error ? <ErrorText error={sendDigest.error} /> : null}
+      </Panel>
 
       <div className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
         <Panel title="Revenue-risk alerts" icon={AlertTriangle}>

@@ -71,6 +71,11 @@ export const api = {
       body: JSON.stringify(input)
     }),
   dashboard: () => request<DashboardSummary>("/dashboard"),
+  weeklyDigest: () => request<OwnerWeeklyDigest>("/dashboard/weekly-digest"),
+  sendWeeklyDigest: () =>
+    request<{ sentAt: string; message: MessageLog; digest: OwnerWeeklyDigest }>("/dashboard/weekly-digest/send", {
+      method: "POST"
+    }),
   inbox: () => request<Conversation[]>("/inbox"),
   conversation: (id: string) => request<Conversation>(`/inbox/${id}`),
   updateConversation: (
@@ -921,6 +926,47 @@ export type DashboardSummary = {
       amountCents?: number;
     }>;
   };
+};
+
+export type OwnerWeeklyDigest = {
+  businessName: string;
+  recipient: string;
+  period: { from: string; to: string };
+  metrics: {
+    collectedCents: number;
+    paidInvoiceCount: number;
+    openInvoiceCents: number;
+    openInvoiceCount: number;
+    overdueInvoiceCents: number;
+    overdueInvoiceCount: number;
+    completedBookings: number;
+    upcomingBookings: number;
+    noShowCount: number;
+    noShowRiskCents: number;
+    leadsCreated: number;
+    wonLeads: number;
+    bookingReadyLeadCount: number;
+    bookingReadyLeadValueCents: number;
+    retentionActions: number;
+    dispatchIssues: number;
+  };
+  topRisks: Array<{
+    title: string;
+    severity: "info" | "warning" | "critical";
+    amountCents?: number;
+    count?: number;
+  }>;
+  recommendedActions: Array<{
+    id: string;
+    title: string;
+    priority: string;
+    type: string;
+    dueAt?: string | null;
+    customerName?: string | null;
+    invoiceNo?: string | null;
+    serviceTitle?: string | null;
+  }>;
+  text: string;
 };
 
 export type Customer = {
