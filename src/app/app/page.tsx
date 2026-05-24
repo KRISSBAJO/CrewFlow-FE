@@ -3353,10 +3353,16 @@ function ConversationDetail({ item }: { item: Conversation }) {
     queryFn: () => api.conversation(item.id)
   });
   const staff = useQuery({ queryKey: ["staff"], queryFn: api.staff });
+  const services = useQuery({ queryKey: ["services"], queryFn: api.services });
+  const invoices = useQuery({ queryKey: ["invoices"], queryFn: api.invoices });
   const [reply, setReply] = useState("");
+  const [selectedServiceId, setSelectedServiceId] = useState("");
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState("");
+  const [followUpAt, setFollowUpAt] = useState("");
   const [startTime, setStartTime] = useState("");
   const [assignedStaffId, setAssignedStaffId] = useState("");
   const [bookingNotes, setBookingNotes] = useState("");
+  const conversation = full.data ?? item;
   const sendReply = useMutation({
     mutationFn: () => api.replyConversation(item.id, reply),
     onSuccess: () => {
@@ -3368,7 +3374,30 @@ function ConversationDetail({ item }: { item: Conversation }) {
     mutationFn: () => api.suggestReply(item.id),
     onSuccess: (data) => setReply(data.reply)
   });
-  const conversation = full.data ?? item;
+  const updateConversation = useMutation({
+    mutationFn: (input: { status?: string; assignedToId?: string; followUpAt?: string }) =>
+      api.updateConversation(item.id, input),
+    onSuccess: () => void queryClient.invalidateQueries()
+  });
+  const convertLead = useMutation({
+    mutationFn: () =>
+      api.convertConversationToLead(item.id, {
+        title: `${conversation.customer?.name ?? "Customer"} ${conversation.channel} inquiry`,
+        status: "QUALIFIED",
+        source: conversation.channel === "WHATSAPP" ? "WHATSAPP" : "WEB_CHAT",
+        followUpAt: followUpAt ? new Date(followUpAt).toISOString() : undefined
+      }),
+    onSuccess: () => void queryClient.invalidateQueries()
+  });
+  const sendQuote = useMutation({
+    mutationFn: () => api.sendConversationQuote(item.id, selectedServiceId, bookingNotes || undefined),
+    onSuccess: () => void queryClient.invalidateQueries()
+  });
+  const sendInvoiceLink = useMutation({
+    mutationFn: () => api.sendConversationInvoiceLink(item.id, selectedInvoiceId, "Here is your secure payment link."),
+    onSuccess: () => void queryClient.invalidateQueries()
+  });
+  const customerInvoices = (invoices.data ?? []).filter((invoice) => invoice.customer.id === conversation.customer?.id && invoice.status !== "PAID" && invoice.status !== "VOID");
   const activeIntent = conversation.bookingIntents?.find((intent) =>
     ["READY", "COLLECTING"].includes(intent.status)
   );
@@ -3395,7 +3424,96 @@ function ConversationDetail({ item }: { item: Conversation }) {
         <Info label="Channel" value={conversation.channel} />
         <Info label="Status" value={conversation.status} />
         <Info label="Last message" value={shortDate(conversation.lastMessageAt)} />
+        {conversation.leads?.[0] ? <Info label="Lead" value={`${conversation.leads[0].status} · ${money(conversation.leads[0].estimatedValueCents)}`} /> : null}
       </DetailCard>
+
+      <section className="rounded-[8px] bg-mist p-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-ink">Conversion controls</p>
+            <p className="text-sm text-steel">Turn this chat into booked or paid revenue.</p>
+          </div>
+          <Status label={conversation.assignedToId ? "ASSIGNED" : "UNASSIGNED"} />
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          <select
+            value={assignedStaffId}
+            onChange={(event) => {
+              setAssignedStaffId(event.target.value);
+              if (event.target.value) updateConversation.mutate({ assignedToId: event.target.value });
+            }}
+            className="h-11 rounded-[8px] border border-ink/10 bg-white px-3 text-sm outline-none focus:border-pine"
+          >
+            <option value="">Assign conversation</option>
+            {(staff.data ?? []).map((member) => (
+              <option key={member.id} value={member.id}>{member.name} · {member.role}</option>
+            ))}
+          </select>
+          <input
+            type="datetime-local"
+            value={followUpAt}
+            onChange={(event) => setFollowUpAt(event.target.value)}
+            className="h-11 rounded-[8px] border border-ink/10 bg-white px-3 text-sm outline-none focus:border-pine"
+          />
+          <select
+            value={selectedServiceId}
+            onChange={(event) => setSelectedServiceId(event.target.value)}
+            className="h-11 rounded-[8px] border border-ink/10 bg-white px-3 text-sm outline-none focus:border-pine"
+          >
+            <option value="">Choose service for quote</option>
+            {(services.data ?? []).map((service) => (
+              <option key={service.id} value={service.id}>{service.title} · {money(service.priceCents)}</option>
+            ))}
+          </select>
+          <select
+            value={selectedInvoiceId}
+            onChange={(event) => setSelectedInvoiceId(event.target.value)}
+            className="h-11 rounded-[8px] border border-ink/10 bg-white px-3 text-sm outline-none focus:border-pine"
+          >
+            <option value="">Choose invoice to send</option>
+            {customerInvoices.map((invoice) => (
+              <option key={invoice.id} value={invoice.id}>{invoice.invoiceNo} · {money(invoice.totalCents)}</option>
+            ))}
+          </select>
+        </div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-4">
+          <button
+            onClick={() => convertLead.mutate()}
+            disabled={convertLead.isPending}
+            className="flex h-10 items-center justify-center gap-2 rounded-[8px] bg-white px-3 text-sm font-semibold text-ink disabled:opacity-50"
+          >
+            {convertLead.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Target className="h-4 w-4" />}
+            Lead
+          </button>
+          <button
+            onClick={() => sendQuote.mutate()}
+            disabled={!selectedServiceId || sendQuote.isPending}
+            className="flex h-10 items-center justify-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {sendQuote.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <DollarSign className="h-4 w-4" />}
+            Quote
+          </button>
+          <button
+            onClick={() => sendInvoiceLink.mutate()}
+            disabled={!selectedInvoiceId || sendInvoiceLink.isPending}
+            className="flex h-10 items-center justify-center gap-2 rounded-[8px] bg-ink px-3 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {sendInvoiceLink.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+            Pay link
+          </button>
+          <button
+            onClick={() => updateConversation.mutate({ status: "RESOLVED" })}
+            disabled={updateConversation.isPending}
+            className="flex h-10 items-center justify-center gap-2 rounded-[8px] bg-mint px-3 text-sm font-semibold text-ink disabled:opacity-50"
+          >
+            <CheckCircle2 className="h-4 w-4" />
+            Resolve
+          </button>
+        </div>
+        {convertLead.error || sendQuote.error || sendInvoiceLink.error || updateConversation.error ? (
+          <ErrorText error={convertLead.error ?? sendQuote.error ?? sendInvoiceLink.error ?? updateConversation.error} />
+        ) : null}
+      </section>
 
       {activeIntent ? (
         <section className="rounded-[8px] bg-ink p-4 text-white">

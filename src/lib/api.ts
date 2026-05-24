@@ -73,10 +73,33 @@ export const api = {
   dashboard: () => request<DashboardSummary>("/dashboard"),
   inbox: () => request<Conversation[]>("/inbox"),
   conversation: (id: string) => request<Conversation>(`/inbox/${id}`),
+  updateConversation: (
+    id: string,
+    input: { status?: string; assignedToId?: string; followUpAt?: string }
+  ) =>
+    request<Conversation>(`/inbox/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(input)
+    }),
   replyConversation: (id: string, content: string) =>
     request<{ message: MessageLog }>(`/inbox/${id}/reply`, {
       method: "POST",
       body: JSON.stringify({ content })
+    }),
+  convertConversationToLead: (id: string, input: Partial<LeadInput>) =>
+    request<Lead>(`/inbox/${id}/lead`, {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
+  sendConversationQuote: (id: string, serviceId: string, note?: string) =>
+    request<{ message: MessageLog }>(`/inbox/${id}/quote`, {
+      method: "POST",
+      body: JSON.stringify({ serviceId, note })
+    }),
+  sendConversationInvoiceLink: (id: string, invoiceId: string, note?: string) =>
+    request<{ invoice: Invoice; payment: Payment; reply: { message: MessageLog } }>(`/inbox/${id}/invoice-link`, {
+      method: "POST",
+      body: JSON.stringify({ invoiceId, note })
     }),
   suggestReply: (id: string) =>
     request<{ reply: string; mode: string }>(`/inbox/${id}/ai-suggest`, {
@@ -1276,9 +1299,12 @@ export type Conversation = {
   status: string;
   channel: string;
   lastMessageAt: string;
+  assignedToId?: string | null;
+  followUpAt?: string | null;
   customer?: Customer | null;
   messages?: Array<{ id?: string; content: string; role: string; createdAt: string }>;
   bookingIntents?: BookingIntent[];
+  leads?: Lead[];
 };
 
 export type Lead = {
