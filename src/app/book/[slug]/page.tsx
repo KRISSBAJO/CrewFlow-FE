@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { type CSSProperties, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   ArrowRight,
@@ -47,10 +47,14 @@ export default function BookingPage() {
   });
 
   const services = useMemo(() => portal.data?.services ?? [], [portal.data?.services]);
+  const tenant = portal.data?.tenant;
   const selectedService = useMemo(
     () => services.find((service) => service.id === selectedServiceId) ?? services[0],
     [selectedServiceId, services],
   );
+  const brandColor = normalizeBrandColor(tenant?.brandColor);
+  const heroImage = tenant?.coverImageUrl ?? selectedService?.imageUrl ?? services.find((service) => service.imageUrl)?.imageUrl;
+  const logoImage = tenant?.logoUrl;
   const serviceId = selectedService?.id ?? "";
   const availability = useQuery({
     queryKey: ["portal-availability", slug, serviceId, selectedDate],
@@ -96,21 +100,23 @@ export default function BookingPage() {
   const checkoutUrl = booking.data?.invoice?.paymentUrl ?? booking.data?.payment?.checkoutUrl;
 
   return (
-    <main className="min-h-screen bg-mist text-ink">
-      <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-5 py-6 sm:px-8 lg:px-10">
-        <header className="flex items-center justify-between gap-4 rounded-[8px] border border-white/80 bg-white/85 p-4 shadow-soft backdrop-blur">
+    <main className="min-h-screen bg-[#f4f7f4] text-ink">
+      <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-5 py-5 sm:px-8 lg:px-10">
+        <header className="sticky top-4 z-30 flex items-center justify-between gap-4 rounded-[8px] border border-white/80 bg-white/88 p-3 shadow-soft backdrop-blur">
           <div className="flex min-w-0 items-center gap-3">
-            <Image src="/images/logo.png" alt="CrewFlow" width={44} height={44} className="rounded-[8px]" />
+            <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-[8px] bg-ink">
+              <Image src={logoImage || "/images/logo.png"} alt="" fill sizes="44px" className="object-cover" />
+            </div>
             <div className="min-w-0">
               <p className="truncate text-lg font-semibold">
-                {portal.data?.tenant.businessName ?? "CrewFlow booking"}
+                {tenant?.businessName ?? "CrewFlow booking"}
               </p>
               <p className="truncate text-sm text-steel">
-                {portal.data?.tenant.industry ?? "Customer booking portal"}
+                {tenant?.industry ?? "Customer booking portal"}
               </p>
             </div>
           </div>
-          <div className="hidden items-center gap-2 rounded-full bg-mist px-4 py-2 text-sm font-semibold text-pine sm:flex">
+          <div className="hidden items-center gap-2 rounded-full bg-mist px-4 py-2 text-sm font-semibold sm:flex" style={{ color: brandColor }}>
             <ShieldCheck className="h-4 w-4" />
             Secure request
           </div>
@@ -122,21 +128,35 @@ export default function BookingPage() {
         {portal.data ? (
           <div className="grid flex-1 gap-5 py-5 lg:grid-cols-[minmax(0,1fr)_420px]">
             <section className="space-y-5">
-              <div className="rounded-[8px] border border-white bg-white p-6 shadow-soft sm:p-8">
-                <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.22em] text-pine">
-                  <Sparkles className="h-4 w-4" />
-                  Book online
-                </div>
-                <h1 className="mt-4 max-w-3xl text-4xl font-semibold leading-tight sm:text-5xl">
-                  Choose a service and lock in your appointment.
-                </h1>
-                <p className="mt-4 max-w-2xl text-lg leading-8 text-steel">
-                  {portal.data.tenant.businessName} will receive your request instantly, confirm the details, and send updates through the same operational flow.
-                </p>
-                <div className="mt-6 grid gap-3 sm:grid-cols-3">
-                  <TrustItem icon={MessageSquareText} label="Fast response" />
-                  <TrustItem icon={CalendarDays} label="Clear schedule" />
-                  <TrustItem icon={CreditCard} label="Online payment" />
+              <div className="relative min-h-[520px] overflow-hidden rounded-[8px] bg-ink shadow-soft">
+                {heroImage ? (
+                  <Image
+                    src={heroImage}
+                    alt=""
+                    fill
+                    priority
+                    sizes="(min-width: 1024px) 58vw, 100vw"
+                    className="object-cover"
+                  />
+                ) : null}
+                <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(18,31,29,0.92)_0%,rgba(18,31,29,0.78)_48%,rgba(18,31,29,0.38)_100%)]" />
+                <div className="relative z-10 flex min-h-[520px] flex-col justify-end p-6 text-white sm:p-8">
+                  <div className="mb-6 flex w-fit items-center gap-2 rounded-[8px] border border-white/16 bg-white/12 px-3 py-2 text-sm font-semibold text-white/82 backdrop-blur">
+                    <Sparkles className="h-4 w-4" style={{ color: brandColor }} />
+                    Online booking
+                  </div>
+                  <h1 className="max-w-3xl text-5xl font-semibold leading-[1.02] sm:text-6xl">
+                    Book {tenant?.businessName} in minutes.
+                  </h1>
+                  <p className="mt-5 max-w-2xl text-lg leading-8 text-white/78">
+                    Choose a service, pick an open slot, and send your request directly to the team.
+                    You will receive confirmation and updates from the same operations flow.
+                  </p>
+                  <div className="mt-7 grid gap-3 sm:grid-cols-3">
+                    <TrustItem icon={MessageSquareText} label="Fast response" brandColor={brandColor} />
+                    <TrustItem icon={CalendarDays} label="Clear schedule" brandColor={brandColor} />
+                    <TrustItem icon={CreditCard} label="Online payment" brandColor={brandColor} />
+                  </div>
                 </div>
               </div>
 
@@ -154,6 +174,7 @@ export default function BookingPage() {
                       key={service.id}
                       service={service}
                       active={selectedService?.id === service.id}
+                      brandColor={brandColor}
                       onClick={() => setSelectedServiceId(service.id)}
                     />
                   ))}
@@ -198,8 +219,13 @@ export default function BookingPage() {
                             onClick={() => setStartTime(slot.startTime)}
                             className={cn(
                               "rounded-[8px] border px-3 py-2 text-left text-sm font-semibold hover:border-pine hover:text-pine",
-                              startTime === slot.startTime ? "border-pine bg-pine text-white hover:text-white" : "border-black/10 text-steel"
+                              startTime === slot.startTime ? "text-white hover:text-white" : "border-black/10 text-steel"
                             )}
+                            style={
+                              startTime === slot.startTime
+                                ? { backgroundColor: brandColor, borderColor: brandColor }
+                                : undefined
+                            }
                           >
                             {shortDate(slot.startTime)}
                             {slot.staffName ? <span className="mt-1 block text-xs opacity-75">{slot.staffName}</span> : null}
@@ -236,7 +262,8 @@ export default function BookingPage() {
                         type="checkbox"
                         checked={payNow}
                         onChange={(event) => setPayNow(event.target.checked)}
-                        className="mt-1 h-5 w-5 accent-pine"
+                        className="mt-1 h-5 w-5"
+                        style={{ accentColor: brandColor }}
                       />
                       <span>
                         <span className="block font-semibold">Create payment link</span>
@@ -252,7 +279,8 @@ export default function BookingPage() {
                       type="button"
                       disabled={!canSubmit}
                       onClick={submit}
-                      className="flex h-13 w-full items-center justify-center gap-2 rounded-[8px] bg-pine px-5 py-4 text-base font-semibold text-white shadow-soft transition hover:bg-ink disabled:cursor-not-allowed disabled:bg-steel/40"
+                      className="flex h-13 w-full items-center justify-center gap-2 rounded-[8px] px-5 py-4 text-base font-semibold text-white shadow-soft transition hover:brightness-95 disabled:cursor-not-allowed disabled:bg-steel/40"
+                      style={!canSubmit ? undefined : { backgroundColor: brandColor }}
                     >
                       {booking.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowRight className="h-5 w-5" />}
                       Book appointment
@@ -285,40 +313,77 @@ function ErrorState({ message }: { message: string }) {
   );
 }
 
-function TrustItem({ icon: Icon, label }: { icon: typeof CalendarDays; label: string }) {
+function TrustItem({
+  icon: Icon,
+  label,
+  brandColor,
+}: {
+  icon: typeof CalendarDays;
+  label: string;
+  brandColor: string;
+}) {
   return (
-    <div className="flex items-center gap-3 rounded-[8px] bg-mist p-4 text-sm font-semibold text-steel">
-      <Icon className="h-5 w-5 text-pine" />
+    <div className="flex items-center gap-3 rounded-[8px] border border-white/14 bg-white/12 p-4 text-sm font-semibold text-white/82 backdrop-blur">
+      <Icon className="h-5 w-5" style={{ color: brandColor }} />
       {label}
     </div>
   );
 }
 
-function ServiceCard({ service, active, onClick }: { service: Service; active: boolean; onClick: () => void }) {
+function ServiceCard({
+  service,
+  active,
+  brandColor,
+  onClick,
+}: {
+  service: Service;
+  active: boolean;
+  brandColor: string;
+  onClick: () => void;
+}) {
+  const activeStyle: CSSProperties | undefined = active
+    ? { backgroundColor: brandColor, borderColor: brandColor }
+    : undefined;
+
   return (
     <button
       type="button"
       onClick={onClick}
       className={cn(
-        "min-h-[168px] rounded-[8px] border p-5 text-left transition",
-        active ? "border-pine bg-pine text-white shadow-soft" : "border-black/10 bg-mist hover:border-pine",
+        "overflow-hidden rounded-[8px] border text-left transition",
+        active ? "text-white shadow-soft" : "border-black/10 bg-mist hover:shadow-soft",
       )}
+      style={activeStyle}
     >
-      <div className="flex items-start justify-between gap-4">
-        <h3 className="text-xl font-semibold leading-tight">{service.title}</h3>
-        <span className={cn("rounded-full px-3 py-1 text-sm font-semibold", active ? "bg-white text-pine" : "bg-white text-pine")}>
+      <div className="relative h-36 bg-white/20">
+        {service.imageUrl ? (
+          <Image src={service.imageUrl} alt="" fill sizes="(min-width: 768px) 280px, 100vw" className="object-cover" />
+        ) : (
+          <div className="flex h-full items-center justify-center bg-white/40">
+            <Sparkles className="h-8 w-8" style={{ color: active ? "white" : brandColor }} />
+          </div>
+        )}
+        <div className="absolute right-3 top-3 rounded-[8px] bg-white px-3 py-1 text-sm font-semibold" style={{ color: brandColor }}>
           {money(service.priceCents)}
-        </span>
+        </div>
       </div>
-      <p className={cn("mt-3 line-clamp-2 text-sm leading-6", active ? "text-white/80" : "text-steel")}>
-        {service.description ?? "Professional service with confirmation and customer updates."}
-      </p>
-      <div className={cn("mt-5 flex items-center gap-2 text-sm font-semibold", active ? "text-white" : "text-steel")}>
-        <Clock className="h-4 w-4" />
-        {service.durationMinutes} minutes
+      <div className="p-5">
+        <h3 className="text-xl font-semibold leading-tight">{service.title}</h3>
+        <p className={cn("mt-3 line-clamp-2 text-sm leading-6", active ? "text-white/80" : "text-steel")}>
+          {service.description ?? "Professional service with confirmation and customer updates."}
+        </p>
+        <div className={cn("mt-5 flex items-center gap-2 text-sm font-semibold", active ? "text-white" : "text-steel")}>
+          <Clock className="h-4 w-4" />
+          {service.durationMinutes} minutes
+        </div>
       </div>
     </button>
   );
+}
+
+function normalizeBrandColor(value?: string | null) {
+  if (value && /^#[0-9a-f]{6}$/i.test(value.trim())) return value.trim();
+  return "#0f766e";
 }
 
 function TextInput({

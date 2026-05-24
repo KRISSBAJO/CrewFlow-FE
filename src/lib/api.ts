@@ -577,6 +577,7 @@ export type TenantProfile = {
   industry: string;
   logoUrl?: string | null;
   coverImageUrl?: string | null;
+  brandColor?: string | null;
   subscriptionPlan: string;
   subscriptionStatus?: "TRIALING" | "ACTIVE" | "PAST_DUE" | "CANCELED" | "UNPAID";
   billingEmail?: string | null;
@@ -666,6 +667,7 @@ export type UpdateTenantInput = {
   industry?: string;
   logoUrl?: string;
   coverImageUrl?: string;
+  brandColor?: string;
   whatsappNumber?: string;
   serviceArea?: string;
   businessHours?: Record<string, string>;
@@ -811,6 +813,9 @@ export type PublicBookingPortal = {
     slug: string;
     industry: string;
     status: string;
+    logoUrl?: string | null;
+    coverImageUrl?: string | null;
+    brandColor?: string | null;
   };
   booking: {
     paymentEnabled: boolean;

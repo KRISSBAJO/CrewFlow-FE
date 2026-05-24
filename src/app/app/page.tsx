@@ -2410,6 +2410,7 @@ function SettingsForm({
   const [industry, setIndustry] = useState(tenant.industry);
   const [logoUrl, setLogoUrl] = useState(tenant.logoUrl ?? "");
   const [coverImageUrl, setCoverImageUrl] = useState(tenant.coverImageUrl ?? "");
+  const [brandColor, setBrandColor] = useState(tenant.brandColor ?? "#0f766e");
   const [serviceArea, setServiceArea] = useState(tenant.receptionistConfig?.serviceArea ?? "");
   const [whatsappNumber, setWhatsappNumber] = useState(onboarding?.whatsappNumber ?? "");
   const [staffCount, setStaffCount] = useState(onboarding?.staffCount ?? "");
@@ -2456,6 +2457,7 @@ function SettingsForm({
         industry,
         logoUrl,
         coverImageUrl,
+        brandColor,
         serviceArea,
         whatsappNumber,
         staffCount,
@@ -2519,6 +2521,22 @@ function SettingsForm({
           <InputField label="Industry" value={industry} onChange={setIndustry} />
           <MediaUploadField label="Business logo" value={logoUrl} onChange={setLogoUrl} folder="tenants/logos" />
           <MediaUploadField label="Cover image" value={coverImageUrl} onChange={setCoverImageUrl} folder="tenants/covers" />
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-ink">Brand color</span>
+            <div className="flex h-11 overflow-hidden rounded-[8px] border border-ink/10 bg-mist">
+              <input
+                type="color"
+                value={brandColor}
+                onChange={(event) => setBrandColor(event.target.value)}
+                className="h-full w-14 cursor-pointer border-0 bg-transparent"
+              />
+              <input
+                value={brandColor}
+                onChange={(event) => setBrandColor(event.target.value)}
+                className="min-w-0 flex-1 bg-transparent px-3 text-sm font-semibold outline-none"
+              />
+            </div>
+          </label>
           <InputField label="Service area" value={serviceArea} onChange={setServiceArea} />
           <InputField label="WhatsApp number" value={whatsappNumber} onChange={setWhatsappNumber} />
           <InputField label="Staff plan" value={staffCount} onChange={setStaffCount} />
