@@ -241,6 +241,15 @@ export const api = {
       { method: "POST" }
     ),
   platformMetrics: () => request<PlatformMetrics>("/platform/metrics"),
+  platformProviderHealth: () => request<PlatformProviderHealth>("/platform/provider-health"),
+  scanPlatformTrials: () =>
+    request<PlatformBillingScanResult>("/platform/billing/scan-trials", {
+      method: "POST"
+    }),
+  scanPlatformPastDue: () =>
+    request<PlatformBillingScanResult>("/platform/billing/scan-past-due", {
+      method: "POST"
+    }),
   platformRisk: () => request<PlatformRiskRow[]>("/platform/risk"),
   platformSupportSessions: () => request<PlatformSupportAccess[]>("/platform/support-sessions"),
   platformTenants: () => request<PlatformTenant[]>("/platform/tenants"),
@@ -755,6 +764,45 @@ export type PlatformMetrics = {
   paidRevenueCents: number;
   mrrCents: number;
   pastDueTenants: number;
+};
+
+export type PlatformBillingScanResult = {
+  scannedAt: string;
+  tenantCount: number;
+  actionsCreatedOrUpdated: number;
+  results: Array<{
+    scannedAt: string;
+    subscriptionStatus: string;
+    actionsCreatedOrUpdated: number;
+  }>;
+};
+
+export type PlatformProviderHealth = {
+  checkedAt: string;
+  integrations: {
+    whatsapp: {
+      configured: boolean;
+      verifyTokenConfigured: boolean;
+      appSecretConfigured: boolean;
+    };
+    stripe: {
+      configured: boolean;
+      webhookSecretConfigured: boolean;
+    };
+    paystack: {
+      configured: boolean;
+      currency: string;
+      platformPlanConfigured: boolean;
+      tenantPlanConfigured: boolean;
+    };
+  };
+  queues: {
+    failedAutomations: number;
+    pendingAutomations: number;
+  };
+  webhooks: Record<string, Record<string, number>>;
+  recentWebhooks: PlatformWebhookFailure[];
+  recentRuns: PlatformAutomationFailure[];
 };
 
 export type PlatformRiskRow = {

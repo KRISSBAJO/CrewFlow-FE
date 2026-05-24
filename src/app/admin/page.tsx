@@ -32,6 +32,7 @@ import {
   PlatformBillingEventType,
   PlatformBillingSummary,
   PlatformMetrics,
+  PlatformProviderHealth,
   PlatformAction,
   PlatformRiskRow,
   PlatformUser,
@@ -157,6 +158,11 @@ function AdminConsole() {
     queryFn: api.readiness,
     refetchInterval: 60_000
   });
+  const providerHealth = useQuery({
+    queryKey: ["platform-provider-health"],
+    queryFn: api.platformProviderHealth,
+    refetchInterval: 60_000
+  });
   const filteredTenants = useMemo(() => {
     const needle = search.trim().toLowerCase();
     if (!needle) return tenants.data ?? [];
@@ -234,6 +240,7 @@ function AdminConsole() {
                 error={readiness.error}
                 onRefresh={() => void readiness.refetch()}
               />
+              <ProviderHealthPanel data={providerHealth.data} error={providerHealth.error} />
               <Metrics data={metrics.data} readiness={readiness.data} />
               <div className="grid gap-4 xl:grid-cols-[1fr_0.9fr]">
                 <PlatformSummary data={metrics.data} tenants={tenants.data} />
@@ -306,6 +313,7 @@ function AdminConsole() {
             <div className="grid gap-4 xl:grid-cols-[1fr_0.8fr]">
               <RiskBoard rows={risk.data} />
               <div className="grid gap-4">
+                <BillingRiskControls />
                 <SupportSessionList items={supportSessions.data} expanded />
                 <Panel title="Export history" icon={Download}>
                   <AuditList items={exportHistory.data} compact />
@@ -570,6 +578,118 @@ function ReadinessCheck({
         {good ? <CheckCircle2 className="h-4 w-4 text-pine" /> : muted ? <TimerReset className="h-4 w-4 text-amber" /> : <AlertTriangle className="h-4 w-4 text-coral" />}
       </div>
       <p className="mt-2 truncate text-lg font-semibold text-ink">{value}</p>
+    </div>
+  );
+}
+
+function ProviderHealthPanel({ data, error }: { data?: PlatformProviderHealth; error: unknown }) {
+  const failedWebhooks = Object.values(data?.webhooks ?? {}).reduce((sum, item) => sum + (item.FAILED ?? 0), 0);
+  const providers = [
+    {
+      label: "WhatsApp",
+      ready: Boolean(data?.integrations.whatsapp.configured),
+      detail: data?.integrations.whatsapp.appSecretConfigured ? "signed webhooks" : "signature optional"
+    },
+    {
+      label: "Stripe",
+      ready: Boolean(data?.integrations.stripe.configured),
+      detail: data?.integrations.stripe.webhookSecretConfigured ? "webhook signed" : "mock / unsigned"
+    },
+    {
+      label: "Paystack",
+      ready: Boolean(data?.integrations.paystack.configured),
+      detail: `${data?.integrations.paystack.currency ?? "NGN"} billing`
+    }
+  ];
+
+  return (
+    <Panel title="Provider reliability" icon={Activity}>
+      <div className="grid gap-3 md:grid-cols-3">
+        {providers.map((provider) => (
+          <div key={provider.label} className="rounded-[8px] bg-mist p-4">
+            <div className="flex items-center justify-between gap-3">
+              <p className="font-semibold text-ink">{provider.label}</p>
+              <span className={cn("rounded-full px-2 py-1 text-xs font-semibold", provider.ready ? "bg-pine text-white" : "bg-white text-steel")}>
+                {provider.ready ? "Live" : "Mock"}
+              </span>
+            </div>
+            <p className="mt-2 text-sm text-steel">{provider.detail}</p>
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-3">
+        <ReliabilityStat label="Failed webhooks" value={failedWebhooks} danger={failedWebhooks > 0} />
+        <ReliabilityStat label="Failed automations" value={data?.queues.failedAutomations ?? 0} danger={(data?.queues.failedAutomations ?? 0) > 0} />
+        <ReliabilityStat label="Pending automations" value={data?.queues.pendingAutomations ?? 0} />
+      </div>
+      {error ? <p className="mt-3 text-sm font-medium text-coral">{error instanceof Error ? error.message : "Unable to load provider health"}</p> : null}
+    </Panel>
+  );
+}
+
+function BillingRiskControls() {
+  const queryClient = useQueryClient();
+  const scanTrials = useMutation({
+    mutationFn: api.scanPlatformTrials,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["platform-actions"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-risk"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-tenants"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-audit"] });
+    }
+  });
+  const scanPastDue = useMutation({
+    mutationFn: api.scanPlatformPastDue,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["platform-actions"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-risk"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-tenants"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-audit"] });
+    }
+  });
+
+  return (
+    <Panel title="Billing risk controls" icon={TimerReset}>
+      <div className="grid gap-3">
+        <button
+          onClick={() => scanTrials.mutate()}
+          disabled={scanTrials.isPending}
+          className="flex min-h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+        >
+          {scanTrials.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <TimerReset className="h-4 w-4" />}
+          Scan trial expiry
+        </button>
+        <button
+          onClick={() => scanPastDue.mutate()}
+          disabled={scanPastDue.isPending}
+          className="flex min-h-11 items-center justify-center gap-2 rounded-[8px] bg-ink px-3 text-sm font-semibold text-white disabled:opacity-50"
+        >
+          {scanPastDue.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+          Scan past-due billing
+        </button>
+      </div>
+      {scanTrials.data ? (
+        <p className="mt-3 rounded-[8px] bg-mint/20 p-3 text-sm font-medium text-pine">
+          Trial scan checked {scanTrials.data.tenantCount} tenants and created or updated {scanTrials.data.actionsCreatedOrUpdated} actions.
+        </p>
+      ) : null}
+      {scanPastDue.data ? (
+        <p className="mt-3 rounded-[8px] bg-mint/20 p-3 text-sm font-medium text-pine">
+          Past-due scan checked {scanPastDue.data.tenantCount} tenants and created or updated {scanPastDue.data.actionsCreatedOrUpdated} actions.
+        </p>
+      ) : null}
+      {scanTrials.error || scanPastDue.error ? (
+        <p className="mt-3 text-sm font-medium text-coral">{((scanTrials.error ?? scanPastDue.error) as Error).message}</p>
+      ) : null}
+    </Panel>
+  );
+}
+
+function ReliabilityStat({ label, value, danger }: { label: string; value: number; danger?: boolean }) {
+  return (
+    <div className={cn("rounded-[8px] p-4", danger ? "bg-coral/10 text-coral" : "bg-mist text-ink")}>
+      <p className="text-sm font-semibold">{label}</p>
+      <p className="mt-1 text-2xl font-semibold">{value}</p>
     </div>
   );
 }
@@ -1619,6 +1739,7 @@ function FailureList({
     mutationFn: (id: string) => api.retryPlatformAutomationFailure(id, "Retried from platform admin failure queue."),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["platform-automation-failures"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-provider-health"] });
       void queryClient.invalidateQueries({ queryKey: ["platform-audit"] });
       void queryClient.invalidateQueries({ queryKey: ["platform-metrics"] });
     }
@@ -1627,6 +1748,7 @@ function FailureList({
     mutationFn: (id: string) => api.replayPlatformWebhookFailure(id, "Replayed from platform admin failure queue."),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["platform-webhook-failures"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-provider-health"] });
       void queryClient.invalidateQueries({ queryKey: ["platform-audit"] });
       void queryClient.invalidateQueries({ queryKey: ["platform-metrics"] });
     }
