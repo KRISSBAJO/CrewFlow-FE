@@ -3184,6 +3184,7 @@ function MiniStat({ label, value, danger }: { label: string; value: string | num
 function ServiceManager({ services }: { services: Service[] }) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<Service | null>(null);
+  const [serviceModalOpen, setServiceModalOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [imageUrl, setImageUrl] = useState("");
@@ -3199,6 +3200,22 @@ function ServiceManager({ services }: { services: Service[] }) {
     setPrice(service ? String(service.priceCents / 100) : "199");
   }
 
+  function openCreate() {
+    reset();
+    setServiceModalOpen(true);
+  }
+
+  function openEdit(service: Service) {
+    reset(service);
+    setServiceModalOpen(true);
+  }
+
+  function closeModal() {
+    if (save.isPending) return;
+    setServiceModalOpen(false);
+    reset();
+  }
+
   const save = useMutation({
     mutationFn: () => {
       const input = {
@@ -3212,6 +3229,7 @@ function ServiceManager({ services }: { services: Service[] }) {
     },
     onSuccess: () => {
       reset();
+      setServiceModalOpen(false);
       void queryClient.invalidateQueries({ queryKey: ["services"] });
       void queryClient.invalidateQueries({ queryKey: ["tenant"] });
     }
@@ -3227,7 +3245,25 @@ function ServiceManager({ services }: { services: Service[] }) {
   const canSave = title.trim() && Number(durationMinutes) >= 5 && Number(price) >= 0;
 
   return (
-    <Panel title="Service catalog" icon={Settings2}>
+    <Panel
+      title="Service catalog"
+      icon={Settings2}
+      action={
+        <button
+          onClick={openCreate}
+          className="flex h-10 items-center justify-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white"
+        >
+          <Plus className="h-4 w-4" />
+          New service
+        </button>
+      }
+    >
+      <div className="mb-4 grid gap-3 sm:grid-cols-3">
+        <MiniStat label="Services" value={services.length} />
+        <MiniStat label="Active" value={services.filter((service) => service.active !== false).length} />
+        <MiniStat label="With images" value={services.filter((service) => service.imageUrl).length} />
+      </div>
+
       <div className="grid gap-3">
         {services.map((service) => (
           <Row key={service.id}>
@@ -3248,7 +3284,7 @@ function ServiceManager({ services }: { services: Service[] }) {
             </div>
             <Status label={service.active === false ? "INACTIVE" : "ACTIVE"} />
             <button
-              onClick={() => reset(service)}
+              onClick={() => openEdit(service)}
               className="h-9 rounded-[8px] bg-white px-3 text-sm font-semibold text-ink"
             >
               Edit
@@ -3264,35 +3300,82 @@ function ServiceManager({ services }: { services: Service[] }) {
         <Empty show={!services.length} label="No services yet" />
       </div>
 
-      <div className="mt-4 rounded-[8px] bg-mist p-4">
-        <p className="mb-3 font-semibold text-ink">{editing ? "Edit service" : "Add service"}</p>
-        <div className="grid gap-3 md:grid-cols-2">
-          <InputField label="Title" value={title} onChange={setTitle} />
-          <InputField label="Price" value={price} onChange={setPrice} />
-          <InputField label="Duration minutes" value={durationMinutes} onChange={setDurationMinutes} />
-          <InputField label="Description" value={description} onChange={setDescription} />
-          <MediaUploadField label="Service image" value={imageUrl} onChange={setImageUrl} folder="services" />
-        </div>
-        {save.error ? <ErrorText error={save.error} /> : null}
-        <div className="mt-3 flex gap-2">
-          <button
-            onClick={() => save.mutate()}
-            disabled={!canSave || save.isPending}
-            className="flex h-10 items-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+      <AnimatePresence>
+        {serviceModalOpen ? (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-ink/35 p-4 backdrop-blur-sm"
           >
-            {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            {editing ? "Save service" : "Add service"}
-          </button>
-          {editing ? (
-            <button
-              onClick={() => reset()}
-              className="h-10 rounded-[8px] bg-white px-3 text-sm font-semibold text-ink"
+            <motion.div
+              initial={{ opacity: 0, y: 18, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 18, scale: 0.98 }}
+              className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[8px] border border-white/80 bg-white p-5 shadow-soft"
             >
-              Cancel
-            </button>
-          ) : null}
-        </div>
-      </div>
+              <div className="mb-5 flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pine">Service setup</p>
+                  <h3 className="mt-1 text-2xl font-semibold text-ink">{editing ? "Edit service" : "Create service"}</h3>
+                  <p className="mt-1 text-sm leading-6 text-steel">
+                    This is what customers see on the booking page and what staff use during scheduling.
+                  </p>
+                </div>
+                <button
+                  onClick={closeModal}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] bg-mist text-ink"
+                  aria-label="Close service editor"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <InputField label="Title" value={title} onChange={setTitle} />
+                <InputField label="Price" value={price} onChange={setPrice} />
+                <InputField label="Duration minutes" value={durationMinutes} onChange={setDurationMinutes} />
+                <InputField label="Description" value={description} onChange={setDescription} />
+                <div className="md:col-span-2">
+                  <MediaUploadField label="Service image" value={imageUrl} onChange={setImageUrl} folder="services" />
+                </div>
+              </div>
+
+              {imageUrl ? (
+                <div className="relative mt-4 h-44 overflow-hidden rounded-[8px] bg-mist">
+                  <Image src={imageUrl} alt="" fill sizes="640px" className="object-cover" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-ink/60 to-transparent" />
+                  <div className="absolute bottom-4 left-4 right-4 text-white">
+                    <p className="text-lg font-semibold">{title || "Service preview"}</p>
+                    <p className="text-sm text-white/76">
+                      {Number(durationMinutes) || 0} min · {money(Math.round((Number(price) || 0) * 100))}
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+
+              {save.error ? <ErrorText error={save.error} /> : null}
+              <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <button
+                  onClick={closeModal}
+                  disabled={save.isPending}
+                  className="h-11 rounded-[8px] bg-mist px-4 text-sm font-semibold text-ink disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => save.mutate()}
+                  disabled={!canSave || save.isPending}
+                  className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 text-sm font-semibold text-white disabled:opacity-50"
+                >
+                  {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  {editing ? "Save service" : "Create service"}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </Panel>
   );
 }
