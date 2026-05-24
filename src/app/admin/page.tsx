@@ -189,14 +189,6 @@ function AdminConsole() {
               </button>
             ))}
           </nav>
-          <div className="mt-6 rounded-[8px] bg-mist p-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-steel">System</p>
-            <div className="mt-3 grid gap-2 text-sm font-medium text-ink">
-              <span>{readiness.data?.environment ?? "checking"}</span>
-              <span>{readiness.data?.productionReady ? "Production ready" : `${readiness.data?.warnings.length ?? 0} warnings`}</span>
-              <span>{metrics.data?.tenantStatus.ACTIVE ?? 0} active tenants</span>
-            </div>
-          </div>
           <button onClick={logout} className="mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-[8px] bg-ink px-3 text-sm font-semibold text-white">
             <LogOut className="h-4 w-4" />
             Logout
