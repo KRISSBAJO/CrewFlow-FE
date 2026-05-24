@@ -309,11 +309,17 @@ export const api = {
     }),
   runCollectionsAutomation: () => request<CollectionsAutomationResult>("/collections/automation/run", { method: "POST" }),
   retention: () => request<RetentionSummary>("/retention"),
+  revenueEngine: () => request<CustomerRevenueEngine>("/retention/revenue-engine"),
   scanRetention: () =>
     request<{ scannedAt: string; repeatCandidates: number; winBackCandidates: number; actionsCreatedOrUpdated: number }>(
       "/retention/scan",
       { method: "POST" }
   ),
+  sendRevenueCampaign: (input: RevenueCampaignInput) =>
+    request<{ sentAt: string; type: string; provider: string; requested: number; sent: number }>("/retention/campaigns/send", {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
   health: () => request<Health>("/health"),
   readiness: () => request<Readiness>("/health/readiness"),
   schedulerRun: () => request<unknown>("/scheduler/run-now", { method: "POST" }),
@@ -974,6 +980,14 @@ export type RetentionCustomer = {
   estimatedNextValueCents: number;
   lifetimeValueCents: number;
   recommendation: string;
+  segmentTags?: string[];
+  riskScore?: number;
+  nextBestAction?: {
+    type: string;
+    label: string;
+    message: string;
+    priorityScore: number;
+  };
 };
 
 export type RetentionSummary = {
@@ -984,6 +998,35 @@ export type RetentionSummary = {
   repeatCandidates: RetentionCustomer[];
   winBackCandidates: RetentionCustomer[];
   topCustomers: RetentionCustomer[];
+};
+
+export type CustomerRevenueEngine = {
+  generatedAt: string;
+  summary: {
+    customers: number;
+    lifetimeValueCents: number;
+    openInvoiceCents: number;
+    repeatReadyCents: number;
+    winBackCents: number;
+    highValueCount: number;
+    atRiskCount: number;
+  };
+  segments: {
+    highValue: RetentionCustomer[];
+    overduePayers: RetentionCustomer[];
+    inactive: RetentionCustomer[];
+    repeatReady: RetentionCustomer[];
+    newCustomers: RetentionCustomer[];
+  };
+  nextBestActions: RetentionCustomer[];
+  customers: RetentionCustomer[];
+};
+
+export type RevenueCampaignInput = {
+  type: "REBOOKING" | "WIN_BACK" | "VIP_CHECK_IN" | "PAYMENT_RECOVERY";
+  customerIds: string[];
+  provider?: "WHATSAPP" | "SMS" | "WEB_CHAT";
+  note?: string;
 };
 
 export type StaffMember = {

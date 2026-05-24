@@ -812,23 +812,100 @@ function RetentionView({
   onOpen: (state: DrawerState) => void;
 }) {
   const queryClient = useQueryClient();
+  const revenue = useQuery({ queryKey: ["revenue-engine"], queryFn: api.revenueEngine });
+  const [campaignNote, setCampaignNote] = useState("");
   const scan = useMutation({
     mutationFn: api.scanRetention,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["retention"] });
       void queryClient.invalidateQueries({ queryKey: ["actions"] });
       void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      void queryClient.invalidateQueries({ queryKey: ["revenue-engine"] });
     }
   });
+  const campaign = useMutation({
+    mutationFn: (input: { type: "REBOOKING" | "WIN_BACK" | "VIP_CHECK_IN" | "PAYMENT_RECOVERY"; customerIds: string[] }) =>
+      api.sendRevenueCampaign({ ...input, provider: "WHATSAPP", note: campaignNote || undefined }),
+    onSuccess: () => {
+      setCampaignNote("");
+      void queryClient.invalidateQueries({ queryKey: ["messages"] });
+    }
+  });
+  const engine = revenue.data;
 
   return (
     <div className="grid gap-4">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Metric icon={Banknote} label="Retained revenue" value={money(data?.retainedRevenueCents)} tone="pine" />
-        <Metric icon={Repeat2} label="Repeat opportunity" value={money(data?.repeatOpportunityCents)} tone="mint" />
-        <Metric icon={HeartPulse} label="Win-back value" value={money(data?.winBackOpportunityCents)} tone="amber" />
-        <Metric icon={UsersRound} label="Customers to act on" value={(data?.repeatCandidates.length ?? 0) + (data?.winBackCandidates.length ?? 0)} tone="coral" />
+        <Metric icon={Banknote} label="Customer LTV" value={money(engine?.summary.lifetimeValueCents ?? data?.retainedRevenueCents)} tone="pine" />
+        <Metric icon={Repeat2} label="Repeat opportunity" value={money(engine?.summary.repeatReadyCents ?? data?.repeatOpportunityCents)} tone="mint" />
+        <Metric icon={HeartPulse} label="Win-back value" value={money(engine?.summary.winBackCents ?? data?.winBackOpportunityCents)} tone="amber" />
+        <Metric icon={AlertTriangle} label="At-risk customers" value={engine?.summary.atRiskCount ?? ((data?.repeatCandidates.length ?? 0) + (data?.winBackCandidates.length ?? 0))} tone="coral" />
       </div>
+
+      <Panel title="Customer revenue engine" icon={Target}>
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
+          <div className="grid gap-3">
+            <div className="grid gap-3 md:grid-cols-3">
+              <RevenueSegment label="High value" items={engine?.segments.highValue} />
+              <RevenueSegment label="Repeat ready" items={engine?.segments.repeatReady} />
+              <RevenueSegment label="Overdue payer" items={engine?.segments.overduePayers} />
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              {(engine?.nextBestActions ?? []).slice(0, 8).map((item) => (
+                <RevenueActionCard key={item.customer.id} item={item} onOpen={onOpen} />
+              ))}
+              <Empty show={!engine?.nextBestActions.length && !revenue.isLoading} label="No customer revenue actions right now" />
+            </div>
+          </div>
+          <div className="rounded-[8px] bg-mist p-4">
+            <p className="font-semibold text-ink">One-click WhatsApp campaigns</p>
+            <p className="mt-1 text-sm leading-6 text-steel">Send targeted messages to customers already segmented by revenue behavior.</p>
+            <textarea
+              value={campaignNote}
+              onChange={(event) => setCampaignNote(event.target.value)}
+              rows={3}
+              placeholder="Optional campaign note"
+              className="mt-4 min-h-[90px] w-full rounded-[8px] border border-black/10 bg-white p-3 text-sm outline-none focus:border-pine"
+            />
+            <div className="mt-3 grid gap-2">
+              <CampaignButton
+                label="Rebook repeat-ready"
+                type="REBOOKING"
+                items={engine?.segments.repeatReady}
+                pending={campaign.isPending}
+                onSend={(type, customerIds) => campaign.mutate({ type, customerIds })}
+              />
+              <CampaignButton
+                label="Win back inactive"
+                type="WIN_BACK"
+                items={engine?.segments.inactive}
+                pending={campaign.isPending}
+                onSend={(type, customerIds) => campaign.mutate({ type, customerIds })}
+              />
+              <CampaignButton
+                label="VIP check-in"
+                type="VIP_CHECK_IN"
+                items={engine?.segments.highValue}
+                pending={campaign.isPending}
+                onSend={(type, customerIds) => campaign.mutate({ type, customerIds })}
+              />
+              <CampaignButton
+                label="Payment recovery"
+                type="PAYMENT_RECOVERY"
+                items={engine?.segments.overduePayers}
+                pending={campaign.isPending}
+                onSend={(type, customerIds) => campaign.mutate({ type, customerIds })}
+              />
+            </div>
+            {campaign.data ? (
+              <p className="mt-3 rounded-[8px] bg-mint/30 px-3 py-2 text-sm font-semibold text-ink">
+                Sent {campaign.data.sent} {campaign.data.type.replaceAll("_", " ").toLowerCase()} messages.
+              </p>
+            ) : null}
+            {campaign.error ? <ErrorText error={campaign.error} /> : null}
+          </div>
+        </div>
+      </Panel>
 
       <Panel
         title="Retention engine"
@@ -877,6 +954,83 @@ function RetentionView({
         </div>
       </Panel>
     </div>
+  );
+}
+
+function RevenueSegment({ label, items }: { label: string; items?: RetentionCustomer[] }) {
+  return (
+    <div className="rounded-[8px] bg-mist p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-steel">{label}</p>
+      <p className="mt-2 text-3xl font-semibold text-ink">{items?.length ?? 0}</p>
+      <p className="mt-1 text-sm text-steel">{money((items ?? []).reduce((sum, item) => sum + item.estimatedNextValueCents, 0))}</p>
+    </div>
+  );
+}
+
+function RevenueActionCard({
+  item,
+  onOpen
+}: {
+  item: RetentionCustomer;
+  onOpen: (state: DrawerState) => void;
+}) {
+  return (
+    <button
+      onClick={() =>
+        onOpen({
+          type: "customer",
+          item: {
+            id: item.customer.id,
+            name: item.customer.name,
+            phone: item.customer.phone,
+            email: item.customer.email
+          }
+        })
+      }
+      className="rounded-[8px] bg-white p-4 text-left shadow-soft transition hover:-translate-y-0.5"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-semibold text-ink">{item.customer.name}</p>
+          <p className="mt-1 text-sm text-steel">{item.nextBestAction?.label ?? item.recommendation}</p>
+        </div>
+        <span className="rounded-full bg-coral/10 px-2 py-1 text-xs font-semibold text-coral">risk {item.riskScore ?? 0}</span>
+      </div>
+      <p className="mt-3 line-clamp-2 text-sm leading-6 text-steel">{item.nextBestAction?.message}</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {(item.segmentTags ?? []).map((tag) => (
+          <span key={tag} className="rounded-full bg-mist px-2 py-1 text-xs font-semibold text-steel">
+            {tag.replaceAll("_", " ")}
+          </span>
+        ))}
+      </div>
+    </button>
+  );
+}
+
+function CampaignButton({
+  label,
+  type,
+  items,
+  pending,
+  onSend
+}: {
+  label: string;
+  type: "REBOOKING" | "WIN_BACK" | "VIP_CHECK_IN" | "PAYMENT_RECOVERY";
+  items?: RetentionCustomer[];
+  pending: boolean;
+  onSend: (type: "REBOOKING" | "WIN_BACK" | "VIP_CHECK_IN" | "PAYMENT_RECOVERY", customerIds: string[]) => void;
+}) {
+  const customerIds = (items ?? []).map((item) => item.customer.id);
+  return (
+    <button
+      onClick={() => onSend(type, customerIds)}
+      disabled={pending || !customerIds.length}
+      className="flex h-11 items-center justify-between gap-3 rounded-[8px] bg-white px-3 text-sm font-semibold text-ink shadow-soft disabled:opacity-50"
+    >
+      <span>{label}</span>
+      <span className="rounded-full bg-pine px-2 py-1 text-xs text-white">{customerIds.length}</span>
+    </button>
   );
 }
 
