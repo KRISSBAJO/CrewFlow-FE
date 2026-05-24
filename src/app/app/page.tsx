@@ -97,6 +97,7 @@ const nav = [
 ] as const;
 
 type View = (typeof nav)[number]["id"];
+type SettingsSection = "overview" | "brand" | "services" | "team" | "billing" | "whatsapp";
 const leadStatuses: Array<{ value: LeadStatus; label: string }> = [
   { value: "NEW", label: "New" },
   { value: "CONTACTED", label: "Contacted" },
@@ -2422,6 +2423,7 @@ function SettingsForm({
     tenant.receptionistConfig?.businessHours?.saturday ?? "Closed"
   );
   const [whatsappPlanned, setWhatsappPlanned] = useState(Boolean(onboarding?.whatsappNumber));
+  const [section, setSection] = useState<SettingsSection>("overview");
   const whatsappStatus = useQuery({ queryKey: ["whatsapp-status"], queryFn: api.whatsappStatus });
   const whatsappOnboarding = useQuery({ queryKey: ["whatsapp-onboarding"], queryFn: api.whatsappOnboarding });
   const automationRuns = useQuery({ queryKey: ["automation-runs"], queryFn: api.automationRuns });
@@ -2486,9 +2488,171 @@ function SettingsForm({
     }
   });
 
+  const settingsSections: Array<{
+    id: SettingsSection;
+    label: string;
+    description: string;
+    icon: typeof Settings2;
+    count?: string | number;
+  }> = [
+    { id: "overview", label: "Overview", description: "Setup health and quick links", icon: ClipboardCheck },
+    { id: "brand", label: "Brand & storefront", description: "Logo, cover, color, booking link", icon: Building2 },
+    { id: "services", label: "Services", description: "Pricing, duration, service photos", icon: Wrench, count: services.length },
+    { id: "team", label: "Team", description: "Staff users, roles, profile photos", icon: UsersRound, count: staff.length },
+    {
+      id: "billing",
+      label: "Billing",
+      description: "Plan, usage, payment status",
+      icon: CreditCard,
+      count: billing?.subscriptionStatus?.replaceAll("_", " ") ?? "Trial"
+    },
+    {
+      id: "whatsapp",
+      label: "WhatsApp",
+      description: "Templates, delivery, production readiness",
+      icon: MessageSquareText,
+      count: whatsappStatus.data?.provider.ready ? "Ready" : "Setup"
+    }
+  ];
+
   return (
-    <div className="grid gap-4">
-      <div className="grid gap-4 xl:grid-cols-[1fr_0.8fr]">
+    <div className="grid gap-5">
+      <div className="rounded-[8px] border border-white/80 bg-white/90 p-4 shadow-soft backdrop-blur">
+        <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pine">Workspace settings</p>
+            <h2 className="mt-1 text-2xl font-semibold text-ink">Control center</h2>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-steel">
+              Configure the business in focused sections. Start with brand and services, then connect payments and WhatsApp.
+            </p>
+          </div>
+          <button
+            onClick={() => save.mutate()}
+            disabled={save.isPending || !businessName || !industry}
+            className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 font-semibold text-white disabled:opacity-50"
+          >
+            {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Save changes
+          </button>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {settingsSections.map((item) => (
+            <SettingsSectionButton key={item.id} item={item} active={section === item.id} onClick={() => setSection(item.id)} />
+          ))}
+        </div>
+        {save.error ? <ErrorText error={save.error} /> : null}
+        {save.isSuccess ? (
+          <p className="mt-4 rounded-[8px] bg-mint/30 px-3 py-2 text-sm font-semibold text-ink">
+            Settings saved. Your storefront and operations profile are updated.
+          </p>
+        ) : null}
+      </div>
+
+      {section === "overview" ? (
+        <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+          <Panel title="Setup readiness" icon={ClipboardCheck}>
+            <div className="grid gap-3">
+              <ReadinessRow label="Business profile" done={Boolean(tenant?.businessName && tenant?.industry)} />
+              <ReadinessRow label="Operating area" done={Boolean(serviceArea)} />
+              <ReadinessRow label="Business hours" done={Boolean(weekdayHours)} />
+              <ReadinessRow label="WhatsApp plan" done={Boolean(whatsappNumber || whatsappPlanned)} />
+              <ReadinessRow label="Staff plan" done={Boolean(staffCount)} />
+            </div>
+            <div className="mt-4 rounded-[8px] bg-mist p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-steel">Status</p>
+              <p className="mt-1 text-2xl font-semibold text-ink">
+                {tenant?.onboardingProfile?.setupStatus ?? onboarding?.setupStatus ?? "IN_PROGRESS"}
+              </p>
+              <p className="mt-2 text-sm leading-6 text-steel">
+                These basics power the receptionist, booking page, staff flows, and customer reminders.
+              </p>
+            </div>
+          </Panel>
+          <div className="grid gap-4">
+            <SettingsQuickPreview
+              tenant={tenant}
+              businessName={businessName}
+              industry={industry}
+              logoUrl={logoUrl}
+              coverImageUrl={coverImageUrl}
+              brandColor={brandColor}
+              services={services}
+              staff={staff}
+              onOpenBrand={() => setSection("brand")}
+              onOpenServices={() => setSection("services")}
+              onOpenTeam={() => setSection("team")}
+            />
+            <PortalLinkPanel tenant={tenant} />
+          </div>
+        </div>
+      ) : null}
+
+      {section === "brand" ? (
+        <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+          <Panel title="Brand and booking storefront" icon={Building2}>
+            <div className="grid gap-4 md:grid-cols-2">
+              <InputField label="Business name" value={businessName} onChange={setBusinessName} />
+              <InputField label="Industry" value={industry} onChange={setIndustry} />
+              <MediaUploadField label="Business logo" value={logoUrl} onChange={setLogoUrl} folder="tenants/logos" />
+              <MediaUploadField label="Cover image" value={coverImageUrl} onChange={setCoverImageUrl} folder="tenants/covers" />
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-ink">Brand color</span>
+                <div className="flex h-11 overflow-hidden rounded-[8px] border border-ink/10 bg-mist">
+                  <input
+                    type="color"
+                    value={brandColor}
+                    onChange={(event) => setBrandColor(event.target.value)}
+                    className="h-full w-14 cursor-pointer border-0 bg-transparent"
+                  />
+                  <input
+                    value={brandColor}
+                    onChange={(event) => setBrandColor(event.target.value)}
+                    className="min-w-0 flex-1 bg-transparent px-3 text-sm font-semibold outline-none"
+                  />
+                </div>
+              </label>
+              <InputField label="Service area" value={serviceArea} onChange={setServiceArea} />
+              <InputField label="WhatsApp number" value={whatsappNumber} onChange={setWhatsappNumber} />
+              <InputField label="Staff plan" value={staffCount} onChange={setStaffCount} />
+              <InputField label="Weekday hours" value={weekdayHours} onChange={setWeekdayHours} />
+              <InputField label="Saturday hours" value={saturdayHours} onChange={setSaturdayHours} />
+              <label className="flex min-h-11 items-center gap-3 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink">
+                <input
+                  type="checkbox"
+                  checked={whatsappPlanned}
+                  onChange={(event) => setWhatsappPlanned(event.target.checked)}
+                  className="h-5 w-5 accent-pine"
+                />
+                WhatsApp automation planned
+              </label>
+            </div>
+            <label className="mt-4 block">
+              <span className="mb-2 block text-sm font-medium text-ink">Biggest operational problem</span>
+              <textarea
+                value={biggestProblem}
+                onChange={(event) => setBiggestProblem(event.target.value)}
+                className="min-h-28 w-full rounded-[8px] border border-ink/10 bg-mist p-3 outline-none focus:border-pine"
+              />
+            </label>
+          </Panel>
+          <div className="grid content-start gap-4">
+            <StorefrontPreview
+              businessName={businessName}
+              industry={industry}
+              logoUrl={logoUrl}
+              coverImageUrl={coverImageUrl}
+              brandColor={brandColor}
+            />
+            <PortalLinkPanel tenant={tenant} />
+          </div>
+        </div>
+      ) : null}
+
+      {section === "services" ? <ServiceManager services={services} /> : null}
+      {section === "team" ? <StaffManager staff={staff} /> : null}
+
+      {section === "billing" ? (
         <BillingSelfServePanel
           billing={billing}
           checkoutPending={createCheckout.isPending}
@@ -2499,114 +2663,159 @@ function SettingsForm({
           onPortal={() => createPortal.mutate()}
           onScan={() => scanBilling.mutate()}
         />
+      ) : null}
 
-        <PortalLinkPanel tenant={tenant} />
+      {section === "whatsapp" ? (
+        <WhatsAppOpsPanel
+          status={whatsappStatus.data}
+          onboarding={whatsappOnboarding.data}
+          runs={automationRuns.data}
+          events={webhookEvents.data}
+        />
+      ) : null}
+    </div>
+  );
+}
 
-        <Panel title="Tenant settings" icon={Settings2}>
-        {coverImageUrl ? (
-          <div className="relative mb-4 h-36 overflow-hidden rounded-[8px] bg-mist">
-            <Image src={coverImageUrl} alt="" fill sizes="(min-width: 1024px) 50vw, 100vw" className="object-cover" />
-            <div className="absolute inset-0 bg-ink/18" />
-            <div className="absolute bottom-3 left-3 flex items-center gap-3">
-              <Avatar name={businessName} imageUrl={logoUrl} size="lg" />
-              <div className="text-white">
-                <p className="font-semibold">{businessName}</p>
-                <p className="text-sm text-white/78">{industry}</p>
-              </div>
-            </div>
-          </div>
-        ) : null}
-        <div className="grid gap-4 md:grid-cols-2">
-          <InputField label="Business name" value={businessName} onChange={setBusinessName} />
-          <InputField label="Industry" value={industry} onChange={setIndustry} />
-          <MediaUploadField label="Business logo" value={logoUrl} onChange={setLogoUrl} folder="tenants/logos" />
-          <MediaUploadField label="Cover image" value={coverImageUrl} onChange={setCoverImageUrl} folder="tenants/covers" />
-          <label className="block">
-            <span className="mb-2 block text-sm font-medium text-ink">Brand color</span>
-            <div className="flex h-11 overflow-hidden rounded-[8px] border border-ink/10 bg-mist">
-              <input
-                type="color"
-                value={brandColor}
-                onChange={(event) => setBrandColor(event.target.value)}
-                className="h-full w-14 cursor-pointer border-0 bg-transparent"
-              />
-              <input
-                value={brandColor}
-                onChange={(event) => setBrandColor(event.target.value)}
-                className="min-w-0 flex-1 bg-transparent px-3 text-sm font-semibold outline-none"
-              />
-            </div>
-          </label>
-          <InputField label="Service area" value={serviceArea} onChange={setServiceArea} />
-          <InputField label="WhatsApp number" value={whatsappNumber} onChange={setWhatsappNumber} />
-          <InputField label="Staff plan" value={staffCount} onChange={setStaffCount} />
-          <InputField label="Weekday hours" value={weekdayHours} onChange={setWeekdayHours} />
-          <InputField label="Saturday hours" value={saturdayHours} onChange={setSaturdayHours} />
-          <label className="flex min-h-11 items-center gap-3 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink">
-            <input
-              type="checkbox"
-              checked={whatsappPlanned}
-              onChange={(event) => setWhatsappPlanned(event.target.checked)}
-              className="h-5 w-5 accent-pine"
-            />
-            WhatsApp automation planned
-          </label>
-        </div>
-        <label className="mt-4 block">
-          <span className="mb-2 block text-sm font-medium text-ink">Biggest operational problem</span>
-          <textarea
-            value={biggestProblem}
-            onChange={(event) => setBiggestProblem(event.target.value)}
-            className="min-h-28 w-full rounded-[8px] border border-ink/10 bg-mist p-3 outline-none focus:border-pine"
-          />
-        </label>
-        {save.error ? <ErrorText error={save.error} /> : null}
-        {save.isSuccess ? (
-          <p className="mt-3 rounded-[8px] bg-mint/30 px-3 py-2 text-sm font-semibold text-ink">
-            Settings saved. Setup progress updated.
-          </p>
-        ) : null}
-        <button
-          onClick={() => save.mutate()}
-          disabled={save.isPending || !businessName || !industry}
-          className="mt-4 flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 font-semibold text-white disabled:opacity-50"
-        >
-          {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          Save settings
-        </button>
-        </Panel>
+function SettingsSectionButton({
+  item,
+  active,
+  onClick
+}: {
+  item: {
+    id: SettingsSection;
+    label: string;
+    description: string;
+    icon: typeof Settings2;
+    count?: string | number;
+  };
+  active: boolean;
+  onClick: () => void;
+}) {
+  const Icon = item.icon;
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "flex min-h-[88px] items-start gap-3 rounded-[8px] border p-3 text-left transition",
+        active ? "border-pine bg-pine text-white shadow-soft" : "border-ink/5 bg-mist/70 text-ink hover:border-pine/30 hover:bg-white"
+      )}
+    >
+      <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px]", active ? "bg-white/16" : "bg-white text-pine")}>
+        <Icon className="h-5 w-5" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center justify-between gap-2">
+          <span className="font-semibold">{item.label}</span>
+          {item.count !== undefined ? (
+            <span className={cn("rounded-[8px] px-2 py-1 text-xs font-semibold", active ? "bg-white/16 text-white" : "bg-white text-steel")}>
+              {item.count}
+            </span>
+          ) : null}
+        </span>
+        <span className={cn("mt-1 block text-sm leading-5", active ? "text-white/76" : "text-steel")}>{item.description}</span>
+      </span>
+    </button>
+  );
+}
 
-        <Panel title="Setup readiness" icon={ClipboardCheck}>
+function SettingsQuickPreview({
+  tenant,
+  businessName,
+  industry,
+  logoUrl,
+  coverImageUrl,
+  brandColor,
+  services,
+  staff,
+  onOpenBrand,
+  onOpenServices,
+  onOpenTeam
+}: {
+  tenant: TenantProfile;
+  businessName: string;
+  industry: string;
+  logoUrl: string;
+  coverImageUrl: string;
+  brandColor: string;
+  services: Service[];
+  staff: StaffMember[];
+  onOpenBrand: () => void;
+  onOpenServices: () => void;
+  onOpenTeam: () => void;
+}) {
+  return (
+    <Panel title="Business snapshot" icon={Building2}>
+      <div className="grid gap-3 lg:grid-cols-[1fr_0.9fr]">
+        <StorefrontPreview
+          businessName={businessName}
+          industry={industry}
+          logoUrl={logoUrl}
+          coverImageUrl={coverImageUrl}
+          brandColor={brandColor}
+          compact
+        />
         <div className="grid gap-3">
-          <ReadinessRow label="Business profile" done={Boolean(tenant?.businessName && tenant?.industry)} />
-          <ReadinessRow label="Operating area" done={Boolean(serviceArea)} />
-          <ReadinessRow label="Business hours" done={Boolean(weekdayHours)} />
-          <ReadinessRow label="WhatsApp plan" done={Boolean(whatsappNumber || whatsappPlanned)} />
-          <ReadinessRow label="Staff plan" done={Boolean(staffCount)} />
+          <button onClick={onOpenBrand} className="rounded-[8px] bg-mist p-4 text-left transition hover:bg-white">
+            <p className="font-semibold text-ink">Brand and booking page</p>
+            <p className="mt-1 text-sm text-steel">Public link: /book/{tenant.slug}</p>
+          </button>
+          <button onClick={onOpenServices} className="rounded-[8px] bg-mist p-4 text-left transition hover:bg-white">
+            <p className="font-semibold text-ink">{services.length} services configured</p>
+            <p className="mt-1 text-sm text-steel">Keep pricing and service photos customer-ready.</p>
+          </button>
+          <button onClick={onOpenTeam} className="rounded-[8px] bg-mist p-4 text-left transition hover:bg-white">
+            <p className="font-semibold text-ink">{staff.length} team members</p>
+            <p className="mt-1 text-sm text-steel">Owners, managers, and field staff access.</p>
+          </button>
         </div>
-        <div className="mt-4 rounded-[8px] bg-mist p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-steel">Status</p>
-          <p className="mt-1 text-2xl font-semibold text-ink">
-            {tenant?.onboardingProfile?.setupStatus ?? onboarding?.setupStatus ?? "IN_PROGRESS"}
-          </p>
-          <p className="mt-2 text-sm leading-6 text-steel">
-            Settings here drive the first-run checklist and give the AI receptionist the business context it needs.
-          </p>
+      </div>
+    </Panel>
+  );
+}
+
+function StorefrontPreview({
+  businessName,
+  industry,
+  logoUrl,
+  coverImageUrl,
+  brandColor,
+  compact
+}: {
+  businessName: string;
+  industry: string;
+  logoUrl: string;
+  coverImageUrl: string;
+  brandColor: string;
+  compact?: boolean;
+}) {
+  return (
+    <div className={cn("overflow-hidden rounded-[8px] border border-ink/5 bg-mist", compact ? "min-h-56" : "min-h-72")}>
+      <div className={cn("relative", compact ? "h-40" : "h-52")}>
+        {coverImageUrl ? (
+          <Image src={coverImageUrl} alt="" fill sizes="(min-width: 1024px) 440px, 100vw" className="object-cover" />
+        ) : (
+          <div className="h-full w-full bg-mist" />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-ink/72 via-ink/24 to-transparent" />
+        <div className="absolute bottom-4 left-4 right-4 flex items-end gap-3">
+          <Avatar name={businessName} imageUrl={logoUrl} size="lg" />
+          <div className="min-w-0 text-white">
+            <p className="truncate text-xl font-semibold">{businessName}</p>
+            <p className="truncate text-sm text-white/76">{industry}</p>
+          </div>
         </div>
-        </Panel>
       </div>
-
-      <div className="grid gap-4 xl:grid-cols-2">
-        <ServiceManager services={services} />
-        <StaffManager staff={staff} />
+      <div className="grid gap-3 p-4 sm:grid-cols-[1fr_auto] sm:items-center">
+        <div>
+          <p className="text-sm font-semibold text-ink">Customer booking storefront</p>
+          <p className="mt-1 text-sm text-steel">Logo, cover image, and brand color appear on the public booking page.</p>
+        </div>
+        <div className="flex items-center gap-2 rounded-[8px] bg-white px-3 py-2">
+          <span className="h-5 w-5 rounded-full" style={{ backgroundColor: brandColor || "#0f766e" }} />
+          <span className="text-sm font-semibold text-ink">{brandColor || "#0f766e"}</span>
+        </div>
       </div>
-
-      <WhatsAppOpsPanel
-        status={whatsappStatus.data}
-        onboarding={whatsappOnboarding.data}
-        runs={automationRuns.data}
-        events={webhookEvents.data}
-      />
     </div>
   );
 }
