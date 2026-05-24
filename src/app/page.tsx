@@ -6,10 +6,15 @@ import {
   CalendarCheck2,
   CheckCircle2,
   ClipboardCheck,
+  CreditCard,
   Headphones,
   MessageSquareText,
+  ReceiptText,
   Route,
-  ShieldCheck
+  ShieldCheck,
+  Sparkles,
+  Star,
+  Zap
 } from "lucide-react";
 import { ConversionSection } from "@/components/Conversion";
 import { FeatureSection } from "@/components/Feature";
@@ -47,6 +52,89 @@ const workflow = [
   }
 ];
 
+const roiSignals = [
+  {
+    title: "Recover one missed booking",
+    body: "A single deep clean, HVAC callout, or repeat customer can cover the monthly platform cost.",
+    icon: CalendarCheck2
+  },
+  {
+    title: "Collect one overdue invoice",
+    body: "Automated reminders and manager actions turn forgotten cash into visible follow-up.",
+    icon: ReceiptText
+  },
+  {
+    title: "Save admin hours every week",
+    body: "Reception, booking, dispatch, reminders, and follow-up move through one operating lane.",
+    icon: Zap
+  }
+];
+
+const pricingPlans = [
+  {
+    name: "Launch",
+    price: "$199",
+    setup: "$300 setup",
+    description: "For owner-led teams replacing calls, notes, and spreadsheets with one workflow.",
+    bestFor: "1-2 crews",
+    features: [
+      "AI receptionist intake",
+      "Bookings, customers, and services",
+      "WhatsApp reminders",
+      "Simple invoices and payment tracking",
+      "Owner dashboard and action queue"
+    ]
+  },
+  {
+    name: "Growth",
+    price: "$349",
+    setup: "$750 setup",
+    description: "For busy service teams that need sales follow-up, dispatch, and cash control.",
+    bestFor: "3-8 crews",
+    highlighted: true,
+    features: [
+      "Everything in Launch",
+      "Lead pipeline and conversion tracking",
+      "Staff dispatch and job readiness",
+      "Collections automation",
+      "Weekly owner digest"
+    ]
+  },
+  {
+    name: "Scale",
+    price: "$499",
+    setup: "Custom setup",
+    description: "For multi-crew teams that want deeper automation and stronger control.",
+    bestFor: "8+ crews",
+    features: [
+      "Everything in Growth",
+      "Advanced WhatsApp templates",
+      "Plan limits and permissions",
+      "Admin support controls",
+      "Priority workflow configuration"
+    ]
+  }
+];
+
+const faqs = [
+  {
+    question: "Do I need to replace WhatsApp?",
+    answer: "No. CrewFlow is designed around WhatsApp-first service businesses. WhatsApp drives reminders, follow-up, invoices, and customer updates."
+  },
+  {
+    question: "Is this a CRM?",
+    answer: "It includes CRM tools, but the product is built as an operations assistant: inquiries, bookings, staff, invoices, collections, and revenue-risk actions."
+  },
+  {
+    question: "Why is there a setup fee?",
+    answer: "The setup covers service configuration, workflow defaults, reminder logic, starter data, and the first operating path so the business does not start from a blank account."
+  },
+  {
+    question: "Which plan should most teams start with?",
+    answer: "Growth is the best fit for most serious service teams because it connects lead capture, dispatch, collections, and weekly owner visibility."
+  }
+];
+
 export default function LandingPage() {
   return (
     <main className="min-h-screen bg-[#f6f8f5] text-ink">
@@ -75,6 +163,7 @@ export default function LandingPage() {
             <a href="#engine" className="transition hover:text-white">Engine</a>
             <a href="#workflow" className="transition hover:text-white">Workflow</a>
             <a href="#operations" className="transition hover:text-white">Operations</a>
+            <a href="#pricing" className="transition hover:text-white">Pricing</a>
             <a href="#setup" className="transition hover:text-white">Setup</a>
           </nav>
           <Link
@@ -108,10 +197,10 @@ export default function LandingPage() {
                 <ArrowRight className="h-4 w-4" />
               </Link>
               <a
-                href="#setup"
+                href="#pricing"
                 className="flex h-12 items-center rounded-[8px] border border-white/24 px-5 font-semibold text-white transition hover:bg-white/10"
               >
-                Configure workspace
+                View pricing
               </a>
             </div>
           </div>
@@ -231,6 +320,73 @@ export default function LandingPage() {
         </div>
       </section>
 
+      <section id="pricing" className="bg-white px-5 py-24 md:px-8">
+        <div className="mx-auto max-w-7xl">
+          <div className="grid gap-8 lg:grid-cols-[0.82fr_1.18fr]">
+            <div className="lg:sticky lg:top-6 lg:self-start">
+              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-pine">Pricing</p>
+              <h2 className="mt-3 text-4xl font-semibold leading-tight md:text-5xl">
+                Priced around recovered revenue, not software seats.
+              </h2>
+              <p className="mt-5 text-lg leading-8 text-steel">
+                CrewFlow is sold as an operating system for cleaning and home-service teams that
+                are losing money to slow replies, missed follow-up, messy dispatch, and unpaid work.
+              </p>
+              <div className="mt-8 grid gap-3">
+                {roiSignals.map((item) => (
+                  <RoiRow key={item.title} {...item} />
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-3">
+              {pricingPlans.map((plan) => (
+                <PricingCard key={plan.name} {...plan} />
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-10 rounded-[8px] border border-ink/8 bg-[#f6f8f5] p-5 md:p-6">
+            <div className="grid gap-6 lg:grid-cols-[1fr_auto] lg:items-center">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-pine">Setup model</p>
+                <h3 className="mt-2 text-2xl font-semibold text-ink">White-glove onboarding for the first workflow.</h3>
+                <p className="mt-2 max-w-3xl leading-7 text-steel">
+                  The first version should be sold with setup because the value is operational dependency:
+                  services configured, staff imported, WhatsApp templates prepared, payment flow connected,
+                  and the first revenue-leak alerts switched on.
+                </p>
+              </div>
+              <a
+                href="#setup"
+                className="flex h-12 items-center justify-center gap-2 rounded-[8px] bg-pine px-5 font-semibold text-white shadow-soft transition hover:bg-ink"
+              >
+                Start setup
+                <ArrowRight className="h-4 w-4" />
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="px-5 py-24 md:px-8">
+        <div className="mx-auto max-w-7xl">
+          <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr]">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-pine">Buying confidence</p>
+              <h2 className="mt-3 text-4xl font-semibold leading-tight md:text-5xl">
+                Clear enough for owners. Serious enough for operators.
+              </h2>
+            </div>
+            <div className="grid gap-3">
+              {faqs.map((item) => (
+                <FaqItem key={item.question} {...item} />
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
       <ConversionSection />
 
       <footer className="border-t border-ink/10 bg-white">
@@ -255,6 +411,7 @@ export default function LandingPage() {
             <div className="mt-4 grid gap-3 text-sm font-medium text-steel">
               <a href="#engine" className="transition hover:text-ink">Money engine</a>
               <a href="#workflow" className="transition hover:text-ink">Workflow</a>
+              <a href="#pricing" className="transition hover:text-ink">Pricing</a>
               <Link href="/app" className="transition hover:text-ink">Operations console</Link>
             </div>
           </div>
@@ -318,6 +475,113 @@ function WorkflowRow({
         <p className="font-semibold text-ink">{title}</p>
         <p className="mt-1 text-sm leading-6 text-steel">{body}</p>
       </div>
+    </div>
+  );
+}
+
+function RoiRow({
+  title,
+  body,
+  icon: Icon
+}: {
+  title: string;
+  body: string;
+  icon: typeof CalendarCheck2;
+}) {
+  return (
+    <div className="flex gap-4 rounded-[8px] border border-ink/8 bg-[#f6f8f5] p-4">
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[8px] bg-white text-pine shadow-soft">
+        <Icon className="h-5 w-5" />
+      </div>
+      <div>
+        <p className="font-semibold text-ink">{title}</p>
+        <p className="mt-1 text-sm leading-6 text-steel">{body}</p>
+      </div>
+    </div>
+  );
+}
+
+function PricingCard({
+  name,
+  price,
+  setup,
+  description,
+  bestFor,
+  features,
+  highlighted
+}: {
+  name: string;
+  price: string;
+  setup: string;
+  description: string;
+  bestFor: string;
+  features: string[];
+  highlighted?: boolean;
+}) {
+  return (
+    <div
+      className={`flex min-h-[560px] flex-col rounded-[8px] border p-5 shadow-soft ${
+        highlighted ? "border-pine bg-ink text-white" : "border-ink/8 bg-white text-ink"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className={`text-sm font-semibold uppercase tracking-[0.18em] ${highlighted ? "text-mint" : "text-pine"}`}>
+            {name}
+          </p>
+          <p className="mt-4 text-4xl font-semibold">
+            {price}
+            <span className={`text-base font-medium ${highlighted ? "text-white/58" : "text-steel"}`}> / mo</span>
+          </p>
+        </div>
+        {highlighted ? (
+          <span className="flex items-center gap-1 rounded-[8px] bg-mint px-3 py-1 text-xs font-semibold text-ink">
+            <Star className="h-3.5 w-3.5" />
+            Best fit
+          </span>
+        ) : null}
+      </div>
+
+      <p className={`mt-4 leading-7 ${highlighted ? "text-white/70" : "text-steel"}`}>{description}</p>
+
+      <div className={`mt-5 grid gap-2 rounded-[8px] p-4 ${highlighted ? "bg-white/8" : "bg-mist"}`}>
+        <div className="flex items-center gap-2">
+          <CreditCard className={`h-4 w-4 ${highlighted ? "text-mint" : "text-pine"}`} />
+          <p className="font-semibold">{setup}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Sparkles className={`h-4 w-4 ${highlighted ? "text-mint" : "text-pine"}`} />
+          <p className={`text-sm font-medium ${highlighted ? "text-white/66" : "text-steel"}`}>Best for {bestFor}</p>
+        </div>
+      </div>
+
+      <div className="mt-5 grid flex-1 gap-3">
+        {features.map((feature) => (
+          <div key={feature} className="flex gap-3">
+            <CheckCircle2 className={`mt-0.5 h-5 w-5 shrink-0 ${highlighted ? "text-mint" : "text-pine"}`} />
+            <p className={`text-sm font-medium leading-6 ${highlighted ? "text-white/74" : "text-steel"}`}>{feature}</p>
+          </div>
+        ))}
+      </div>
+
+      <a
+        href="#setup"
+        className={`mt-6 flex h-11 items-center justify-center gap-2 rounded-[8px] font-semibold transition ${
+          highlighted ? "bg-mint text-ink hover:bg-white" : "bg-pine text-white hover:bg-ink"
+        }`}
+      >
+        Start {name}
+        <ArrowRight className="h-4 w-4" />
+      </a>
+    </div>
+  );
+}
+
+function FaqItem({ question, answer }: { question: string; answer: string }) {
+  return (
+    <div className="rounded-[8px] border border-ink/8 bg-white p-5 shadow-soft">
+      <p className="font-semibold text-ink">{question}</p>
+      <p className="mt-2 leading-7 text-steel">{answer}</p>
     </div>
   );
 }

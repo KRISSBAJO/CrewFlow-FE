@@ -81,11 +81,11 @@ export function ConversionSection() {
         <div className="max-w-xl">
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-mint">Start setup</p>
           <h2 className="mt-3 text-4xl font-semibold leading-tight md:text-5xl">
-            Turn the demo into a configured business.
+            Start with a configured workspace, not a blank account.
           </h2>
           <p className="mt-5 text-lg leading-8 text-white/72">
-            Capture the details needed to configure services, staff, WhatsApp follow-up, invoices,
-            and the first operating workflow.
+            Share the core business details and CrewFlow creates the tenant, starter services,
+            automation defaults, and first revenue-protection workflow.
           </p>
           <div className="mt-8 grid gap-3">
             <SetupSignal icon={MessageSquareText} title="Lead capture" body="Get owner contact and operating pain." />
@@ -98,7 +98,7 @@ export function ConversionSection() {
           <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-sm font-semibold text-pine">Workspace setup</p>
-              <h3 className="text-2xl font-semibold">Create your operations workspace</h3>
+              <h3 className="text-2xl font-semibold">Create your CrewFlow setup profile</h3>
             </div>
             <div className="flex items-center gap-2 rounded-[8px] bg-mist px-3 py-2 text-sm font-semibold text-steel">
               <Clock3 className="h-4 w-4 text-pine" />
