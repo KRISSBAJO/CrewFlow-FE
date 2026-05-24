@@ -52,6 +52,7 @@ import {
   Booking,
   BookingStatus,
   BookingUpdateType,
+  CollectionActionInput,
   Conversation,
   Customer,
   DashboardSummary,
@@ -1902,20 +1903,23 @@ function MoneyView({
   payments?: Payment[];
   onOpen: (state: DrawerState) => void;
 }) {
+  const queryClient = useQueryClient();
+  const collections = useQuery({ queryKey: ["collections"], queryFn: api.collectionSummary });
+  const scanCollections = useMutation({
+    mutationFn: api.scanCollections,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["collections"] });
+      void queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      void queryClient.invalidateQueries({ queryKey: ["actions"] });
+    }
+  });
   const openInvoices = useMemo(
-    () => (invoices ?? []).filter((invoice) => invoice.status !== "PAID"),
-    [invoices]
-  );
-  const overdueTotal = useMemo(
-    () =>
-      (invoices ?? [])
-        .filter((invoice) => invoice.status === "OVERDUE")
-        .reduce((sum, invoice) => sum + invoice.totalCents, 0),
-    [invoices]
+    () => collections.data?.invoices ?? (invoices ?? []).filter((invoice) => !["PAID", "VOID"].includes(invoice.status)),
+    [collections.data?.invoices, invoices]
   );
   const openTotal = useMemo(
-    () => openInvoices.reduce((sum, invoice) => sum + invoice.totalCents, 0),
-    [openInvoices]
+    () => collections.data?.summary.openCents ?? openInvoices.reduce((sum, invoice) => sum + invoice.totalCents, 0),
+    [collections.data?.summary.openCents, openInvoices]
   );
   const paidTotal = useMemo(
     () =>
@@ -1924,47 +1928,92 @@ function MoneyView({
         .reduce((sum, invoice) => sum + invoice.totalCents, 0),
     [invoices]
   );
+  const priorityInvoices = collections.data?.priorityInvoices ?? openInvoices.slice(0, 8);
+  const agingBuckets = collections.data?.agingBuckets ?? [];
+  const overdueTotal = collections.data?.summary.overdueCents ?? 0;
+  const noLinkCount = collections.data?.summary.noPaymentLinkCount ?? openInvoices.filter((invoice) => !invoice.paymentUrl).length;
 
   return (
     <div className="grid gap-4">
-      <div className="grid gap-4 md:grid-cols-3">
-        <Metric icon={CreditCard} label="Open invoices" value={money(openTotal)} tone="amber" />
-        <Metric icon={AlertTriangle} label="Overdue" value={money(overdueTotal)} tone="coral" />
-        <Metric icon={Banknote} label="Paid" value={money(paidTotal)} tone="mint" />
+      <div className="grid gap-4 md:grid-cols-4">
+        <Metric icon={CreditCard} label="Open to collect" value={money(openTotal)} tone="amber" />
+        <Metric icon={AlertTriangle} label="Past due" value={money(overdueTotal)} tone="coral" />
+        <Metric icon={Send} label="Need payment link" value={String(noLinkCount)} tone="pine" />
+        <Metric icon={Banknote} label="Paid total" value={money(collections.data?.summary.paidLast30Cents ?? paidTotal)} tone="mint" />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
-      <Panel title="Invoices" icon={CreditCard}>
-        <div className="grid gap-3">
-          {openInvoices.map((invoice) => (
-            <Row key={invoice.id} onClick={() => onOpen({ type: "invoice", item: invoice })}>
-              <div className="flex-1">
-                <p className="font-semibold text-ink">{invoice.invoiceNo}</p>
-                <p className="text-sm text-steel">{invoice.customer.name} · due {shortDate(invoice.dueDate)}</p>
-              </div>
-              <p className="font-semibold text-ink">{money(invoice.totalCents)}</p>
-              <Status label={invoice.status} />
-            </Row>
+      <Panel title="Collections command center" icon={DollarSign}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-ink">Cash recovery queue</p>
+            <p className="text-sm text-steel">
+              Prioritized by overdue age, missing payment links, invoice value, and payment attempts.
+            </p>
+          </div>
+          <button
+            onClick={() => scanCollections.mutate()}
+            disabled={scanCollections.isPending}
+            className="flex h-10 items-center justify-center gap-2 rounded-[8px] bg-mist px-4 text-sm font-semibold text-ink disabled:opacity-50"
+          >
+            {scanCollections.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            Scan overdue
+          </button>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-4">
+          {agingBuckets.map((bucket) => (
+            <div key={bucket.key} className="rounded-[8px] bg-mist p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-steel">{bucket.label}</p>
+              <p className="mt-2 text-2xl font-semibold text-ink">{money(bucket.totalCents)}</p>
+              <p className="mt-1 text-sm text-steel">{bucket.count} invoices</p>
+            </div>
           ))}
-          <Empty show={!openInvoices.length} label="No open invoices" />
+          <Empty show={!agingBuckets.length && !collections.isLoading} label="No aging data yet" />
         </div>
       </Panel>
-      <Panel title="Payments" icon={Banknote}>
-        <div className="grid gap-3">
-          {(payments ?? []).slice(0, 8).map((payment) => (
-            <Row key={payment.id}>
-              <div className="flex-1">
-                <p className="font-semibold text-ink">{payment.invoice.invoiceNo}</p>
-                <p className="text-sm text-steel">{payment.provider}</p>
-              </div>
-              <p className="font-semibold text-ink">{money(payment.amountCents)}</p>
-              <Status label={payment.status} />
-            </Row>
-          ))}
-          <Empty show={!payments?.length} label="No payments yet" />
-        </div>
-      </Panel>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(340px,0.75fr)]">
+        <Panel title="Priority invoices" icon={CreditCard}>
+          <div className="grid gap-3">
+            {priorityInvoices.map((invoice) => (
+              <Row key={invoice.id} onClick={() => onOpen({ type: "invoice", item: invoice })}>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold text-ink">{invoice.invoiceNo}</p>
+                    <Status label={invoice.status} />
+                    {invoice.hasPaymentLink || invoice.paymentUrl ? (
+                      <span className="rounded-full bg-mint/20 px-2 py-1 text-xs font-semibold text-pine">link ready</span>
+                    ) : (
+                      <span className="rounded-full bg-amber/20 px-2 py-1 text-xs font-semibold text-ink">no link</span>
+                    )}
+                  </div>
+                  <p className="truncate text-sm text-steel">
+                    {invoice.customer.name} · due {shortDate(invoice.dueDate)} · risk {invoice.collectionRisk ?? 0}
+                  </p>
+                </div>
+                <p className="font-semibold text-ink">{money(invoice.totalCents)}</p>
+              </Row>
+            ))}
+            <Empty show={!priorityInvoices.length} label="No collection risk right now" />
+          </div>
+        </Panel>
+        <Panel title="Payment timeline" icon={Banknote}>
+          <div className="grid gap-3">
+            {(payments ?? []).slice(0, 8).map((payment) => (
+              <Row key={payment.id}>
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-ink">{payment.invoice.invoiceNo}</p>
+                  <p className="text-sm text-steel">{payment.provider}</p>
+                </div>
+                <p className="font-semibold text-ink">{money(payment.amountCents)}</p>
+                <Status label={payment.status} />
+              </Row>
+            ))}
+            <Empty show={!payments?.length} label="No payments yet" />
+          </div>
+        </Panel>
       </div>
+      {collections.error ? <ErrorText error={collections.error} /> : null}
+      {scanCollections.error ? <ErrorText error={scanCollections.error} /> : null}
     </div>
   );
 }
@@ -4029,10 +4078,24 @@ function parseCustomerCsv(value: string) {
 function InvoiceDetail({ item }: { item: Invoice }) {
   const queryClient = useQueryClient();
   const [current, setCurrent] = useState(item);
+  const [collectionNote, setCollectionNote] = useState("");
+  const [promiseDate, setPromiseDate] = useState("");
+  const collectionTimeline = useQuery({
+    queryKey: ["collection-timeline", current.id],
+    queryFn: () => api.collectionTimeline(current.id)
+  });
   const paymentLink = useMutation({
     mutationFn: () => api.createPaymentLink(current.id),
     onSuccess: (result) => {
       setCurrent(result.invoice);
+      void queryClient.invalidateQueries();
+    }
+  });
+  const collectionAction = useMutation({
+    mutationFn: (input: CollectionActionInput) => api.runCollectionAction(current.id, input),
+    onSuccess: (result) => {
+      setCurrent(result.invoice);
+      setCollectionNote("");
       void queryClient.invalidateQueries();
     }
   });
@@ -4072,6 +4135,70 @@ function InvoiceDetail({ item }: { item: Invoice }) {
           ))}
         </DetailCard>
       ) : null}
+
+      <DetailCard icon={DollarSign} title="Collection controls">
+        <div className="grid gap-3">
+          <textarea
+            value={collectionNote}
+            onChange={(event) => setCollectionNote(event.target.value)}
+            rows={3}
+            placeholder="Optional note for the customer or internal collection context"
+            className="min-h-[90px] rounded-[8px] border border-black/10 bg-white p-3 text-sm outline-none focus:border-pine"
+          />
+          <div className="grid gap-2 sm:grid-cols-2">
+            <button
+              onClick={() =>
+                collectionAction.mutate({
+                  type: "SEND_PAYMENT_LINK",
+                  provider: "WHATSAPP",
+                  note: collectionNote || undefined
+                })
+              }
+              disabled={collectionAction.isPending || current.status === "PAID" || current.status === "VOID"}
+              className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {collectionAction.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              Send pay link
+            </button>
+            <button
+              onClick={() =>
+                collectionAction.mutate({
+                  type: "SEND_REMINDER",
+                  provider: "WHATSAPP",
+                  note: collectionNote || undefined
+                })
+              }
+              disabled={collectionAction.isPending || current.status === "PAID" || current.status === "VOID"}
+              className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-amber px-3 text-sm font-semibold text-ink disabled:opacity-50"
+            >
+              <MessageSquareText className="h-4 w-4" />
+              Send reminder
+            </button>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+            <input
+              type="datetime-local"
+              value={promiseDate}
+              onChange={(event) => setPromiseDate(event.target.value)}
+              className="h-11 rounded-[8px] border border-black/10 bg-white px-3 text-sm outline-none focus:border-pine"
+            />
+            <button
+              onClick={() =>
+                collectionAction.mutate({
+                  type: "PROMISE_TO_PAY",
+                  promiseDate: promiseDate ? new Date(promiseDate).toISOString() : undefined,
+                  note: collectionNote || undefined
+                })
+              }
+              disabled={collectionAction.isPending || !promiseDate}
+              className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink disabled:opacity-50"
+            >
+              <Clock3 className="h-4 w-4" />
+              Promise to pay
+            </button>
+          </div>
+        </div>
+      </DetailCard>
 
       <button
         onClick={() => paymentLink.mutate()}
@@ -4127,6 +4254,31 @@ function InvoiceDetail({ item }: { item: Invoice }) {
       ) : null}
       {paymentLink.error ? <ErrorText error={paymentLink.error} /> : null}
       {updateStatus.error ? <ErrorText error={updateStatus.error} /> : null}
+      {collectionAction.error ? <ErrorText error={collectionAction.error} /> : null}
+
+      <DetailCard icon={FileText} title="Payment communication timeline">
+        <div className="grid gap-3">
+          {collectionTimeline.isLoading ? (
+            <div className="flex items-center gap-2 text-sm text-steel">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading timeline
+            </div>
+          ) : null}
+          {(collectionTimeline.data?.events ?? []).map((event) => (
+            <div key={`${event.type}-${event.id}`} className="rounded-[8px] bg-white p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="font-semibold text-ink">{event.label}</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-steel">{shortDate(event.createdAt)}</p>
+              </div>
+              <p className="mt-2 line-clamp-3 text-sm leading-6 text-steel">{event.detail}</p>
+            </div>
+          ))}
+          <Empty
+            show={!collectionTimeline.isLoading && !collectionTimeline.data?.events.length}
+            label="No collection activity yet"
+          />
+        </div>
+      </DetailCard>
     </div>
   );
 }

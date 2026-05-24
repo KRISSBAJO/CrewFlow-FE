@@ -295,6 +295,18 @@ export const api = {
       body: JSON.stringify({ provider: "MOCK" })
     }),
   payments: () => request<Payment[]>("/payments"),
+  collectionSummary: () => request<CollectionSummary>("/collections/summary"),
+  collectionTimeline: (invoiceId: string) =>
+    request<CollectionTimeline>(`/collections/invoices/${invoiceId}/timeline`),
+  runCollectionAction: (invoiceId: string, input: CollectionActionInput) =>
+    request<CollectionActionResult>(`/collections/invoices/${invoiceId}/action`, {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
+  scanCollections: () =>
+    request<{ scannedAt: string; overdueMarked: number }>("/collections/scan", {
+      method: "POST"
+    }),
   retention: () => request<RetentionSummary>("/retention"),
   scanRetention: () =>
     request<{ scannedAt: string; repeatCandidates: number; winBackCandidates: number; actionsCreatedOrUpdated: number }>(
@@ -1390,6 +1402,12 @@ export type Invoice = {
   }>;
   paymentUrl?: string | null;
   paymentProvider?: string | null;
+  daysPastDue?: number;
+  agingBucket?: string;
+  hasPaymentLink?: boolean;
+  latestPaymentStatus?: string | null;
+  pendingPaymentAttempts?: number;
+  collectionRisk?: number;
 };
 
 export type Payment = {
@@ -1408,6 +1426,56 @@ export type MessageLog = {
   provider: string;
   createdAt: string;
   customer?: Customer | null;
+};
+
+export type CollectionSummary = {
+  generatedAt: string;
+  summary: {
+    openCents: number;
+    overdueCents: number;
+    paidLast30Cents: number;
+    openCount: number;
+    overdueCount: number;
+    noPaymentLinkCount: number;
+    highRiskCount: number;
+  };
+  agingBuckets: Array<{
+    key: string;
+    label: string;
+    count: number;
+    totalCents: number;
+  }>;
+  priorityInvoices: Invoice[];
+  invoices: Invoice[];
+};
+
+export type CollectionTimelineEvent = {
+  id: string;
+  type: "payment" | "message" | "audit";
+  label: string;
+  detail: string;
+  createdAt: string;
+  actor?: { id: string; name?: string | null; email: string; role: string } | null;
+};
+
+export type CollectionTimeline = {
+  invoice: Invoice;
+  events: CollectionTimelineEvent[];
+};
+
+export type CollectionActionInput = {
+  type: "SEND_PAYMENT_LINK" | "SEND_REMINDER" | "MARK_PAID" | "VOID_INVOICE" | "PROMISE_TO_PAY";
+  provider?: "WHATSAPP" | "SMS" | "WEB_CHAT";
+  note?: string;
+  promiseDate?: string;
+};
+
+export type CollectionActionResult = {
+  action: CollectionActionInput["type"];
+  invoice: Invoice;
+  payment?: Payment | null;
+  message?: MessageLog;
+  timeline?: CollectionTimeline;
 };
 
 export type WhatsappStatus = {

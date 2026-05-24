@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, CheckCircle2, CreditCard, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, CreditCard, Loader2, RefreshCw } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn, money, shortDate } from "@/lib/utils";
 
@@ -90,6 +90,14 @@ export default function PublicInvoicePage() {
                 <p className="mt-2 text-sm leading-6 text-steel">
                   {paid ? "This invoice is marked paid." : "Use the checkout link to complete payment securely."}
                 </p>
+                <button
+                  onClick={() => void invoice.refetch()}
+                  disabled={invoice.isFetching}
+                  className="mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-[8px] bg-mist px-4 text-sm font-semibold text-ink disabled:opacity-50"
+                >
+                  {invoice.isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  Refresh status
+                </button>
                 {paid ? (
                   <div className="mt-5 flex items-center gap-2 rounded-[8px] bg-mint/20 p-3 text-sm font-semibold text-pine">
                     <CheckCircle2 className="h-4 w-4" />
