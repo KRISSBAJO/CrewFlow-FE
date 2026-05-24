@@ -1476,6 +1476,7 @@ function CustomersView({ items, onOpen }: { items?: Customer[]; onOpen: (state: 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("");
   const [notes, setNotes] = useState("");
   const [csv, setCsv] = useState("name,phone,email,notes\nAva Carter,+15550102020,ava@example.com,Prefers WhatsApp");
   const [whatsappText, setWhatsappText] = useState(
@@ -1501,14 +1502,15 @@ function CustomersView({ items, onOpen }: { items?: Customer[]; onOpen: (state: 
     setName(customer?.name ?? "");
     setPhone(customer?.phone ?? "");
     setEmail(customer?.email ?? "");
+    setAvatarUrl(customer?.avatarUrl ?? "");
     setNotes(customer?.notes ?? "");
   }
 
   const save = useMutation({
     mutationFn: () =>
       editing
-        ? api.updateCustomer(editing.id, { name, phone, email, notes })
-        : api.createCustomer({ name, phone, email, notes }),
+        ? api.updateCustomer(editing.id, { name, phone, email, avatarUrl, notes })
+        : api.createCustomer({ name, phone, email, avatarUrl, notes }),
     onSuccess: () => {
       reset();
       void queryClient.invalidateQueries({ queryKey: ["customers"] });
@@ -1583,7 +1585,7 @@ function CustomersView({ items, onOpen }: { items?: Customer[]; onOpen: (state: 
         <div className="grid gap-3">
           {filtered.map((customer) => (
             <Row key={customer.id} onClick={() => onOpen({ type: "customer", item: customer })}>
-              <Avatar name={customer.name} />
+              <Avatar name={customer.name} imageUrl={customer.avatarUrl} />
               <div className="min-w-0 flex-1">
                 <p className="truncate font-semibold text-ink">{customer.name}</p>
                 <p className="truncate text-sm text-steel">
@@ -1611,6 +1613,7 @@ function CustomersView({ items, onOpen }: { items?: Customer[]; onOpen: (state: 
             <InputField label="Name" value={name} onChange={setName} />
             <InputField label="Phone" value={phone} onChange={setPhone} />
             <InputField label="Email" value={email} onChange={setEmail} />
+            <MediaUploadField label="Customer photo" value={avatarUrl} onChange={setAvatarUrl} folder="customers" />
           </div>
           <label className="mt-3 block">
             <span className="mb-2 block text-sm font-medium text-ink">Notes</span>
@@ -2405,6 +2408,8 @@ function SettingsForm({
   const queryClient = useQueryClient();
   const [businessName, setBusinessName] = useState(tenant.businessName);
   const [industry, setIndustry] = useState(tenant.industry);
+  const [logoUrl, setLogoUrl] = useState(tenant.logoUrl ?? "");
+  const [coverImageUrl, setCoverImageUrl] = useState(tenant.coverImageUrl ?? "");
   const [serviceArea, setServiceArea] = useState(tenant.receptionistConfig?.serviceArea ?? "");
   const [whatsappNumber, setWhatsappNumber] = useState(onboarding?.whatsappNumber ?? "");
   const [staffCount, setStaffCount] = useState(onboarding?.staffCount ?? "");
@@ -2449,6 +2454,8 @@ function SettingsForm({
       api.updateTenant({
         businessName,
         industry,
+        logoUrl,
+        coverImageUrl,
         serviceArea,
         whatsappNumber,
         staffCount,
@@ -2494,9 +2501,24 @@ function SettingsForm({
         <PortalLinkPanel tenant={tenant} />
 
         <Panel title="Tenant settings" icon={Settings2}>
+        {coverImageUrl ? (
+          <div className="relative mb-4 h-36 overflow-hidden rounded-[8px] bg-mist">
+            <Image src={coverImageUrl} alt="" fill sizes="(min-width: 1024px) 50vw, 100vw" className="object-cover" />
+            <div className="absolute inset-0 bg-ink/18" />
+            <div className="absolute bottom-3 left-3 flex items-center gap-3">
+              <Avatar name={businessName} imageUrl={logoUrl} size="lg" />
+              <div className="text-white">
+                <p className="font-semibold">{businessName}</p>
+                <p className="text-sm text-white/78">{industry}</p>
+              </div>
+            </div>
+          </div>
+        ) : null}
         <div className="grid gap-4 md:grid-cols-2">
           <InputField label="Business name" value={businessName} onChange={setBusinessName} />
           <InputField label="Industry" value={industry} onChange={setIndustry} />
+          <MediaUploadField label="Business logo" value={logoUrl} onChange={setLogoUrl} folder="tenants/logos" />
+          <MediaUploadField label="Cover image" value={coverImageUrl} onChange={setCoverImageUrl} folder="tenants/covers" />
           <InputField label="Service area" value={serviceArea} onChange={setServiceArea} />
           <InputField label="WhatsApp number" value={whatsappNumber} onChange={setWhatsappNumber} />
           <InputField label="Staff plan" value={staffCount} onChange={setStaffCount} />
@@ -2937,6 +2959,7 @@ function ServiceManager({ services }: { services: Service[] }) {
   const [editing, setEditing] = useState<Service | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
   const [durationMinutes, setDurationMinutes] = useState("120");
   const [price, setPrice] = useState("199");
 
@@ -2944,6 +2967,7 @@ function ServiceManager({ services }: { services: Service[] }) {
     setEditing(service ?? null);
     setTitle(service?.title ?? "");
     setDescription(service?.description ?? "");
+    setImageUrl(service?.imageUrl ?? "");
     setDurationMinutes(String(service?.durationMinutes ?? 120));
     setPrice(service ? String(service.priceCents / 100) : "199");
   }
@@ -2953,6 +2977,7 @@ function ServiceManager({ services }: { services: Service[] }) {
       const input = {
         title,
         description,
+        imageUrl,
         durationMinutes: Number(durationMinutes),
         price: Number(price)
       };
@@ -2979,6 +3004,15 @@ function ServiceManager({ services }: { services: Service[] }) {
       <div className="grid gap-3">
         {services.map((service) => (
           <Row key={service.id}>
+            <div className="relative h-12 w-14 shrink-0 overflow-hidden rounded-[8px] bg-white">
+              {service.imageUrl ? (
+                <Image src={service.imageUrl} alt="" fill sizes="56px" className="object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-pine">
+                  <Wrench className="h-5 w-5" />
+                </div>
+              )}
+            </div>
             <div className="min-w-0 flex-1">
               <p className="truncate font-semibold text-ink">{service.title}</p>
               <p className="truncate text-sm text-steel">
@@ -3010,6 +3044,7 @@ function ServiceManager({ services }: { services: Service[] }) {
           <InputField label="Price" value={price} onChange={setPrice} />
           <InputField label="Duration minutes" value={durationMinutes} onChange={setDurationMinutes} />
           <InputField label="Description" value={description} onChange={setDescription} />
+          <MediaUploadField label="Service image" value={imageUrl} onChange={setImageUrl} folder="services" />
         </div>
         {save.error ? <ErrorText error={save.error} /> : null}
         <div className="mt-3 flex gap-2">
@@ -3041,6 +3076,7 @@ function StaffManager({ staff }: { staff: StaffMember[] }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("");
   const [role, setRole] = useState<"OWNER" | "MANAGER" | "STAFF">("STAFF");
   const [password, setPassword] = useState("Password123!");
 
@@ -3049,6 +3085,7 @@ function StaffManager({ staff }: { staff: StaffMember[] }) {
     setName(member?.name ?? "");
     setEmail(member?.email ?? "");
     setPhone(member?.phone ?? "");
+    setAvatarUrl(member?.avatarUrl ?? "");
     setRole(member?.role === "OWNER" || member?.role === "MANAGER" || member?.role === "STAFF" ? member.role : "STAFF");
     setPassword("Password123!");
   }
@@ -3056,8 +3093,8 @@ function StaffManager({ staff }: { staff: StaffMember[] }) {
   const save = useMutation({
     mutationFn: () =>
       editing
-        ? api.updateStaff(editing.id, { name, email, phone, role })
-        : api.createStaff({ name, email, phone, role, password }),
+        ? api.updateStaff(editing.id, { name, email, phone, avatarUrl, role })
+        : api.createStaff({ name, email, phone, avatarUrl, role, password }),
     onSuccess: () => {
       reset();
       void queryClient.invalidateQueries({ queryKey: ["staff"] });
@@ -3079,7 +3116,7 @@ function StaffManager({ staff }: { staff: StaffMember[] }) {
       <div className="grid gap-3">
         {staff.map((member) => (
           <Row key={member.id}>
-            <Avatar name={member.name} />
+            <Avatar name={member.name} imageUrl={member.avatarUrl} />
             <div className="min-w-0 flex-1">
               <p className="truncate font-semibold text-ink">{member.name}</p>
               <p className="truncate text-sm text-steel">{member.email}</p>
@@ -3109,6 +3146,7 @@ function StaffManager({ staff }: { staff: StaffMember[] }) {
           <InputField label="Name" value={name} onChange={setName} />
           <InputField label="Email" value={email} onChange={setEmail} />
           <InputField label="Phone" value={phone} onChange={setPhone} />
+          <MediaUploadField label="Staff photo" value={avatarUrl} onChange={setAvatarUrl} folder="staff" />
           <label className="block">
             <span className="mb-2 block text-sm font-medium text-ink">Role</span>
             <select
@@ -3361,11 +3399,75 @@ function Row({ children, onClick }: { children: React.ReactNode; onClick?: () =>
   );
 }
 
-function Avatar({ name }: { name?: string | null }) {
+function Avatar({
+  name,
+  imageUrl,
+  size = "md"
+}: {
+  name?: string | null;
+  imageUrl?: string | null;
+  size?: "md" | "lg";
+}) {
+  const className = size === "lg" ? "h-14 w-14 text-base" : "h-10 w-10 text-sm";
   return (
-    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] bg-ink text-sm font-bold text-white">
-      {initials(name)}
+    <div className={cn("relative flex shrink-0 items-center justify-center overflow-hidden rounded-[8px] bg-ink font-bold text-white", className)}>
+      {imageUrl ? <Image src={imageUrl} alt="" fill sizes={size === "lg" ? "56px" : "40px"} className="object-cover" /> : initials(name)}
     </div>
+  );
+}
+
+function MediaUploadField({
+  label,
+  value,
+  onChange,
+  folder
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  folder: string;
+}) {
+  const [isUploading, setIsUploading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function upload(file?: File) {
+    if (!file) return;
+    setError("");
+    setIsUploading(true);
+    try {
+      onChange(await uploadMedia(file, folder));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to upload image");
+    } finally {
+      setIsUploading(false);
+    }
+  }
+
+  return (
+    <label className="block">
+      <span className="mb-2 block text-sm font-medium text-ink">{label}</span>
+      <div className="grid gap-2 rounded-[8px] border border-ink/10 bg-white p-2">
+        {value ? (
+          <div className="relative h-24 overflow-hidden rounded-[8px] bg-mist">
+            <Image src={value} alt="" fill sizes="280px" className="object-cover" />
+          </div>
+        ) : null}
+        <input
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder="Paste image URL or upload"
+          className="h-10 w-full rounded-[8px] bg-mist px-3 text-sm outline-none focus:ring-2 focus:ring-pine/30"
+        />
+        <input
+          type="file"
+          accept="image/*"
+          onChange={(event) => void upload(event.target.files?.[0])}
+          className="text-sm text-steel file:mr-3 file:rounded-[8px] file:border-0 file:bg-pine file:px-3 file:py-2 file:font-semibold file:text-white"
+        />
+        {isUploading ? <p className="text-sm font-semibold text-pine">Uploading...</p> : null}
+        {error ? <p className="text-sm font-semibold text-coral">{error}</p> : null}
+      </div>
+    </label>
   );
 }
 
@@ -4413,8 +4515,8 @@ function parseCustomerCsv(value: string) {
 
   return rows
     .map((line) => {
-      const [name = "", phone = "", email = "", notes = ""] = parseCsvLine(line);
-      return { name, phone, email, notes };
+      const [name = "", phone = "", email = "", notes = "", avatarUrl = ""] = parseCsvLine(line);
+      return { name, phone, email, notes, avatarUrl };
     })
     .filter((row) => row.name && row.phone);
 }
@@ -4480,18 +4582,49 @@ function normalizeCustomerImportRow(row: Record<string, unknown>) {
     name: normalized.name || normalized.customer || normalized.customer_name || normalized.full_name || "",
     phone: normalized.phone || normalized.mobile || normalized.whatsapp || normalized.phone_number || "",
     email: normalized.email || normalized.email_address || "",
-    notes: normalized.notes || normalized.note || normalized.address || normalized.last_service_date || ""
+    notes: normalized.notes || normalized.note || normalized.address || normalized.last_service_date || "",
+    avatarUrl: normalized.avatar_url || normalized.image_url || normalized.photo_url || normalized.profile_image || ""
   };
 }
 
 function toCustomerCsv(rows: CustomerInput[]) {
-  const header = "name,phone,email,notes";
-  const body = rows.map((row) => [row.name, row.phone, row.email ?? "", row.notes ?? ""].map(escapeCsvCell).join(","));
+  const header = "name,phone,email,notes,avatarUrl";
+  const body = rows.map((row) =>
+    [row.name, row.phone, row.email ?? "", row.notes ?? "", row.avatarUrl ?? ""].map(escapeCsvCell).join(",")
+  );
   return [header, ...body].join("\n");
 }
 
 function escapeCsvCell(value: string) {
   return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
+async function uploadMedia(file: File, folder: string) {
+  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+  const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+  const baseFolder = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_FOLDER ?? "crewflow";
+
+  if (!cloudName || !uploadPreset) {
+    throw new Error("Cloudinary upload env is not configured");
+  }
+
+  const form = new FormData();
+  form.append("file", file);
+  form.append("upload_preset", uploadPreset);
+  form.append("folder", `${baseFolder}/${folder}`.replace(/\/+/g, "/"));
+
+  const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+    method: "POST",
+    body: form
+  });
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+
+  const payload = (await response.json()) as { secure_url?: string };
+  if (!payload.secure_url) throw new Error("Cloudinary did not return an image URL");
+  return payload.secure_url;
 }
 
 function InvoiceDetail({ item }: { item: Invoice }) {

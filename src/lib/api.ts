@@ -575,6 +575,8 @@ export type TenantProfile = {
   businessName: string;
   slug: string;
   industry: string;
+  logoUrl?: string | null;
+  coverImageUrl?: string | null;
   subscriptionPlan: string;
   subscriptionStatus?: "TRIALING" | "ACTIVE" | "PAST_DUE" | "CANCELED" | "UNPAID";
   billingEmail?: string | null;
@@ -662,6 +664,8 @@ export type OnboardingProfile = {
 export type UpdateTenantInput = {
   businessName?: string;
   industry?: string;
+  logoUrl?: string;
+  coverImageUrl?: string;
   whatsappNumber?: string;
   serviceArea?: string;
   businessHours?: Record<string, string>;
@@ -674,6 +678,7 @@ export type UpdateTenantInput = {
 export type ServiceInput = {
   title: string;
   description?: string;
+  imageUrl?: string;
   durationMinutes: number;
   price: number;
 };
@@ -683,6 +688,7 @@ export type StaffInput = {
   email: string;
   password: string;
   phone?: string;
+  avatarUrl?: string;
   role: "OWNER" | "MANAGER" | "STAFF";
 };
 
@@ -690,6 +696,7 @@ export type CustomerInput = {
   name: string;
   phone: string;
   email?: string;
+  avatarUrl?: string;
   notes?: string;
 };
 
@@ -979,6 +986,7 @@ export type Customer = {
   name: string;
   phone: string;
   email?: string | null;
+  avatarUrl?: string | null;
   notes?: string | null;
   updatedAt?: string;
 };
@@ -1094,6 +1102,7 @@ export type StaffMember = {
   email: string;
   role: "PLATFORM_ADMIN" | "PLATFORM_SUPPORT" | "OWNER" | "MANAGER" | "STAFF";
   phone?: string | null;
+  avatarUrl?: string | null;
   active?: boolean;
 };
 
@@ -1427,6 +1436,7 @@ export type Service = {
   id: string;
   title: string;
   description?: string | null;
+  imageUrl?: string | null;
   priceCents: number;
   durationMinutes: number;
   active?: boolean;
