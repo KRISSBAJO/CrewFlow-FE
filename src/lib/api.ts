@@ -244,6 +244,13 @@ export const api = {
       body: JSON.stringify(input)
     }),
   fieldJobs: () => request<Booking[]>("/field/jobs"),
+  fieldDispatch: (date?: string) =>
+    request<FieldDispatchBoard>(date ? `/field/dispatch?date=${encodeURIComponent(date)}` : "/field/dispatch"),
+  assignFieldJob: (bookingId: string, input: { staffId: string; dispatchNote?: string }) =>
+    request<{ booking: Booking; readiness: FieldDispatchJob }>(`/field/jobs/${bookingId}/assign`, {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
   startFieldJob: (bookingId: string) =>
     request<Booking>(`/field/jobs/${bookingId}/start`, { method: "POST" }),
   saveFieldNotes: (
@@ -1208,6 +1215,35 @@ export type Booking = {
   assignedStaff?: { id: string; name: string } | null;
   invoice?: Invoice | null;
   fieldJobReport?: FieldJobReport | null;
+};
+
+export type FieldDispatchJob = Booking & {
+  readiness: {
+    ready: boolean;
+    assigned: boolean;
+    confirmed: boolean;
+    hasCustomerPhone: boolean;
+    hasServiceWindow: boolean;
+    reportStarted: boolean;
+    completed: boolean;
+    blockers: string[];
+    score: number;
+  };
+};
+
+export type FieldDispatchBoard = {
+  date: string;
+  summary: {
+    totalJobs: number;
+    unassigned: number;
+    needsConfirmation: number;
+    ready: number;
+    inProgress: number;
+    completed: number;
+  };
+  jobs: FieldDispatchJob[];
+  staffLoad: Array<StaffMember & { jobs: number; minutes: number; nextJob?: Booking | null }>;
+  openDispatchActions: OperationalAction[];
 };
 
 export type FieldJobReport = {

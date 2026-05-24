@@ -54,6 +54,7 @@ import {
   Conversation,
   Customer,
   DashboardSummary,
+  FieldDispatchJob,
   Invoice,
   InvoiceStatus,
   Lead,
@@ -1659,6 +1660,16 @@ function handleActivationTarget(
 
 function FieldView({ items, onOpen }: { items?: Booking[]; onOpen: (state: DrawerState) => void }) {
   const queryClient = useQueryClient();
+  const today = new Date().toISOString().slice(0, 10);
+  const [date, setDate] = useState(today);
+  const [assigning, setAssigning] = useState<FieldDispatchJob | null>(null);
+  const [staffId, setStaffId] = useState("");
+  const [dispatchNote, setDispatchNote] = useState("");
+  const dispatch = useQuery({
+    queryKey: ["field-dispatch", date],
+    queryFn: () => api.fieldDispatch(date)
+  });
+  const jobs = dispatch.data?.jobs ?? items ?? [];
   const complete = useMutation({
     mutationFn: (bookingId: string) =>
       api.completeFieldJob(bookingId, {
@@ -1675,23 +1686,90 @@ function FieldView({ items, onOpen }: { items?: Booking[]; onOpen: (state: Drawe
       void queryClient.invalidateQueries();
     }
   });
+  const assign = useMutation({
+    mutationFn: () => {
+      if (!assigning || !staffId) throw new Error("Choose a crew member");
+      return api.assignFieldJob(assigning.id, { staffId, dispatchNote: dispatchNote || undefined });
+    },
+    onSuccess: () => {
+      setAssigning(null);
+      setStaffId("");
+      setDispatchNote("");
+      void queryClient.invalidateQueries();
+    }
+  });
 
   return (
-    <Panel title="Field jobs" icon={Route}>
-      <div className="grid gap-3">
-        {(items ?? []).map((item) => (
+    <div className="grid gap-4">
+      <Panel title="Dispatch readiness" icon={Route}>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            <MiniStat label="Jobs" value={dispatch.data?.summary.totalJobs ?? jobs.length} />
+            <MiniStat label="Ready" value={dispatch.data?.summary.ready ?? 0} />
+            <MiniStat label="Unassigned" value={dispatch.data?.summary.unassigned ?? 0} danger={(dispatch.data?.summary.unassigned ?? 0) > 0} />
+            <MiniStat label="Confirm" value={dispatch.data?.summary.needsConfirmation ?? 0} danger={(dispatch.data?.summary.needsConfirmation ?? 0) > 0} />
+            <MiniStat label="Active" value={dispatch.data?.summary.inProgress ?? 0} />
+            <MiniStat label="Done" value={dispatch.data?.summary.completed ?? 0} />
+          </div>
+          <input
+            type="date"
+            value={date}
+            onChange={(event) => setDate(event.target.value)}
+            className="h-11 rounded-[8px] border border-ink/10 bg-mist px-3 text-sm font-semibold outline-none focus:border-pine"
+          />
+        </div>
+
+        <div className="mt-4 grid gap-3 lg:grid-cols-3">
+          {(dispatch.data?.staffLoad ?? []).map((member) => (
+            <div key={member.id} className="rounded-[8px] bg-mist p-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="truncate font-semibold text-ink">{member.name}</p>
+                <Status label={`${member.jobs} jobs`} />
+              </div>
+              <p className="mt-1 text-sm text-steel">{Math.round(member.minutes / 60)}h scheduled</p>
+              <p className="mt-2 truncate text-sm font-medium text-steel">
+                {member.nextJob ? `Next: ${member.nextJob.service.title}` : "No active job"}
+              </p>
+            </div>
+          ))}
+        </div>
+      </Panel>
+
+      <Panel title="Route and job readiness" icon={Wrench}>
+        <div className="grid gap-3">
+        {jobs.map((item) => {
+          const dispatchJob = asDispatchJob(item);
+          return (
           <Row key={item.id} onClick={() => onOpen({ type: "field-job", item })}>
-            <div className="flex h-10 w-10 items-center justify-center rounded-[8px] bg-mist text-pine">
+            <div className={cn("flex h-10 w-10 items-center justify-center rounded-[8px]", dispatchJob?.readiness.ready ? "bg-mint/20 text-pine" : "bg-amber/20 text-ink")}>
               <Wrench className="h-5 w-5" />
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate font-semibold text-ink">{item.service.title}</p>
               <p className="truncate text-sm text-steel">
-                {item.customer.name} · {shortDate(item.startTime)}
+                {item.customer.name} · {shortDate(item.startTime)} · {item.assignedStaff?.name ?? "Unassigned"}
               </p>
+              {dispatchJob?.readiness.blockers.length ? (
+                <p className="mt-1 truncate text-xs font-semibold text-coral">
+                  {dispatchJob.readiness.blockers.join(" · ")}
+                </p>
+              ) : null}
             </div>
+            {dispatchJob ? <Status label={`${dispatchJob.readiness.score}% ready`} /> : null}
             <Status label={item.status} />
             {item.fieldJobReport?.status ? <Status label={item.fieldJobReport.status} /> : null}
+            {!item.assignedStaff ? (
+              <button
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setAssigning(dispatchJob ?? null);
+                }}
+                className="flex h-9 items-center gap-2 rounded-[8px] bg-ink px-3 text-sm font-semibold text-white"
+              >
+                <UserCheck className="h-4 w-4" />
+                Assign
+              </button>
+            ) : null}
             {item.status !== "COMPLETED" ? (
               <button
                 onClick={(event) => {
@@ -1705,11 +1783,46 @@ function FieldView({ items, onOpen }: { items?: Booking[]; onOpen: (state: Drawe
               </button>
             ) : null}
           </Row>
-        ))}
-        <Empty show={!items?.length} label="No field jobs today" />
+          );
+        })}
+        <Empty show={!jobs.length && !dispatch.isLoading} label="No field jobs today" />
+        {dispatch.isLoading ? <p className="text-sm font-semibold text-steel">Loading dispatch board...</p> : null}
       </div>
-    </Panel>
+      </Panel>
+
+      {assigning ? (
+        <Panel title="Assign crew" icon={UserCheck}>
+          <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
+            <SelectField label="Crew" value={staffId} onChange={setStaffId}>
+              <option value="">Choose crew</option>
+              {(dispatch.data?.staffLoad ?? []).map((member) => (
+                <option key={member.id} value={member.id}>
+                  {member.name} · {member.jobs} jobs
+                </option>
+              ))}
+            </SelectField>
+            <InputField label="Dispatch note" value={dispatchNote} onChange={setDispatchNote} />
+            <button
+              onClick={() => assign.mutate()}
+              disabled={assign.isPending || !staffId}
+              className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {assign.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserCheck className="h-4 w-4" />}
+              Assign
+            </button>
+          </div>
+          <p className="mt-3 text-sm text-steel">
+            {assigning.customer.name} · {assigning.service.title} · {shortDate(assigning.startTime)}
+          </p>
+          {assign.error ? <ErrorText error={assign.error} /> : null}
+        </Panel>
+      ) : null}
+    </div>
   );
+}
+
+function asDispatchJob(item: Booking | FieldDispatchJob): FieldDispatchJob | null {
+  return "readiness" in item ? item : null;
 }
 
 function MoneyView({
