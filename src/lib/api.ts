@@ -286,6 +286,8 @@ export const api = {
         | "nextBillingAt"
         | "stripeCustomerId"
         | "stripeSubscriptionId"
+        | "paystackCustomerCode"
+        | "paystackSubscriptionCode"
         | "featureFlags"
         | "planLimits"
       >
@@ -428,6 +430,12 @@ export type Readiness = {
         configured: boolean;
         webhookSecretConfigured: boolean;
       };
+      paystack?: {
+        configured: boolean;
+        currency: string;
+        platformPlanConfigured: boolean;
+        tenantPlanConfigured: boolean;
+      };
       whatsapp: {
         configured: boolean;
         appSecretConfigured: boolean;
@@ -488,7 +496,9 @@ export type TenantBillingSummary = {
   pastDueAt?: string | null;
   canceledAt?: string | null;
   stripeConfigured: boolean;
+  paystackConfigured?: boolean;
   hasStripeCustomer: boolean;
+  hasPaystackCustomer?: boolean;
   limits: Record<string, number>;
   usage: Record<string, number>;
   events: PlatformBillingEvent[];
@@ -780,6 +790,8 @@ export type PlatformTenant = {
   canceledAt?: string | null;
   stripeCustomerId?: string | null;
   stripeSubscriptionId?: string | null;
+  paystackCustomerCode?: string | null;
+  paystackSubscriptionCode?: string | null;
   featureFlags?: Record<string, boolean> | null;
   planLimits?: Record<string, number> | null;
   suspendedAt?: string | null;
@@ -915,6 +927,9 @@ export type PlatformBillingEvent = {
 };
 
 export type PlatformBillingCheckoutInput = {
+  provider?: "stripe" | "paystack" | "mock";
+  currency?: string;
+  paystackPlanCode?: string;
   monthlyPriceCents?: number;
   setupFeeCents?: number;
   collectSetupFee?: boolean;
@@ -929,6 +944,7 @@ export type PlatformBillingCheckout = {
   sessionId: string;
   customerId?: string | null;
   subscriptionId?: string | null;
+  currency?: string | null;
 };
 
 export type PlatformBillingPortal = {
@@ -945,7 +961,10 @@ export type PlatformBillingSummary = {
   billingEmail?: string | null;
   stripeCustomerId?: string | null;
   stripeSubscriptionId?: string | null;
+  paystackCustomerCode?: string | null;
+  paystackSubscriptionCode?: string | null;
   stripeConfigured: boolean;
+  paystackConfigured?: boolean;
   trialEndsAt?: string | null;
   currentPeriodEnd?: string | null;
   nextBillingAt?: string | null;

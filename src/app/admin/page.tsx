@@ -785,6 +785,9 @@ function TenantDetail({ tenantId }: { tenantId: string }) {
   const [flags, setFlags] = useState("");
   const [limits, setLimits] = useState("");
   const [billingType, setBillingType] = useState<PlatformBillingEventType>("SUBSCRIPTION_RENEWED");
+  const [billingProvider, setBillingProvider] = useState<"stripe" | "paystack" | "mock">("paystack");
+  const [billingCurrency, setBillingCurrency] = useState("NGN");
+  const [paystackPlanCode, setPaystackPlanCode] = useState("");
   const [billingAmount, setBillingAmount] = useState("299");
   const [setupAmount, setSetupAmount] = useState("1000");
   const [billingNote, setBillingNote] = useState("Manual payment recorded.");
@@ -882,6 +885,9 @@ function TenantDetail({ tenantId }: { tenantId: string }) {
       const monthly = Number(billingAmount);
       const setup = Number(setupAmount);
       return api.createPlatformBillingCheckout(tenantId, {
+        provider: billingProvider,
+        currency: billingCurrency,
+        paystackPlanCode: paystackPlanCode.trim() || undefined,
         monthlyPriceCents: billingAmount.trim() && Number.isFinite(monthly) ? Math.round(monthly * 100) : undefined,
         setupFeeCents: setupAmount.trim() && Number.isFinite(setup) ? Math.round(setup * 100) : undefined,
         collectSetupFee: true
@@ -947,6 +953,9 @@ function TenantDetail({ tenantId }: { tenantId: string }) {
           type={billingType}
           amount={billingAmount}
           setupAmount={setupAmount}
+          provider={billingProvider}
+          currency={billingCurrency}
+          paystackPlanCode={paystackPlanCode}
           note={billingNote}
           pending={createBillingEvent.isPending}
           checkoutPending={createCheckout.isPending}
@@ -955,6 +964,9 @@ function TenantDetail({ tenantId }: { tenantId: string }) {
           onTypeChange={setBillingType}
           onAmountChange={setBillingAmount}
           onSetupAmountChange={setSetupAmount}
+          onProviderChange={setBillingProvider}
+          onCurrencyChange={setBillingCurrency}
+          onPaystackPlanCodeChange={setPaystackPlanCode}
           onNoteChange={setBillingNote}
           onSubmit={() => createBillingEvent.mutate()}
           onCheckout={() => createCheckout.mutate()}
@@ -1274,6 +1286,9 @@ function BillingPanel({
   type,
   amount,
   setupAmount,
+  provider,
+  currency,
+  paystackPlanCode,
   note,
   pending,
   checkoutPending,
@@ -1282,6 +1297,9 @@ function BillingPanel({
   onTypeChange,
   onAmountChange,
   onSetupAmountChange,
+  onProviderChange,
+  onCurrencyChange,
+  onPaystackPlanCodeChange,
   onNoteChange,
   onSubmit,
   onCheckout,
@@ -1291,6 +1309,9 @@ function BillingPanel({
   type: PlatformBillingEventType;
   amount: string;
   setupAmount: string;
+  provider: "stripe" | "paystack" | "mock";
+  currency: string;
+  paystackPlanCode: string;
   note: string;
   pending: boolean;
   checkoutPending: boolean;
@@ -1299,6 +1320,9 @@ function BillingPanel({
   onTypeChange: (type: PlatformBillingEventType) => void;
   onAmountChange: (value: string) => void;
   onSetupAmountChange: (value: string) => void;
+  onProviderChange: (provider: "stripe" | "paystack" | "mock") => void;
+  onCurrencyChange: (value: string) => void;
+  onPaystackPlanCodeChange: (value: string) => void;
   onNoteChange: (value: string) => void;
   onSubmit: () => void;
   onCheckout: () => void;
@@ -1323,7 +1347,15 @@ function BillingPanel({
         <BillingStat label="Next billing" value={summary?.nextBillingAt ? shortDate(summary.nextBillingAt) : "Not set"} />
       </div>
 
-      <div className="mt-4 grid gap-4 rounded-[8px] bg-white p-4 lg:grid-cols-2 2xl:grid-cols-[1fr_0.7fr_0.7fr_auto_auto] 2xl:items-end">
+      <div className="mt-4 grid gap-4 rounded-[8px] bg-white p-4 lg:grid-cols-2 2xl:grid-cols-[0.8fr_0.7fr_0.7fr_1fr_auto_auto] 2xl:items-end">
+        <label>
+          <span className="mb-2 block text-sm font-medium text-steel">Provider</span>
+          <select value={provider} onChange={(event) => onProviderChange(event.target.value as "stripe" | "paystack" | "mock")} className="h-10 w-full rounded-[8px] border border-ink/10 bg-mist px-2 text-sm outline-none focus:border-pine">
+            <option value="paystack">Paystack</option>
+            <option value="stripe">Stripe</option>
+            <option value="mock">Mock</option>
+          </select>
+        </label>
         <label>
           <span className="mb-2 block text-sm font-medium text-steel">Monthly</span>
           <input value={amount} onChange={(event) => onAmountChange(event.target.value)} inputMode="decimal" className="h-10 w-full rounded-[8px] border border-ink/10 bg-mist px-3 text-sm outline-none focus:border-pine" />
@@ -1332,10 +1364,18 @@ function BillingPanel({
           <span className="mb-2 block text-sm font-medium text-steel">Setup</span>
           <input value={setupAmount} onChange={(event) => onSetupAmountChange(event.target.value)} inputMode="decimal" className="h-10 w-full rounded-[8px] border border-ink/10 bg-mist px-3 text-sm outline-none focus:border-pine" />
         </label>
+        <label>
+          <span className="mb-2 block text-sm font-medium text-steel">Currency</span>
+          <input value={currency} onChange={(event) => onCurrencyChange(event.target.value.toUpperCase())} className="h-10 w-full rounded-[8px] border border-ink/10 bg-mist px-3 text-sm outline-none focus:border-pine" />
+        </label>
+        <label>
+          <span className="mb-2 block text-sm font-medium text-steel">Paystack plan</span>
+          <input value={paystackPlanCode} onChange={(event) => onPaystackPlanCodeChange(event.target.value)} placeholder="PLN_..." className="h-10 w-full rounded-[8px] border border-ink/10 bg-mist px-3 text-sm outline-none focus:border-pine" />
+        </label>
         <div className="rounded-[8px] bg-mist px-3 py-2 text-xs font-semibold text-steel">
-          {summary?.stripeConfigured ? "Stripe live" : "Mock checkout"}
+          {summary?.paystackConfigured ? "Paystack live" : summary?.stripeConfigured ? "Stripe live" : "Mock checkout"}
           <br />
-          {summary?.stripeCustomerId ? "Customer linked" : "No customer yet"}
+          {summary?.paystackCustomerCode ? "Paystack customer" : summary?.stripeCustomerId ? "Stripe customer" : "No customer yet"}
         </div>
         <button onClick={onCheckout} disabled={checkoutPending} className="h-10 rounded-[8px] bg-ink px-4 text-sm font-semibold text-white disabled:opacity-50">
           Checkout

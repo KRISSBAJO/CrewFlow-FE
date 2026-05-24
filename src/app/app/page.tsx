@@ -2055,6 +2055,11 @@ function BillingSelfServePanel({
           Manage billing
         </button>
       </div>
+      {billing?.paystackConfigured ? (
+        <p className="mt-3 rounded-[8px] bg-mist px-3 py-2 text-sm font-medium text-steel">
+          Paystack checkout is enabled for Nigeria/Africa payments.
+        </p>
+      ) : null}
       <button
         onClick={onScan}
         disabled={scanPending}
