@@ -169,6 +169,12 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(input)
     }),
+  portal: (slug: string) => request<PublicBookingPortal>(`/portal/${slug}`),
+  createPortalBooking: (slug: string, input: PublicBookingInput) =>
+    request<PublicBookingResult>(`/portal/${slug}/book`, {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
   bookings: () => request<Booking[]>("/bookings"),
   createBooking: (input: BookingInput) =>
     request<Booking>("/bookings", {
@@ -685,6 +691,47 @@ export type BookingInput = {
   repeatCount?: number;
 };
 
+export type PublicBookingPortal = {
+  tenant: {
+    id: string;
+    businessName: string;
+    slug: string;
+    industry: string;
+    status: string;
+  };
+  booking: {
+    paymentEnabled: boolean;
+    defaultStatus: BookingStatus;
+    source: string;
+  };
+  receptionist?: {
+    serviceArea?: string | null;
+    businessHours?: unknown;
+    quoteDisclaimer?: string;
+    bookingBufferMinutes?: number;
+    maxAdvanceDays?: number;
+  } | null;
+  services: Service[];
+};
+
+export type PublicBookingInput = {
+  serviceId: string;
+  startTime: string;
+  customerName: string;
+  phone: string;
+  email?: string;
+  address?: string;
+  notes?: string;
+  payNow?: boolean;
+};
+
+export type PublicBookingResult = {
+  booking: Booking;
+  customer: Customer;
+  invoice?: Invoice | null;
+  payment?: Payment | null;
+};
+
 export type DashboardSummary = {
   today: {
     appointments: Booking[];
@@ -1178,6 +1225,7 @@ export type Payment = {
   status: string;
   amountCents: number;
   provider: string;
+  checkoutUrl?: string | null;
   invoice: Invoice;
 };
 
