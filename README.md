@@ -43,13 +43,14 @@ admin@crewflow.test / Password123! (platform admin)
 NEXT_PUBLIC_API_URL=http://localhost:3002/api
 ```
 
-For deployment, set `NEXT_PUBLIC_API_URL` to the public backend API URL.
+For deployment, set `NEXT_PUBLIC_API_URL` to the public backend API URL. Use `.env.production.example` as the production template.
 
 ## Production Readiness
 
 Before handing the app to a real business, verify:
 
 - `NEXT_PUBLIC_API_URL` points to the deployed backend `/api` URL.
+- Backend `CORS_ORIGIN` includes the deployed frontend origin.
 - Backend `/api/health/readiness` returns `status: ok`.
 - Login, dashboard, leads, inbox, bookings, invoices, settings, billing, and admin pages load against the deployed API.
 - Landing page CTAs open the app without broken routes.
