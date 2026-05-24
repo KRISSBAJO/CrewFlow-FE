@@ -33,6 +33,7 @@ import {
   PlatformBillingSummary,
   PlatformMetrics,
   PlatformAction,
+  PlatformRiskRow,
   PlatformUser,
   Readiness,
   PlatformSupportAccess,
@@ -48,11 +49,12 @@ import {
 import { cn, money, shortDate } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
 
-type AdminSection = "overview" | "tenants" | "search" | "users" | "actions" | "failures" | "audit";
+type AdminSection = "overview" | "tenants" | "risk" | "search" | "users" | "actions" | "failures" | "audit";
 
 const adminNav: Array<{ id: AdminSection; label: string; icon: typeof ShieldCheck }> = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "tenants", label: "Tenants", icon: Building2 },
+  { id: "risk", label: "Risk", icon: AlertTriangle },
   { id: "search", label: "Search", icon: Search },
   { id: "users", label: "Users", icon: UsersRound },
   { id: "actions", label: "Actions", icon: LifeBuoy },
@@ -141,12 +143,15 @@ function AdminConsole() {
   const [search, setSearch] = useState("");
   const queryClient = useQueryClient();
   const metrics = useQuery({ queryKey: ["platform-metrics"], queryFn: api.platformMetrics });
+  const risk = useQuery({ queryKey: ["platform-risk"], queryFn: api.platformRisk });
+  const supportSessions = useQuery({ queryKey: ["platform-support-sessions"], queryFn: api.platformSupportSessions });
+  const exportHistory = useQuery({ queryKey: ["platform-exports"], queryFn: api.platformExports });
   const tenants = useQuery({ queryKey: ["platform-tenants"], queryFn: api.platformTenants });
   const users = useQuery({ queryKey: ["platform-users"], queryFn: api.platformUsers });
   const platformActions = useQuery({ queryKey: ["platform-actions"], queryFn: api.platformActions });
   const automationFailures = useQuery({ queryKey: ["platform-automation-failures"], queryFn: api.platformAutomationFailures });
   const webhookFailures = useQuery({ queryKey: ["platform-webhook-failures"], queryFn: api.platformWebhookFailures });
-  const audit = useQuery({ queryKey: ["platform-audit"], queryFn: api.platformAudit });
+  const audit = useQuery({ queryKey: ["platform-audit"], queryFn: () => api.platformAudit() });
   const readiness = useQuery({
     queryKey: ["platform-readiness"],
     queryFn: api.readiness,
@@ -236,6 +241,10 @@ function AdminConsole() {
                   <ActionList items={platformActions.data} />
                 </Panel>
               </div>
+              <div className="grid gap-4 xl:grid-cols-[1fr_0.9fr]">
+                <RiskBoard rows={risk.data} compact />
+                <SupportSessionList items={supportSessions.data} />
+              </div>
             </>
           ) : null}
 
@@ -293,6 +302,18 @@ function AdminConsole() {
             </Panel>
           ) : null}
 
+          {section === "risk" ? (
+            <div className="grid gap-4 xl:grid-cols-[1fr_0.8fr]">
+              <RiskBoard rows={risk.data} />
+              <div className="grid gap-4">
+                <SupportSessionList items={supportSessions.data} expanded />
+                <Panel title="Export history" icon={Download}>
+                  <AuditList items={exportHistory.data} compact />
+                </Panel>
+              </div>
+            </div>
+          ) : null}
+
           {section === "actions" ? (
             <Panel title="Platform action queue" icon={LifeBuoy}>
               <ActionList items={platformActions.data} expanded />
@@ -312,7 +333,7 @@ function AdminConsole() {
 
           {section === "audit" ? (
             <Panel title="Audit stream" icon={ShieldCheck}>
-              <AuditList items={audit.data} />
+              <AuditExplorer tenants={tenants.data} initialItems={audit.data} />
             </Panel>
           ) : null}
 
@@ -379,6 +400,88 @@ function CommandStat({ label, value, danger }: { label: string; value: string | 
       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-steel">{label}</p>
       <p className={cn("mt-2 text-2xl font-semibold", danger ? "text-coral" : "text-ink")}>{value}</p>
     </div>
+  );
+}
+
+function RiskBoard({ rows, compact }: { rows?: PlatformRiskRow[]; compact?: boolean }) {
+  const visible = (rows ?? []).slice(0, compact ? 5 : 40);
+  return (
+    <Panel title="Tenant risk board" icon={AlertTriangle}>
+      <div className="grid gap-3">
+        {visible.map((row) => (
+          <div key={row.tenant.id} className="rounded-[8px] bg-mist p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Status label={row.severity} />
+                  <Status label={row.tenant.status} />
+                  {row.tenant.subscriptionStatus ? <Status label={row.tenant.subscriptionStatus} /> : null}
+                </div>
+                <p className="mt-3 truncate font-semibold text-ink">{row.tenant.businessName}</p>
+                <p className="mt-1 text-sm text-steel">{row.reasons.slice(0, 3).join(" · ")}</p>
+              </div>
+              <div className="shrink-0 text-left sm:text-right">
+                <p className={cn("text-3xl font-semibold", row.score < 45 ? "text-coral" : row.score < 70 ? "text-amber" : "text-pine")}>{row.score}</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-steel">Risk score</p>
+              </div>
+            </div>
+            {!compact ? (
+              <div className="mt-4 grid gap-2 text-sm sm:grid-cols-4">
+                <TenantMiniStat label="Open actions" value={row.openActions} />
+                <TenantMiniStat label="Overdue invoices" value={row.overdueInvoices} />
+                <TenantMiniStat label="Hot leads" value={row.hotLeads} />
+                <TenantMiniStat label="Support sessions" value={row.activeSupportSessions} />
+              </div>
+            ) : null}
+          </div>
+        ))}
+        {!visible.length ? <Empty label="No tenant risk data" /> : null}
+      </div>
+    </Panel>
+  );
+}
+
+function SupportSessionList({ items, expanded }: { items?: PlatformSupportAccess[]; expanded?: boolean }) {
+  const queryClient = useQueryClient();
+  const revoke = useMutation({
+    mutationFn: (id: string) => api.revokePlatformSupportAccess(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["platform-support-sessions"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-audit"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-risk"] });
+    }
+  });
+  const visible = (items ?? []).slice(0, expanded ? 50 : 6);
+  return (
+    <Panel title="Support sessions" icon={KeyRound}>
+      <div className="grid gap-3">
+        {visible.map((item) => {
+          const active = !item.revokedAt && !item.usedAt;
+          return (
+            <div key={item.id} className="rounded-[8px] bg-mist p-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Status label={item.revokedAt ? "REVOKED" : item.usedAt ? "USED" : active ? "ACTIVE" : "EXPIRED"} />
+                    {item.tenant ? <Status label={item.tenant.status} /> : null}
+                  </div>
+                  <p className="mt-2 font-semibold text-ink">{item.tenant?.businessName ?? "Unknown tenant"}</p>
+                  <p className="mt-1 text-sm text-steel">{item.admin?.email ?? "system"} · expires {shortDate(item.expiresAt)}</p>
+                  <p className="mt-2 line-clamp-2 text-sm text-steel">{item.reason}</p>
+                </div>
+                {active ? (
+                  <button onClick={() => revoke.mutate(item.id)} disabled={revoke.isPending} className="h-9 rounded-[8px] bg-coral px-3 text-xs font-semibold text-white disabled:opacity-50">
+                    Revoke
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          );
+        })}
+        {!visible.length ? <Empty label="No support sessions" /> : null}
+        {revoke.error ? <p className="text-sm font-medium text-coral">{revoke.error instanceof Error ? revoke.error.message : "Unable to revoke session"}</p> : null}
+      </div>
+    </Panel>
   );
 }
 
@@ -1530,10 +1633,47 @@ function FailureList({
   );
 }
 
-function AuditList({ items }: { items?: PlatformAuditLog[] }) {
+function AuditExplorer({ tenants, initialItems }: { tenants?: PlatformTenant[]; initialItems?: PlatformAuditLog[] }) {
+  const [q, setQ] = useState("");
+  const [tenantId, setTenantId] = useState("");
+  const [action, setAction] = useState("");
+  const audit = useQuery({
+    queryKey: ["platform-audit-filtered", q, tenantId, action],
+    queryFn: () => api.platformAudit({ q: q || undefined, tenantId: tenantId || undefined, action: action || undefined, limit: 300 }),
+    enabled: Boolean(q || tenantId || action)
+  });
+  const items = q || tenantId || action ? audit.data : initialItems;
+  const actions = Array.from(new Set((initialItems ?? []).map((item) => item.action))).slice(0, 30);
+  return (
+    <div className="grid gap-4">
+      <div className="grid gap-3 rounded-[8px] bg-mist p-3 md:grid-cols-[1fr_220px_220px]">
+        <div className="flex h-10 items-center gap-2 rounded-[8px] bg-white px-3">
+          <Search className="h-4 w-4 text-steel" />
+          <input value={q} onChange={(event) => setQ(event.target.value)} placeholder="Search audit summary, actor, action..." className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none" />
+        </div>
+        <select value={tenantId} onChange={(event) => setTenantId(event.target.value)} className="h-10 rounded-[8px] border border-ink/10 bg-white px-2 text-sm outline-none focus:border-pine">
+          <option value="">All tenants</option>
+          {(tenants ?? []).map((tenant) => (
+            <option key={tenant.id} value={tenant.id}>{tenant.businessName}</option>
+          ))}
+        </select>
+        <select value={action} onChange={(event) => setAction(event.target.value)} className="h-10 rounded-[8px] border border-ink/10 bg-white px-2 text-sm outline-none focus:border-pine">
+          <option value="">All actions</option>
+          {actions.map((item) => (
+            <option key={item} value={item}>{item.replaceAll("_", " ")}</option>
+          ))}
+        </select>
+      </div>
+      {audit.isFetching ? <p className="text-sm font-medium text-steel">Loading audit...</p> : null}
+      <AuditList items={items} />
+    </div>
+  );
+}
+
+function AuditList({ items, compact }: { items?: PlatformAuditLog[]; compact?: boolean }) {
   return (
     <div className="grid gap-3 md:grid-cols-2">
-      {(items ?? []).slice(0, 24).map((item) => (
+      {(items ?? []).slice(0, compact ? 8 : 48).map((item) => (
         <div key={item.id} className="rounded-[8px] bg-mist p-3">
           <div className="flex items-start justify-between gap-3">
             <div>

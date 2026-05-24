@@ -241,6 +241,8 @@ export const api = {
       { method: "POST" }
     ),
   platformMetrics: () => request<PlatformMetrics>("/platform/metrics"),
+  platformRisk: () => request<PlatformRiskRow[]>("/platform/risk"),
+  platformSupportSessions: () => request<PlatformSupportAccess[]>("/platform/support-sessions"),
   platformTenants: () => request<PlatformTenant[]>("/platform/tenants"),
   createPlatformTenant: (input: PlatformTenantCreateInput) =>
     request<PlatformTenantDetail>("/platform/tenants", {
@@ -320,6 +322,10 @@ export const api = {
     request<LoginResponse>(`/platform/support-access/${token}/impersonate`, {
       method: "POST"
     }),
+  revokePlatformSupportAccess: (id: string) =>
+    request<PlatformSupportAccess>(`/platform/support-access/${id}/revoke`, {
+      method: "POST"
+    }),
   platformBilling: (id: string) => request<PlatformBillingSummary>(`/platform/tenants/${id}/billing`),
   platformBillingEvents: (id: string) => request<PlatformBillingEvent[]>(`/platform/tenants/${id}/billing-events`),
   createPlatformBillingEvent: (id: string, input: PlatformBillingEventInput) =>
@@ -348,7 +354,16 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ reason })
     }),
-  platformAudit: () => request<PlatformAuditLog[]>("/platform/audit"),
+  platformExports: () => request<PlatformAuditLog[]>("/platform/exports"),
+  platformAudit: (filters?: { tenantId?: string; action?: string; q?: string; limit?: number }) => {
+    const params = new URLSearchParams();
+    if (filters?.tenantId) params.set("tenantId", filters.tenantId);
+    if (filters?.action) params.set("action", filters.action);
+    if (filters?.q) params.set("q", filters.q);
+    if (filters?.limit) params.set("limit", String(filters.limit));
+    const query = params.toString();
+    return request<PlatformAuditLog[]>(`/platform/audit${query ? `?${query}` : ""}`);
+  },
   completeFieldJob: (
     bookingId: string,
     input?: {
@@ -732,6 +747,21 @@ export type PlatformMetrics = {
   pastDueTenants: number;
 };
 
+export type PlatformRiskRow = {
+  tenant: PlatformTenant;
+  score: number;
+  severity: "critical" | "warning" | "healthy";
+  reasons: string[];
+  failedAutomations: number;
+  failedWebhooks: number;
+  openActions: number;
+  overdueInvoices: number;
+  hotLeads: number;
+  recentBookings: number;
+  activeSupportSessions: number;
+  lastActivityAt: string;
+};
+
 export type PlatformTenant = {
   id: string;
   businessName: string;
@@ -849,7 +879,9 @@ export type PlatformSupportAccess = {
   token: string;
   expiresAt: string;
   usedAt?: string | null;
+  revokedAt?: string | null;
   createdAt: string;
+  tenant?: PlatformTenant | null;
   admin?: { id: string; email: string; role: string } | null;
 };
 
