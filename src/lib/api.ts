@@ -307,6 +307,7 @@ export const api = {
     request<{ scannedAt: string; overdueMarked: number }>("/collections/scan", {
       method: "POST"
     }),
+  runCollectionsAutomation: () => request<CollectionsAutomationResult>("/collections/automation/run", { method: "POST" }),
   retention: () => request<RetentionSummary>("/retention"),
   scanRetention: () =>
     request<{ scannedAt: string; repeatCandidates: number; winBackCandidates: number; actionsCreatedOrUpdated: number }>(
@@ -1476,6 +1477,16 @@ export type CollectionActionResult = {
   payment?: Payment | null;
   message?: MessageLog;
   timeline?: CollectionTimeline;
+};
+
+export type CollectionsAutomationResult = {
+  scannedAt: string;
+  invoicesScanned: number;
+  messagesSent: number;
+  actionsCreatedOrUpdated: number;
+  paymentLinksCreated: number;
+  receiptsSent: number;
+  promiseFollowUpsCreatedOrUpdated: number;
 };
 
 export type WhatsappStatus = {

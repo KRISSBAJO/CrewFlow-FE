@@ -1913,6 +1913,15 @@ function MoneyView({
       void queryClient.invalidateQueries({ queryKey: ["actions"] });
     }
   });
+  const runAutomation = useMutation({
+    mutationFn: api.runCollectionsAutomation,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["collections"] });
+      void queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      void queryClient.invalidateQueries({ queryKey: ["payments"] });
+      void queryClient.invalidateQueries({ queryKey: ["actions"] });
+    }
+  });
   const openInvoices = useMemo(
     () => collections.data?.invoices ?? (invoices ?? []).filter((invoice) => !["PAID", "VOID"].includes(invoice.status)),
     [collections.data?.invoices, invoices]
@@ -1958,7 +1967,37 @@ function MoneyView({
             {scanCollections.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             Scan overdue
           </button>
+          <button
+            onClick={() => runAutomation.mutate()}
+            disabled={runAutomation.isPending}
+            className="flex h-10 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {runAutomation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            Run automation
+          </button>
         </div>
+        {runAutomation.data ? (
+          <div className="mt-4 grid gap-3 rounded-[8px] bg-ink p-4 text-white md:grid-cols-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/50">Reminders</p>
+              <p className="mt-1 text-2xl font-semibold">{runAutomation.data.messagesSent}</p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/50">Pay links</p>
+              <p className="mt-1 text-2xl font-semibold">{runAutomation.data.paymentLinksCreated}</p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/50">Receipts</p>
+              <p className="mt-1 text-2xl font-semibold">{runAutomation.data.receiptsSent}</p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/50">Manager actions</p>
+              <p className="mt-1 text-2xl font-semibold">
+                {runAutomation.data.actionsCreatedOrUpdated + runAutomation.data.promiseFollowUpsCreatedOrUpdated}
+              </p>
+            </div>
+          </div>
+        ) : null}
         <div className="mt-4 grid gap-3 md:grid-cols-4">
           {agingBuckets.map((bucket) => (
             <div key={bucket.key} className="rounded-[8px] bg-mist p-4">
@@ -2014,6 +2053,7 @@ function MoneyView({
       </div>
       {collections.error ? <ErrorText error={collections.error} /> : null}
       {scanCollections.error ? <ErrorText error={scanCollections.error} /> : null}
+      {runAutomation.error ? <ErrorText error={runAutomation.error} /> : null}
     </div>
   );
 }
