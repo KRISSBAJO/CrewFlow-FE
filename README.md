@@ -40,10 +40,22 @@ admin@crewflow.test / Password123! (platform admin)
 ## Environment
 
 ```env
+# CrewFlow backend API. Keep the /api suffix.
 NEXT_PUBLIC_API_URL=http://localhost:3002/api
 ```
 
 For deployment, set `NEXT_PUBLIC_API_URL` to the public backend API URL. Use `.env.production.example` as the production template.
+
+## Sales Conversion Flow
+
+The landing page is built to sell the money engine:
+
+- pain first: missed jobs, admin chaos, unpaid work
+- workflow second: capture, book, dispatch, collect
+- pricing third: monthly plan plus setup fee
+- setup last: configured workspace intake
+
+Use [Sales Conversion Playbook](docs/SALES_CONVERSION_PLAYBOOK.md) for pricing, CTA language, first-customer sales motion, and qualification questions.
 
 ## Production Readiness
 
@@ -59,6 +71,7 @@ Before handing the app to a real business, verify:
 ## Product Areas
 
 - Premium landing page
+- Pricing conversion flow
 - Signup/onboarding conversion flow
 - Operations overview
 - Receptionist simulator and inbox

@@ -7,6 +7,8 @@ This checkpoint covers the CrewFlow landing page and operations console through 
 ### Included
 
 - Premium landing page with CrewFlow brand assets
+- Sales pricing flow with Launch, Growth, and Scale packages
+- ROI framing for recovered bookings, collected invoices, and admin time saved
 - Signup/onboarding conversion flow
 - Authenticated operations console
 - Revenue command center overview
@@ -46,3 +48,4 @@ curl -I http://localhost:3000/app
 - Verify backend `/api/health/readiness` before launch.
 - Confirm the landing page and `/app` load after deploy.
 - Use the backend smoke script for end-to-end API readiness.
+- Use `docs/SALES_CONVERSION_PLAYBOOK.md` to keep pricing and setup conversations consistent.
