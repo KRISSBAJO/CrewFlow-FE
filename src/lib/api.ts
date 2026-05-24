@@ -190,6 +190,14 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(input)
     }),
+  communicationHealth: () => request<CommunicationHealth>("/communications/health"),
+  bookingCommunication: (bookingId: string) =>
+    request<BookingCommunication>(`/communications/bookings/${bookingId}`),
+  sendBookingUpdate: (bookingId: string, input: { type: BookingUpdateType; provider?: string; note?: string }) =>
+    request<{ message: MessageLog; provider: unknown }>(`/communications/bookings/${bookingId}/send`, {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
   customers: (search?: string) =>
     request<Customer[]>(search ? `/customers?search=${encodeURIComponent(search)}` : "/customers"),
   customerTimeline: (id: string) => request<CustomerTimeline>(`/customers/${id}/timeline`),
@@ -700,6 +708,54 @@ export type BookingInput = {
   notes?: string;
   repeatFrequency?: RepeatFrequency;
   repeatCount?: number;
+};
+
+export type BookingUpdateType =
+  | "CONFIRM_APPOINTMENT"
+  | "CREW_ASSIGNED"
+  | "ON_THE_WAY"
+  | "RUNNING_LATE"
+  | "INVOICE_READY"
+  | "REVIEW_REQUEST";
+
+export type BookingCommunication = {
+  booking: Booking;
+  timeline: Array<{
+    id: string;
+    kind: "message" | "automation";
+    createdAt: string;
+    title: string;
+    status: string;
+    provider: string;
+    content?: string | null;
+    error?: string | null;
+  }>;
+  suggestions: Array<{
+    type: BookingUpdateType;
+    label: string;
+    sent: boolean;
+    preview: string;
+  }>;
+};
+
+export type CommunicationHealth = {
+  generatedAt: string;
+  summary: {
+    checkedBookings: number;
+    risks: number;
+    missingConfirmation: number;
+    missingOnTheWay: number;
+    missingReview: number;
+  };
+  risks: Array<{
+    bookingId: string;
+    customerName: string;
+    serviceTitle: string;
+    startTime: string;
+    type: BookingUpdateType;
+    title: string;
+    severity: "warning" | "critical";
+  }>;
 };
 
 export type PublicBookingPortal = {

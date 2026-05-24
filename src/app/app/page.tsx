@@ -51,6 +51,7 @@ import {
   AutomationRun,
   Booking,
   BookingStatus,
+  BookingUpdateType,
   Conversation,
   Customer,
   DashboardSummary,
@@ -1669,6 +1670,10 @@ function FieldView({ items, onOpen }: { items?: Booking[]; onOpen: (state: Drawe
     queryKey: ["field-dispatch", date],
     queryFn: () => api.fieldDispatch(date)
   });
+  const communicationHealth = useQuery({
+    queryKey: ["communication-health"],
+    queryFn: api.communicationHealth
+  });
   const jobs = dispatch.data?.jobs ?? items ?? [];
   const complete = useMutation({
     mutationFn: (bookingId: string) =>
@@ -1732,6 +1737,36 @@ function FieldView({ items, onOpen }: { items?: Booking[]; onOpen: (state: Drawe
               </p>
             </div>
           ))}
+        </div>
+      </Panel>
+
+      <Panel title="Communication health" icon={MessageSquareText}>
+        <div className="grid gap-3 sm:grid-cols-4">
+          <MiniStat label="Risks" value={communicationHealth.data?.summary.risks ?? 0} danger={(communicationHealth.data?.summary.risks ?? 0) > 0} />
+          <MiniStat label="Confirm" value={communicationHealth.data?.summary.missingConfirmation ?? 0} />
+          <MiniStat label="On-way" value={communicationHealth.data?.summary.missingOnTheWay ?? 0} danger={(communicationHealth.data?.summary.missingOnTheWay ?? 0) > 0} />
+          <MiniStat label="Review" value={communicationHealth.data?.summary.missingReview ?? 0} />
+        </div>
+        <div className="mt-4 grid gap-2">
+          {(communicationHealth.data?.risks ?? []).slice(0, 5).map((risk) => (
+            <button
+              key={`${risk.bookingId}-${risk.type}`}
+              onClick={() => {
+                const match = jobs.find((job) => job.id === risk.bookingId);
+                if (match) onOpen({ type: "booking", item: match });
+              }}
+              className="flex items-center justify-between gap-3 rounded-[8px] bg-mist p-3 text-left"
+            >
+              <span className="min-w-0">
+                <span className="block truncate font-semibold text-ink">{risk.title}</span>
+                <span className="block truncate text-sm text-steel">
+                  {risk.customerName} · {risk.serviceTitle} · {shortDate(risk.startTime)}
+                </span>
+              </span>
+              <Status label={risk.severity} />
+            </button>
+          ))}
+          <Empty show={!communicationHealth.isLoading && !(communicationHealth.data?.risks.length)} label="No communication gaps" />
         </div>
       </Panel>
 
@@ -3339,6 +3374,7 @@ function BookingDetail({ item }: { item: Booking }) {
           {item.fieldJobReport.staffNotes ? <Info label="Staff notes" value={item.fieldJobReport.staffNotes} /> : null}
         </DetailCard>
       ) : null}
+      <BookingCommunicationPanel booking={item} />
     </div>
   );
 }
@@ -3495,11 +3531,103 @@ function FieldJobDetail({ item, onDone }: { item: Booking; onDone: () => void })
         disabled={complete.isPending || item.status === "COMPLETED"}
         className="flex h-12 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 font-semibold text-white disabled:opacity-50"
       >
-        {complete.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+      {complete.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
         Complete job and trigger invoice
       </button>
       {error ? <ErrorText error={error} /> : null}
+      <BookingCommunicationPanel booking={item} />
     </div>
+  );
+}
+
+function BookingCommunicationPanel({ booking }: { booking: Booking }) {
+  const queryClient = useQueryClient();
+  const [note, setNote] = useState("");
+  const communication = useQuery({
+    queryKey: ["booking-communication", booking.id],
+    queryFn: () => api.bookingCommunication(booking.id)
+  });
+  const send = useMutation({
+    mutationFn: (type: BookingUpdateType) =>
+      api.sendBookingUpdate(booking.id, {
+        type,
+        provider: "WHATSAPP",
+        note: note || undefined
+      }),
+    onSuccess: () => {
+      setNote("");
+      void queryClient.invalidateQueries({ queryKey: ["booking-communication", booking.id] });
+      void queryClient.invalidateQueries({ queryKey: ["communication-health"] });
+    }
+  });
+
+  return (
+    <section className="rounded-[8px] bg-mist p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-steel">Customer updates</p>
+          <h3 className="mt-2 text-lg font-semibold text-ink">Communication center</h3>
+        </div>
+        <Status label={`${communication.data?.timeline.length ?? 0} logs`} />
+      </div>
+
+      <label className="mt-4 block">
+        <span className="mb-2 block text-sm font-medium text-ink">Optional note</span>
+        <input
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+          placeholder="Arrival window, gate code request, delay reason..."
+          className="h-11 w-full rounded-[8px] border border-ink/10 bg-white px-3 outline-none focus:border-pine"
+        />
+      </label>
+
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        {(communication.data?.suggestions ?? []).map((item) => (
+          <button
+            key={item.type}
+            onClick={() => send.mutate(item.type)}
+            disabled={send.isPending}
+            className={cn(
+              "rounded-[8px] p-3 text-left text-sm font-semibold transition disabled:opacity-50",
+              item.sent ? "bg-white text-steel" : "bg-pine text-white"
+            )}
+          >
+            <span className="flex items-center justify-between gap-2">
+              {item.label}
+              {item.sent ? <CheckCircle2 className="h-4 w-4" /> : <Send className="h-4 w-4" />}
+            </span>
+            <span className={cn("mt-2 line-clamp-2 block text-xs leading-5", item.sent ? "text-steel" : "text-white/75")}>
+              {item.preview}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <button
+        onClick={() => send.mutate("RUNNING_LATE")}
+        disabled={send.isPending}
+        className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-[8px] bg-amber px-3 text-sm font-semibold text-ink disabled:opacity-50"
+      >
+        {send.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Clock3 className="h-4 w-4" />}
+        Send running late
+      </button>
+
+      {send.error ? <ErrorText error={send.error} /> : null}
+
+      <div className="mt-4 grid gap-2">
+        {(communication.data?.timeline ?? []).slice(0, 6).map((event) => (
+          <div key={`${event.kind}-${event.id}`} className="rounded-[8px] bg-white p-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="truncate text-sm font-semibold text-ink">{event.title}</p>
+              <Status label={event.status} />
+            </div>
+            {event.content ? <p className="mt-2 line-clamp-2 text-sm leading-6 text-steel">{event.content}</p> : null}
+            {event.error ? <p className="mt-2 text-sm font-semibold text-coral">{event.error}</p> : null}
+          </div>
+        ))}
+        <Empty show={!communication.isLoading && !(communication.data?.timeline.length)} label="No booking updates yet" />
+      </div>
+    </section>
   );
 }
 
