@@ -23,7 +23,8 @@ import {
   UsersRound
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   api,
   PlatformAuditLog,
@@ -76,10 +77,30 @@ const subscriptionStatuses: NonNullable<PlatformTenant["subscriptionStatus"]>[] 
 export default function AdminPage() {
   const token = useAuth((state) => state.token);
   const user = useAuth((state) => state.user);
+  if (token && user && user.role !== "PLATFORM_ADMIN" && user.role !== "PLATFORM_SUPPORT") {
+    return <TenantRedirect />;
+  }
   if (!token || (user?.role !== "PLATFORM_ADMIN" && user?.role !== "PLATFORM_SUPPORT")) {
     return <AdminLogin />;
   }
   return <AdminConsole />;
+}
+
+function TenantRedirect() {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace("/app");
+  }, [router]);
+
+  return (
+    <main className="flex min-h-screen items-center justify-center px-5">
+      <div className="rounded-[8px] border border-white/80 bg-white/90 p-6 text-center shadow-soft">
+        <Loader2 className="mx-auto h-6 w-6 animate-spin text-pine" />
+        <p className="mt-3 font-semibold text-ink">Opening tenant app</p>
+        <p className="mt-1 text-sm text-steel">Tenant accounts use the operations console.</p>
+      </div>
+    </main>
+  );
 }
 
 function AdminLogin() {
