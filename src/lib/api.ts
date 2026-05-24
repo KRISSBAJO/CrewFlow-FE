@@ -9,7 +9,7 @@ type LoginResponse = {
     sub: string;
     tenantId: string;
     email: string;
-    role: "PLATFORM_ADMIN" | "OWNER" | "MANAGER" | "STAFF";
+    role: "PLATFORM_ADMIN" | "PLATFORM_SUPPORT" | "OWNER" | "MANAGER" | "STAFF";
   };
   tenant?: {
     id: string;
@@ -264,6 +264,7 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(input)
     }),
+  platformSearch: (q: string) => request<PlatformSearchResult>(`/platform/search?q=${encodeURIComponent(q)}`),
   platformTenant: (id: string) => request<PlatformTenantDetail>(`/platform/tenants/${id}`),
   platformTenantHealth: (id: string) => request<PlatformTenantHealth>(`/platform/tenants/${id}/health`),
   platformTenantUsage: (id: string) => request<PlatformTenantUsage>(`/platform/tenants/${id}/usage`),
@@ -292,6 +293,17 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(input)
     }),
+  archivePlatformTenant: (id: string, input: { confirmation: string; reason: string }) =>
+    request<PlatformTenant>(`/platform/tenants/${id}/archive`, {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
+  restorePlatformTenant: (id: string) =>
+    request<PlatformTenant>(`/platform/tenants/${id}/restore`, {
+      method: "POST"
+    }),
+  exportPlatformTenant: (id: string) => request<PlatformTenantExport>(`/platform/tenants/${id}/export`),
+  platformTenantTimeline: (id: string) => request<PlatformTimelineItem[]>(`/platform/tenants/${id}/timeline`),
   platformSupportNotes: (id: string) => request<PlatformSupportNote[]>(`/platform/tenants/${id}/support-notes`),
   addPlatformSupportNote: (id: string, note: string) =>
     request<PlatformSupportNote>(`/platform/tenants/${id}/support-notes`, {
@@ -303,6 +315,10 @@ export const api = {
     request<PlatformSupportAccess>(`/platform/tenants/${id}/support-access`, {
       method: "POST",
       body: JSON.stringify({ reason })
+    }),
+  impersonatePlatformTenant: (token: string) =>
+    request<LoginResponse>(`/platform/support-access/${token}/impersonate`, {
+      method: "POST"
     }),
   platformBilling: (id: string) => request<PlatformBillingSummary>(`/platform/tenants/${id}/billing`),
   platformBillingEvents: (id: string) => request<PlatformBillingEvent[]>(`/platform/tenants/${id}/billing-events`),
@@ -322,6 +338,16 @@ export const api = {
     }),
   platformAutomationFailures: () => request<PlatformAutomationFailure[]>("/platform/automation-failures"),
   platformWebhookFailures: () => request<PlatformWebhookFailure[]>("/platform/webhook-failures"),
+  retryPlatformAutomationFailure: (id: string, reason?: string) =>
+    request<PlatformAutomationFailure>(`/platform/automation-failures/${id}/retry`, {
+      method: "POST",
+      body: JSON.stringify({ reason })
+    }),
+  replayPlatformWebhookFailure: (id: string, reason?: string) =>
+    request<PlatformWebhookFailure>(`/platform/webhook-failures/${id}/replay`, {
+      method: "POST",
+      body: JSON.stringify({ reason })
+    }),
   platformAudit: () => request<PlatformAuditLog[]>("/platform/audit"),
   completeFieldJob: (
     bookingId: string,
@@ -688,7 +714,7 @@ export type StaffMember = {
   id: string;
   name: string;
   email: string;
-  role: "PLATFORM_ADMIN" | "OWNER" | "MANAGER" | "STAFF";
+  role: "PLATFORM_ADMIN" | "PLATFORM_SUPPORT" | "OWNER" | "MANAGER" | "STAFF";
   phone?: string | null;
   active?: boolean;
 };
@@ -711,7 +737,7 @@ export type PlatformTenant = {
   businessName: string;
   slug: string;
   industry: string;
-  status: "TRIAL" | "ACTIVE" | "SUSPENDED" | "CHURNED";
+  status: "TRIAL" | "ACTIVE" | "SUSPENDED" | "ARCHIVED" | "CHURNED";
   subscriptionStatus?: "TRIALING" | "ACTIVE" | "PAST_DUE" | "CANCELED" | "UNPAID";
   subscriptionPlan: string;
   billingEmail?: string | null;
@@ -766,7 +792,7 @@ export type PlatformUser = {
   tenantId: string;
   name: string;
   email: string;
-  role: "PLATFORM_ADMIN" | "OWNER" | "MANAGER" | "STAFF";
+  role: "PLATFORM_ADMIN" | "PLATFORM_SUPPORT" | "OWNER" | "MANAGER" | "STAFF";
   phone?: string | null;
   active: boolean;
   createdAt: string;
@@ -835,7 +861,8 @@ export type PlatformBillingEventType =
   | "PAYMENT_FAILED"
   | "PAST_DUE"
   | "CANCELED"
-  | "CREDIT_APPLIED";
+  | "CREDIT_APPLIED"
+  | "REFUND_ISSUED";
 
 export type PlatformBillingEventInput = {
   type: PlatformBillingEventType;
@@ -926,6 +953,31 @@ export type PlatformAuditLog = {
   createdAt: string;
   tenant?: PlatformTenant | null;
   actor?: { id: string; email: string; role: string } | null;
+};
+
+export type PlatformSearchResult = {
+  query: string;
+  tenants: PlatformTenant[];
+  users: PlatformUser[];
+  customers: Array<Customer & { tenant?: PlatformTenant }>;
+  bookings: Array<Booking & { tenant?: PlatformTenant; customer?: Customer; service?: Service }>;
+  leads: Array<Lead & { tenant?: PlatformTenant; customer?: Customer }>;
+  invoices: Array<Invoice & { tenant?: PlatformTenant; customer?: Customer }>;
+};
+
+export type PlatformTimelineItem = {
+  id: string;
+  kind: string;
+  title: string;
+  summary?: string | null;
+  amountCents?: number | null;
+  createdAt: string;
+  actor?: { id: string; email: string; role: string } | null;
+};
+
+export type PlatformTenantExport = {
+  exportedAt: string;
+  tenant: PlatformTenantDetail & Record<string, unknown>;
 };
 
 export type Service = {

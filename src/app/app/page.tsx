@@ -122,7 +122,7 @@ export default function Home() {
   const token = useAuth((state) => state.token);
   const user = useAuth((state) => state.user);
   if (!token) return <Login />;
-  if (user?.role === "PLATFORM_ADMIN") return <AdminRedirect />;
+  if (user?.role === "PLATFORM_ADMIN" || user?.role === "PLATFORM_SUPPORT") return <AdminRedirect />;
   return <Console />;
 }
 
@@ -2323,7 +2323,7 @@ function StaffManager({ staff }: { staff: StaffMember[] }) {
     setName(member?.name ?? "");
     setEmail(member?.email ?? "");
     setPhone(member?.phone ?? "");
-    setRole(member?.role === "PLATFORM_ADMIN" ? "STAFF" : (member?.role ?? "STAFF"));
+    setRole(member?.role === "OWNER" || member?.role === "MANAGER" || member?.role === "STAFF" ? member.role : "STAFF");
     setPassword("Password123!");
   }
 

@@ -8,7 +8,7 @@ type User = {
   sub: string;
   tenantId: string;
   email: string;
-  role: "PLATFORM_ADMIN" | "OWNER" | "MANAGER" | "STAFF";
+  role: "PLATFORM_ADMIN" | "PLATFORM_SUPPORT" | "OWNER" | "MANAGER" | "STAFF";
 };
 
 type AuthState = {

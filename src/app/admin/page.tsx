@@ -6,6 +6,7 @@ import {
   Building2,
   CheckCircle2,
   CreditCard,
+  Download,
   KeyRound,
   LayoutDashboard,
   LifeBuoy,
@@ -18,6 +19,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   TimerReset,
+  Undo2,
   UsersRound
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -46,19 +48,20 @@ import {
 import { cn, money, shortDate } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
 
-type AdminSection = "overview" | "tenants" | "users" | "actions" | "failures" | "audit";
+type AdminSection = "overview" | "tenants" | "search" | "users" | "actions" | "failures" | "audit";
 
 const adminNav: Array<{ id: AdminSection; label: string; icon: typeof ShieldCheck }> = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "tenants", label: "Tenants", icon: Building2 },
+  { id: "search", label: "Search", icon: Search },
   { id: "users", label: "Users", icon: UsersRound },
   { id: "actions", label: "Actions", icon: LifeBuoy },
   { id: "failures", label: "Failures", icon: AlertTriangle },
   { id: "audit", label: "Audit", icon: ShieldCheck }
 ];
 
-const tenantStatuses: PlatformTenant["status"][] = ["TRIAL", "ACTIVE", "SUSPENDED", "CHURNED"];
-const userRoles: PlatformUser["role"][] = ["PLATFORM_ADMIN", "OWNER", "MANAGER", "STAFF"];
+const tenantStatuses: PlatformTenant["status"][] = ["TRIAL", "ACTIVE", "SUSPENDED", "ARCHIVED", "CHURNED"];
+const userRoles: PlatformUser["role"][] = ["PLATFORM_ADMIN", "PLATFORM_SUPPORT", "OWNER", "MANAGER", "STAFF"];
 const subscriptionStatuses: NonNullable<PlatformTenant["subscriptionStatus"]>[] = [
   "TRIALING",
   "ACTIVE",
@@ -70,7 +73,7 @@ const subscriptionStatuses: NonNullable<PlatformTenant["subscriptionStatus"]>[] 
 export default function AdminPage() {
   const token = useAuth((state) => state.token);
   const user = useAuth((state) => state.user);
-  if (!token || user?.role !== "PLATFORM_ADMIN") {
+  if (!token || (user?.role !== "PLATFORM_ADMIN" && user?.role !== "PLATFORM_SUPPORT")) {
     return <AdminLogin />;
   }
   return <AdminConsole />;
@@ -84,8 +87,8 @@ function AdminLogin() {
   const login = useMutation({
     mutationFn: () => api.login(email, password),
     onSuccess: (data) => {
-      if (data.user.role !== "PLATFORM_ADMIN") {
-        setError("This account is not a platform admin.");
+      if (data.user.role !== "PLATFORM_ADMIN" && data.user.role !== "PLATFORM_SUPPORT") {
+        setError("This account is not a platform admin or support user.");
         return;
       }
       setSession(data.accessToken, data.user);
@@ -131,6 +134,8 @@ function AdminLogin() {
 
 function AdminConsole() {
   const logout = useAuth((state) => state.logout);
+  const user = useAuth((state) => state.user);
+  const canManagePlatform = user?.role === "PLATFORM_ADMIN";
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
   const [section, setSection] = useState<AdminSection>("overview");
   const [search, setSearch] = useState("");
@@ -237,7 +242,7 @@ function AdminConsole() {
           {section === "tenants" ? (
             <section className="grid min-w-0 gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
               <Panel title="Tenants" icon={Building2}>
-                <CreateTenantBox />
+                <CreateTenantBox canManage={canManagePlatform} />
                 <div className="mb-4 flex h-11 items-center gap-2 rounded-[8px] bg-mist px-3">
                   <Search className="h-4 w-4 text-steel" />
                   <input
@@ -253,6 +258,7 @@ function AdminConsole() {
                       key={tenant.id}
                       tenant={tenant}
                       selected={selectedTenantId === tenant.id}
+                      canManage={canManagePlatform}
                       onSelect={() => setSelectedTenantId(tenant.id)}
                     />
                   ))}
@@ -277,7 +283,13 @@ function AdminConsole() {
 
           {section === "users" ? (
             <Panel title="Platform users" icon={UsersRound}>
-              <UserAdminList items={users.data} tenants={tenants.data} />
+              <UserAdminList items={users.data} tenants={tenants.data} canManage={canManagePlatform} />
+            </Panel>
+          ) : null}
+
+          {section === "search" ? (
+            <Panel title="Platform-wide search" icon={Search}>
+              <PlatformSearch />
             </Panel>
           ) : null}
 
@@ -462,10 +474,12 @@ function ReadinessCheck({
 function TenantRow({
   tenant,
   selected,
+  canManage,
   onSelect
 }: {
   tenant: PlatformTenant;
   selected: boolean;
+  canManage: boolean;
   onSelect: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -493,16 +507,19 @@ function TenantRow({
         <div className="flex flex-wrap items-center gap-2">
           <Status label={tenant.subscriptionStatus ?? "TRIALING"} />
           <Status label={tenant.subscriptionPlan} />
-          <select
-            value={tenant.status}
-            onChange={(event) => update.mutate(event.target.value as PlatformTenant["status"])}
-            className="h-9 min-w-[128px] rounded-[8px] border border-ink/10 bg-white px-2 text-sm outline-none focus:border-pine"
-          >
-            <option value="TRIAL">Trial</option>
-            <option value="ACTIVE">Active</option>
-            <option value="SUSPENDED">Suspended</option>
-            <option value="CHURNED">Churned</option>
-          </select>
+          {canManage ? (
+            <select
+              value={tenant.status}
+              onChange={(event) => update.mutate(event.target.value as PlatformTenant["status"])}
+              className="h-9 min-w-[128px] rounded-[8px] border border-ink/10 bg-white px-2 text-sm outline-none focus:border-pine"
+            >
+              <option value="TRIAL">Trial</option>
+              <option value="ACTIVE">Active</option>
+              <option value="SUSPENDED">Suspended</option>
+              <option value="ARCHIVED">Archived</option>
+              <option value="CHURNED">Churned</option>
+            </select>
+          ) : null}
         </div>
       </div>
       <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
@@ -517,7 +534,7 @@ function TenantRow({
   );
 }
 
-function CreateTenantBox() {
+function CreateTenantBox({ canManage }: { canManage: boolean }) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [businessName, setBusinessName] = useState("");
@@ -553,9 +570,9 @@ function CreateTenantBox() {
 
   if (!open) {
     return (
-      <button onClick={() => setOpen(true)} className="mb-4 flex h-11 w-full items-center justify-center gap-2 rounded-[8px] bg-ink px-3 text-sm font-semibold text-white">
+      <button disabled={!canManage} onClick={() => setOpen(true)} className="mb-4 flex h-11 w-full items-center justify-center gap-2 rounded-[8px] bg-ink px-3 text-sm font-semibold text-white disabled:opacity-50">
         <Building2 className="h-4 w-4" />
-        Create tenant
+        {canManage ? "Create tenant" : "Create tenant locked"}
       </button>
     );
   }
@@ -596,14 +613,70 @@ function TenantMiniStat({ label, value }: { label: string; value: string | numbe
   );
 }
 
+function PlatformSearch() {
+  const [query, setQuery] = useState("");
+  const search = useQuery({
+    queryKey: ["platform-search", query],
+    queryFn: () => api.platformSearch(query),
+    enabled: query.trim().length >= 2
+  });
+  const groups = search.data
+    ? [
+        { label: "Tenants", items: search.data.tenants.map((item) => ({ id: item.id, title: item.businessName, detail: `${item.slug} · ${item.status}` })) },
+        { label: "Users", items: search.data.users.map((item) => ({ id: item.id, title: item.email, detail: `${item.role} · ${item.tenant?.businessName ?? "No tenant"}` })) },
+        { label: "Customers", items: search.data.customers.map((item) => ({ id: item.id, title: item.name, detail: `${item.phone} · ${item.tenant?.businessName ?? "No tenant"}` })) },
+        { label: "Bookings", items: search.data.bookings.map((item) => ({ id: item.id, title: item.service?.title ?? item.status, detail: `${item.customer?.name ?? "No customer"} · ${shortDate(item.startTime)}` })) },
+        { label: "Leads", items: search.data.leads.map((item) => ({ id: item.id, title: item.title, detail: `${item.status} · ${item.tenant?.businessName ?? "No tenant"}` })) },
+        { label: "Invoices", items: search.data.invoices.map((item) => ({ id: item.id, title: item.invoiceNo, detail: `${item.status} · ${money(item.totalCents)}` })) }
+      ]
+    : [];
+
+  return (
+    <div className="grid gap-4">
+      <div className="flex h-12 items-center gap-2 rounded-[8px] bg-mist px-3">
+        <Search className="h-4 w-4 text-steel" />
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search tenants, users, customers, bookings, leads, invoices..."
+          className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none"
+        />
+      </div>
+      {query.trim().length < 2 ? <Empty label="Type at least 2 characters" /> : null}
+      {search.isFetching ? <p className="text-sm font-medium text-steel">Searching...</p> : null}
+      <div className="grid gap-4 xl:grid-cols-2">
+        {groups.map((group) => (
+          <section key={group.label} className="rounded-[8px] bg-mist p-4">
+            <p className="font-semibold text-ink">{group.label}</p>
+            <div className="mt-3 grid gap-2">
+              {group.items.map((item) => (
+                <div key={item.id} className="rounded-[8px] bg-white p-3">
+                  <p className="font-semibold text-ink">{item.title}</p>
+                  <p className="mt-1 text-sm text-steel">{item.detail}</p>
+                </div>
+              ))}
+              {!group.items.length ? <p className="text-sm text-steel">No matches</p> : null}
+            </div>
+          </section>
+        ))}
+      </div>
+      {search.error ? <p className="text-sm font-medium text-coral">{search.error instanceof Error ? search.error.message : "Search failed"}</p> : null}
+    </div>
+  );
+}
+
 function TenantDetail({ tenantId }: { tenantId: string }) {
   const queryClient = useQueryClient();
+  const setSession = useAuth((state) => state.setSession);
+  const currentUser = useAuth((state) => state.user);
+  const canManagePlatform = currentUser?.role === "PLATFORM_ADMIN";
   const detail = useQuery({ queryKey: ["platform-tenant", tenantId], queryFn: () => api.platformTenant(tenantId) });
   const health = useQuery({ queryKey: ["platform-tenant-health", tenantId], queryFn: () => api.platformTenantHealth(tenantId) });
   const usage = useQuery({ queryKey: ["platform-tenant-usage", tenantId], queryFn: () => api.platformTenantUsage(tenantId) });
   const notes = useQuery({ queryKey: ["platform-support-notes", tenantId], queryFn: () => api.platformSupportNotes(tenantId) });
   const access = useQuery({ queryKey: ["platform-support-access", tenantId], queryFn: () => api.platformSupportAccess(tenantId) });
   const billing = useQuery({ queryKey: ["platform-billing", tenantId], queryFn: () => api.platformBilling(tenantId) });
+  const timeline = useQuery({ queryKey: ["platform-tenant-timeline", tenantId], queryFn: () => api.platformTenantTimeline(tenantId) });
   const [note, setNote] = useState("");
   const [reason, setReason] = useState("Support troubleshooting for tenant setup.");
   const [flags, setFlags] = useState("");
@@ -612,6 +685,8 @@ function TenantDetail({ tenantId }: { tenantId: string }) {
   const [billingAmount, setBillingAmount] = useState("299");
   const [setupAmount, setSetupAmount] = useState("1000");
   const [billingNote, setBillingNote] = useState("Manual payment recorded.");
+  const [archiveReason, setArchiveReason] = useState("Customer no longer active.");
+  const [archiveConfirm, setArchiveConfirm] = useState("");
 
   const saveConfig = useMutation({
     mutationFn: () =>
@@ -638,6 +713,46 @@ function TenantDetail({ tenantId }: { tenantId: string }) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["platform-support-access", tenantId] });
       void queryClient.invalidateQueries({ queryKey: ["platform-audit"] });
+    }
+  });
+  const impersonate = useMutation({
+    mutationFn: (token: string) => api.impersonatePlatformTenant(token),
+    onSuccess: (data) => {
+      setSession(data.accessToken, data.user);
+      window.location.href = "/app";
+    }
+  });
+  const exportTenant = useMutation({
+    mutationFn: () => api.exportPlatformTenant(tenantId),
+    onSuccess: (data) => {
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${data.tenant.slug}-export.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      void queryClient.invalidateQueries({ queryKey: ["platform-audit"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-tenant-timeline", tenantId] });
+    }
+  });
+  const archiveTenant = useMutation({
+    mutationFn: () => api.archivePlatformTenant(tenantId, { confirmation: archiveConfirm, reason: archiveReason }),
+    onSuccess: () => {
+      setArchiveConfirm("");
+      void queryClient.invalidateQueries({ queryKey: ["platform-tenant", tenantId] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-tenants"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-audit"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-tenant-timeline", tenantId] });
+    }
+  });
+  const restoreTenant = useMutation({
+    mutationFn: () => api.restorePlatformTenant(tenantId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["platform-tenant", tenantId] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-tenants"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-audit"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-tenant-timeline", tenantId] });
     }
   });
   const createBillingEvent = useMutation({
@@ -693,6 +808,37 @@ function TenantDetail({ tenantId }: { tenantId: string }) {
       <div className="grid gap-4">
         <HealthPanel health={health.data} usage={usage.data} tenant={tenant} />
         {tenant ? <TenantControlPanel key={tenant.id} tenant={tenant} /> : null}
+        {tenant ? (
+          <section className="grid gap-4 lg:grid-cols-[1fr_0.9fr]">
+            <div className="rounded-[8px] bg-mist p-4">
+              <p className="font-semibold text-ink">Lifecycle safeguards</p>
+              <p className="mt-1 text-sm text-steel">Archive hides a tenant from active operations without destroying customer data.</p>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <AdminInput label="Archive reason" value={archiveReason} onChange={setArchiveReason} />
+                <AdminInput label={`Type "${tenant.businessName}"`} value={archiveConfirm} onChange={setArchiveConfirm} />
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button onClick={() => archiveTenant.mutate()} disabled={!canManagePlatform || archiveTenant.isPending || archiveConfirm !== tenant.businessName} className="flex h-10 items-center gap-2 rounded-[8px] bg-coral px-3 text-sm font-semibold text-white disabled:opacity-50">
+                  <Undo2 className="h-4 w-4" />
+                  Archive tenant
+                </button>
+                <button onClick={() => restoreTenant.mutate()} disabled={!canManagePlatform || restoreTenant.isPending} className="h-10 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50">
+                  Restore active
+                </button>
+                <button onClick={() => exportTenant.mutate()} disabled={exportTenant.isPending} className="flex h-10 items-center gap-2 rounded-[8px] bg-ink px-3 text-sm font-semibold text-white disabled:opacity-50">
+                  <Download className="h-4 w-4" />
+                  Export data
+                </button>
+              </div>
+              {archiveTenant.error || restoreTenant.error || exportTenant.error ? (
+                <p className="mt-3 text-sm font-medium text-coral">
+                  {((archiveTenant.error ?? restoreTenant.error ?? exportTenant.error) as Error).message}
+                </p>
+              ) : null}
+            </div>
+            <TenantTimeline items={timeline.data} />
+          </section>
+        ) : null}
         <BillingPanel
           summary={billing.data}
           type={billingType}
@@ -735,15 +881,26 @@ function TenantDetail({ tenantId }: { tenantId: string }) {
               Create audited token
             </button>
             {createAccess.data ? (
-              <p className="mt-3 break-all rounded-[8px] bg-white p-2 text-xs font-semibold text-ink">{createAccess.data.token}</p>
+              <div className="mt-3 rounded-[8px] bg-white p-2">
+                <p className="break-all text-xs font-semibold text-ink">{createAccess.data.token}</p>
+                <button onClick={() => impersonate.mutate(createAccess.data.token)} className="mt-2 h-9 rounded-[8px] bg-pine px-3 text-xs font-semibold text-white">
+                  Open as tenant
+                </button>
+              </div>
             ) : null}
             <div className="mt-3 grid gap-2">
               {(access.data ?? []).slice(0, 4).map((item) => (
-                <p key={item.id} className="rounded-[8px] bg-white p-2 text-xs text-steel">
-                  {item.admin?.email} · expires {shortDate(item.expiresAt)}
-                </p>
+                <div key={item.id} className="rounded-[8px] bg-white p-2 text-xs text-steel">
+                  <p>{item.admin?.email} · expires {shortDate(item.expiresAt)}</p>
+                  {!item.usedAt ? (
+                    <button onClick={() => impersonate.mutate(item.token)} className="mt-2 h-8 rounded-[8px] bg-ink px-2 text-xs font-semibold text-white">
+                      Impersonate
+                    </button>
+                  ) : null}
+                </div>
               ))}
             </div>
+            {impersonate.error ? <p className="mt-3 text-sm font-medium text-coral">{impersonate.error instanceof Error ? impersonate.error.message : "Unable to impersonate"}</p> : null}
           </section>
         </div>
 
@@ -880,6 +1037,30 @@ function TenantControlPanel({ tenant }: { tenant: PlatformTenantDetail }) {
   );
 }
 
+function TenantTimeline({ items }: { items?: Array<{ id: string; kind: string; title: string; summary?: string | null; amountCents?: number | null; createdAt: string; actor?: { email: string; role: string } | null }> }) {
+  return (
+    <section className="rounded-[8px] bg-mist p-4">
+      <p className="font-semibold text-ink">Tenant activity timeline</p>
+      <div className="mt-3 grid max-h-[360px] gap-2 overflow-auto pr-1">
+        {(items ?? []).slice(0, 30).map((item) => (
+          <div key={`${item.kind}-${item.id}`} className="rounded-[8px] bg-white p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Status label={item.kind} />
+              {item.amountCents ? <Status label={money(item.amountCents)} /> : null}
+            </div>
+            <p className="mt-2 font-semibold text-ink">{item.title}</p>
+            {item.summary ? <p className="mt-1 text-sm text-steel">{item.summary}</p> : null}
+            <p className="mt-2 text-xs font-medium text-steel">
+              {item.actor?.email ?? "system"} · {shortDate(item.createdAt)}
+            </p>
+          </div>
+        ))}
+        {!items?.length ? <Empty label="No tenant activity yet" /> : null}
+      </div>
+    </section>
+  );
+}
+
 function AdminInput({
   label,
   value,
@@ -981,7 +1162,8 @@ const billingEventTypes: PlatformBillingEventType[] = [
   "PAYMENT_FAILED",
   "PAST_DUE",
   "CANCELED",
-  "CREDIT_APPLIED"
+  "CREDIT_APPLIED",
+  "REFUND_ISSUED"
 ];
 
 function BillingPanel({
@@ -1126,7 +1308,7 @@ function SupportNote({ item }: { item: PlatformSupportNote }) {
   );
 }
 
-function UserAdminList({ items, tenants }: { items?: PlatformUser[]; tenants?: PlatformTenant[] }) {
+function UserAdminList({ items, tenants, canManage }: { items?: PlatformUser[]; tenants?: PlatformTenant[]; canManage: boolean }) {
   const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [tenantId, setTenantId] = useState("");
@@ -1169,7 +1351,7 @@ function UserAdminList({ items, tenants }: { items?: PlatformUser[]; tenants?: P
             <p className="font-semibold text-ink">User control</p>
             <p className="text-sm text-steel">Create users, change roles, and disable access.</p>
           </div>
-          <button onClick={() => setShowCreate((value) => !value)} className="h-10 rounded-[8px] bg-ink px-3 text-sm font-semibold text-white">
+          <button disabled={!canManage} onClick={() => setShowCreate((value) => !value)} className="h-10 rounded-[8px] bg-ink px-3 text-sm font-semibold text-white disabled:opacity-50">
             {showCreate ? "Close" : "Create user"}
           </button>
         </div>
@@ -1211,6 +1393,7 @@ function UserAdminList({ items, tenants }: { items?: PlatformUser[]; tenants?: P
           <select
             value={user.role}
             onChange={(event) => update.mutate({ id: user.id, input: { role: event.target.value as PlatformUser["role"] } })}
+            disabled={!canManage}
             className="h-10 rounded-[8px] border border-ink/10 bg-white px-2 text-sm outline-none focus:border-pine"
           >
             {userRoles.map((role) => (
@@ -1220,6 +1403,7 @@ function UserAdminList({ items, tenants }: { items?: PlatformUser[]; tenants?: P
           <Status label={user.tenant?.status ?? "NO TENANT"} />
           <button
             onClick={() => update.mutate({ id: user.id, input: { active: !user.active } })}
+            disabled={!canManage}
             className={cn("h-10 rounded-[8px] px-3 text-sm font-semibold", user.active ? "bg-coral text-white" : "bg-pine text-white")}
           >
             {user.active ? "Deactivate" : "Activate"}
@@ -1287,9 +1471,27 @@ function FailureList({
   automation?: PlatformAutomationFailure[];
   webhooks?: PlatformWebhookFailure[];
 }) {
+  const queryClient = useQueryClient();
+  const retryAutomation = useMutation({
+    mutationFn: (id: string) => api.retryPlatformAutomationFailure(id, "Retried from platform admin failure queue."),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["platform-automation-failures"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-audit"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-metrics"] });
+    }
+  });
+  const replayWebhook = useMutation({
+    mutationFn: (id: string) => api.replayPlatformWebhookFailure(id, "Replayed from platform admin failure queue."),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["platform-webhook-failures"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-audit"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-metrics"] });
+    }
+  });
   const items = [
     ...(automation ?? []).map((item) => ({
       id: item.id,
+      kind: "automation" as const,
       title: item.trigger,
       tenant: item.tenant?.businessName,
       error: item.error,
@@ -1297,6 +1499,7 @@ function FailureList({
     })),
     ...(webhooks ?? []).map((item) => ({
       id: item.id,
+      kind: "webhook" as const,
       title: `${item.provider} webhook`,
       tenant: item.tenant?.businessName,
       error: item.error,
@@ -1310,9 +1513,19 @@ function FailureList({
           <p className="font-semibold text-ink">{item.title}</p>
           <p className="text-sm text-steel">{item.tenant ?? "No tenant"} · {shortDate(item.createdAt)}</p>
           {item.error ? <p className="mt-2 text-sm font-medium text-coral">{item.error}</p> : null}
+          <button
+            onClick={() => item.kind === "automation" ? retryAutomation.mutate(item.id) : replayWebhook.mutate(item.id)}
+            className="mt-3 h-9 rounded-[8px] bg-ink px-3 text-xs font-semibold text-white disabled:opacity-50"
+            disabled={retryAutomation.isPending || replayWebhook.isPending}
+          >
+            {item.kind === "automation" ? "Retry automation" : "Replay webhook"}
+          </button>
         </div>
       ))}
       {!items.length ? <Empty label="No platform failures" /> : null}
+      {retryAutomation.error || replayWebhook.error ? (
+        <p className="text-sm font-medium text-coral">{((retryAutomation.error ?? replayWebhook.error) as Error).message}</p>
+      ) : null}
     </div>
   );
 }
