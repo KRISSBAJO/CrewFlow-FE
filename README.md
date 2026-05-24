@@ -80,6 +80,7 @@ Before handing the app to a real business, verify:
 - Platform admin control center
 - Booking board
 - Customer manager and CSV import
+- Excel/CSV customer import and WhatsApp export import
 - Field job packet
 - Invoices and payments
 - Manager action queue

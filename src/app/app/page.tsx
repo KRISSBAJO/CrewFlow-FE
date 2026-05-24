@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import * as XLSX from "xlsx";
 import {
   AlertTriangle,
   Banknote,
@@ -55,6 +56,7 @@ import {
   CollectionActionInput,
   Conversation,
   Customer,
+  CustomerInput,
   DashboardSummary,
   FieldDispatchJob,
   Invoice,
@@ -1476,7 +1478,12 @@ function CustomersView({ items, onOpen }: { items?: Customer[]; onOpen: (state: 
   const [email, setEmail] = useState("");
   const [notes, setNotes] = useState("");
   const [csv, setCsv] = useState("name,phone,email,notes\nAva Carter,+15550102020,ava@example.com,Prefers WhatsApp");
+  const [whatsappText, setWhatsappText] = useState(
+    "5/24/26, 9:15 AM - +15550102020: Hi, I need a deep clean next Friday afternoon."
+  );
   const [importResult, setImportResult] = useState<string>("");
+  const [whatsappResult, setWhatsappResult] = useState<string>("");
+  const [fileError, setFileError] = useState("");
 
   const filtered = useMemo(() => {
     const value = search.trim().toLowerCase();
@@ -1516,8 +1523,43 @@ function CustomersView({ items, onOpen }: { items?: Customer[]; onOpen: (state: 
     }
   });
 
+  const importWhatsApp = useMutation({
+    mutationFn: () => api.importWhatsAppCustomers({ text: whatsappText, createLeads: true }),
+    onSuccess: (result) => {
+      setWhatsappResult(
+        `${result.created} created, ${result.updated} updated, ${result.messagesCreated} messages, ${result.leadsCreated} leads`
+      );
+      void queryClient.invalidateQueries({ queryKey: ["customers"] });
+      void queryClient.invalidateQueries({ queryKey: ["leads"] });
+      void queryClient.invalidateQueries({ queryKey: ["inbox"] });
+    }
+  });
+
   const canSave = name.trim() && phone.trim();
   const preview = parseCustomerCsv(csv).slice(0, 5);
+
+  async function handleCustomerFile(file?: File) {
+    setFileError("");
+    if (!file) return;
+    try {
+      const rows = await readCustomerImportFile(file);
+      setCsv(toCustomerCsv(rows));
+      setImportResult(`Loaded ${rows.length} rows from ${file.name}. Review preview, then import.`);
+    } catch (error) {
+      setFileError(error instanceof Error ? error.message : "Unable to read customer file");
+    }
+  }
+
+  async function handleWhatsAppFile(file?: File) {
+    setFileError("");
+    if (!file) return;
+    try {
+      setWhatsappText(await file.text());
+      setWhatsappResult(`Loaded WhatsApp export from ${file.name}. Review sample, then import.`);
+    } catch (error) {
+      setFileError(error instanceof Error ? error.message : "Unable to read WhatsApp export");
+    }
+  }
 
   return (
     <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
@@ -1596,7 +1638,20 @@ function CustomersView({ items, onOpen }: { items?: Customer[]; onOpen: (state: 
           </div>
         </Panel>
 
-        <Panel title="CSV import" icon={FileText}>
+        <Panel title="Customer import" icon={FileText}>
+          <div className="mb-3 rounded-[8px] bg-mist p-3 text-sm leading-6 text-steel">
+            Upload Excel or CSV from an existing customer list, or paste rows with
+            name, phone, email, and notes.
+          </div>
+          <label className="mb-3 flex cursor-pointer flex-col gap-2 rounded-[8px] border border-dashed border-ink/20 bg-white p-3 text-sm font-semibold text-ink">
+            <span>Upload Excel or CSV</span>
+            <input
+              type="file"
+              accept=".csv,.xlsx,.xls"
+              onChange={(event) => void handleCustomerFile(event.target.files?.[0])}
+              className="text-sm font-medium text-steel file:mr-3 file:rounded-[8px] file:border-0 file:bg-pine file:px-3 file:py-2 file:font-semibold file:text-white"
+            />
+          </label>
           <textarea
             value={csv}
             onChange={(event) => setCsv(event.target.value)}
@@ -1624,6 +1679,40 @@ function CustomersView({ items, onOpen }: { items?: Customer[]; onOpen: (state: 
           >
             {importCustomers.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
             Import customers
+          </button>
+        </Panel>
+
+        <Panel title="WhatsApp export import" icon={MessageSquareText}>
+          <div className="mb-3 rounded-[8px] bg-mist p-3 text-sm leading-6 text-steel">
+            Paste or upload a WhatsApp chat export. CrewFlow detects phone numbers, creates customer
+            records, stores recent messages, and opens lead records for booking-like inquiries.
+          </div>
+          <label className="mb-3 flex cursor-pointer flex-col gap-2 rounded-[8px] border border-dashed border-ink/20 bg-white p-3 text-sm font-semibold text-ink">
+            <span>Upload WhatsApp .txt export</span>
+            <input
+              type="file"
+              accept=".txt,text/plain"
+              onChange={(event) => void handleWhatsAppFile(event.target.files?.[0])}
+              className="text-sm font-medium text-steel file:mr-3 file:rounded-[8px] file:border-0 file:bg-pine file:px-3 file:py-2 file:font-semibold file:text-white"
+            />
+          </label>
+          <textarea
+            value={whatsappText}
+            onChange={(event) => setWhatsappText(event.target.value)}
+            className="min-h-36 w-full rounded-[8px] border border-ink/10 bg-mist p-3 text-sm outline-none focus:border-pine"
+          />
+          {fileError ? <p className="mt-3 rounded-[8px] bg-coral/10 px-3 py-2 text-sm font-semibold text-coral">{fileError}</p> : null}
+          {importWhatsApp.error ? <ErrorText error={importWhatsApp.error} /> : null}
+          {whatsappResult ? (
+            <p className="mt-3 rounded-[8px] bg-mint/30 px-3 py-2 text-sm font-semibold text-ink">{whatsappResult}</p>
+          ) : null}
+          <button
+            onClick={() => importWhatsApp.mutate()}
+            disabled={!whatsappText.trim() || importWhatsApp.isPending}
+            className="mt-3 flex h-10 items-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {importWhatsApp.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            Import WhatsApp customers
           </button>
         </Panel>
       </div>
@@ -4324,10 +4413,85 @@ function parseCustomerCsv(value: string) {
 
   return rows
     .map((line) => {
-      const [name = "", phone = "", email = "", notes = ""] = line.split(",").map((item) => item.trim());
+      const [name = "", phone = "", email = "", notes = ""] = parseCsvLine(line);
       return { name, phone, email, notes };
     })
     .filter((row) => row.name && row.phone);
+}
+
+function parseCsvLine(line: string) {
+  const cells: string[] = [];
+  let current = "";
+  let quoted = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    const next = line[index + 1];
+
+    if (character === '"' && quoted && next === '"') {
+      current += '"';
+      index += 1;
+      continue;
+    }
+
+    if (character === '"') {
+      quoted = !quoted;
+      continue;
+    }
+
+    if (character === "," && !quoted) {
+      cells.push(current.trim());
+      current = "";
+      continue;
+    }
+
+    current += character;
+  }
+
+  cells.push(current.trim());
+  return cells;
+}
+
+async function readCustomerImportFile(file: File) {
+  const extension = file.name.split(".").pop()?.toLowerCase();
+  if (extension === "xlsx" || extension === "xls") {
+    const buffer = await file.arrayBuffer();
+    const workbook = XLSX.read(buffer, { type: "array" });
+    const sheetName = workbook.SheetNames[0];
+    if (!sheetName) throw new Error("Excel file has no sheets");
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[sheetName], {
+      defval: ""
+    });
+    return rows
+      .map((row) => normalizeCustomerImportRow(row))
+      .filter((row) => row.name && row.phone);
+  }
+
+  const text = await file.text();
+  return parseCustomerCsv(text);
+}
+
+function normalizeCustomerImportRow(row: Record<string, unknown>) {
+  const normalized = Object.fromEntries(
+    Object.entries(row).map(([key, value]) => [key.trim().toLowerCase().replace(/\s+/g, "_"), String(value ?? "").trim()])
+  );
+
+  return {
+    name: normalized.name || normalized.customer || normalized.customer_name || normalized.full_name || "",
+    phone: normalized.phone || normalized.mobile || normalized.whatsapp || normalized.phone_number || "",
+    email: normalized.email || normalized.email_address || "",
+    notes: normalized.notes || normalized.note || normalized.address || normalized.last_service_date || ""
+  };
+}
+
+function toCustomerCsv(rows: CustomerInput[]) {
+  const header = "name,phone,email,notes";
+  const body = rows.map((row) => [row.name, row.phone, row.email ?? "", row.notes ?? ""].map(escapeCsvCell).join(","));
+  return [header, ...body].join("\n");
+}
+
+function escapeCsvCell(value: string) {
+  return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
 function InvoiceDetail({ item }: { item: Invoice }) {

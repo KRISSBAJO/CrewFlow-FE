@@ -16,6 +16,7 @@ This checkpoint covers the CrewFlow landing page and operations console through 
 - Inbox with revenue-intent filters
 - Booking board with inline lead booking and recurrence
 - Customer manager and customer revenue profile
+- Excel/CSV customer import and WhatsApp export import
 - Field job packet and completion flow
 - Invoice/payment controls
 - Manager action queue

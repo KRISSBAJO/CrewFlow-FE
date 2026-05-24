@@ -225,6 +225,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ customers })
     }),
+  importWhatsAppCustomers: (input: { text: string; createLeads?: boolean }) =>
+    request<WhatsAppCustomerImportResult>("/customers/import/whatsapp", {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
   services: () => request<Service[]>("/services"),
   createService: (input: ServiceInput) =>
     request<Service>("/services", {
@@ -989,6 +994,14 @@ export type CustomerImportResult = {
     id?: string;
     reason?: string;
   }>;
+};
+
+export type WhatsAppCustomerImportResult = CustomerImportResult & {
+  parsedMessages: number;
+  ignoredLines: number;
+  conversationsCreated: number;
+  messagesCreated: number;
+  leadsCreated: number;
 };
 
 export type CustomerTimeline = {
