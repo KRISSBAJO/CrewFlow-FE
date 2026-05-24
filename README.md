@@ -54,6 +54,7 @@ Before handing the app to a real business, verify:
 - Backend `/api/health/readiness` returns `status: ok`.
 - Login, dashboard, leads, inbox, bookings, invoices, settings, billing, and admin pages load against the deployed API.
 - Landing page CTAs open the app without broken routes.
+- Use [UAT Checklist](docs/UAT_CHECKLIST.md) before demos and handoff.
 
 ## Product Areas
 
