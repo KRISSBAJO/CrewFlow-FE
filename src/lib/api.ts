@@ -170,6 +170,10 @@ export const api = {
       body: JSON.stringify(input)
     }),
   portal: (slug: string) => request<PublicBookingPortal>(`/portal/${slug}`),
+  portalAvailability: (slug: string, serviceId: string, date: string) =>
+    request<AvailabilityResponse>(
+      `/portal/${slug}/availability?serviceId=${encodeURIComponent(serviceId)}&date=${encodeURIComponent(date)}`
+    ),
   portalBooking: (slug: string, bookingId: string) =>
     request<PublicBookingStatus>(`/portal/${slug}/bookings/${bookingId}`),
   portalInvoice: (slug: string, invoiceId: string) =>
@@ -254,6 +258,12 @@ export const api = {
   fieldJobs: () => request<Booking[]>("/field/jobs"),
   fieldDispatch: (date?: string) =>
     request<FieldDispatchBoard>(date ? `/field/dispatch?date=${encodeURIComponent(date)}` : "/field/dispatch"),
+  schedulingConflicts: (date?: string) =>
+    request<SchedulingConflicts>(date ? `/scheduling/conflicts?date=${encodeURIComponent(date)}` : "/scheduling/conflicts"),
+  staffSuggestions: (serviceId: string, startTime: string) =>
+    request<StaffSuggestion[]>(
+      `/scheduling/staff-suggestions?serviceId=${encodeURIComponent(serviceId)}&startTime=${encodeURIComponent(startTime)}`
+    ),
   assignFieldJob: (bookingId: string, input: { staffId: string; dispatchNote?: string }) =>
     request<{ booking: Booking; readiness: FieldDispatchJob }>(`/field/jobs/${bookingId}/assign`, {
       method: "POST",
@@ -779,6 +789,53 @@ export type PublicBookingPortal = {
     maxAdvanceDays?: number;
   } | null;
   services: Service[];
+};
+
+export type AvailabilitySlot = {
+  startTime: string;
+  endTime: string;
+  available: boolean;
+  staffId?: string;
+  staffName?: string;
+  reason?: string;
+};
+
+export type AvailabilityResponse = {
+  date: string;
+  service: Pick<Service, "id" | "title" | "durationMinutes" | "priceCents">;
+  rules: {
+    slotMinutes: number;
+    bookingBufferMinutes: number;
+    maxAdvanceDays: number;
+  };
+  slots: AvailabilitySlot[];
+  recommended?: AvailabilitySlot | null;
+};
+
+export type SchedulingConflicts = {
+  date: string;
+  summary: {
+    bookings: number;
+    risks: number;
+    critical: number;
+  };
+  risks: Array<{
+    type: string;
+    title: string;
+    score: number;
+    bookingId: string;
+    customerName: string;
+    serviceTitle: string;
+    startTime: string;
+    assignedStaffName?: string | null;
+  }>;
+};
+
+export type StaffSuggestion = StaffMember & {
+  available: boolean;
+  dailyMinutes: number;
+  score: number;
+  conflicts: Booking[];
 };
 
 export type PublicBookingInput = {

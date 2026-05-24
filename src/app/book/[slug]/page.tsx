@@ -19,23 +19,10 @@ import {
 import { api, type PublicBookingInput, type Service } from "@/lib/api";
 import { cn, money, shortDate } from "@/lib/utils";
 
-const quickTimes = [
-  { label: "Tomorrow morning", days: 1, hour: 9 },
-  { label: "Tomorrow afternoon", days: 1, hour: 14 },
-  { label: "This weekend", days: 6, hour: 10 },
-];
-
-function nextSlot(days: number, hour: number) {
-  const date = new Date();
-  date.setDate(date.getDate() + days);
-  date.setHours(hour, 0, 0, 0);
-  return toInputDateTime(date);
-}
-
-function toInputDateTime(date: Date) {
+function toInputDate(date: Date) {
   const offset = date.getTimezoneOffset();
   const local = new Date(date.getTime() - offset * 60_000);
-  return local.toISOString().slice(0, 16);
+  return local.toISOString().slice(0, 10);
 }
 
 export default function BookingPage() {
@@ -43,7 +30,8 @@ export default function BookingPage() {
   const router = useRouter();
   const slug = params.slug;
   const [selectedServiceId, setSelectedServiceId] = useState<string>("");
-  const [startTime, setStartTime] = useState(() => nextSlot(1, 9));
+  const [selectedDate, setSelectedDate] = useState(() => toInputDate(new Date(Date.now() + 24 * 60 * 60_000)));
+  const [startTime, setStartTime] = useState("");
   const [payNow, setPayNow] = useState(true);
   const [form, setForm] = useState({
     customerName: "",
@@ -63,6 +51,13 @@ export default function BookingPage() {
     () => services.find((service) => service.id === selectedServiceId) ?? services[0],
     [selectedServiceId, services],
   );
+  const serviceId = selectedService?.id ?? "";
+  const availability = useQuery({
+    queryKey: ["portal-availability", slug, serviceId, selectedDate],
+    queryFn: () => api.portalAvailability(slug, serviceId, selectedDate),
+    enabled: Boolean(serviceId && selectedDate),
+  });
+  const openSlots = (availability.data?.slots ?? []).filter((slot) => slot.available);
 
   const booking = useMutation({
     mutationFn: (input: PublicBookingInput) => api.createPortalBooking(slug, input),
@@ -75,7 +70,7 @@ export default function BookingPage() {
     Boolean(selectedService) &&
     form.customerName.trim().length > 1 &&
     form.phone.trim().length > 6 &&
-    Boolean(startTime) &&
+    Boolean(startTime || availability.data?.recommended?.startTime) &&
     !booking.isPending;
 
   function updateForm(key: keyof typeof form, value: string) {
@@ -84,9 +79,11 @@ export default function BookingPage() {
 
   function submit() {
     if (!selectedService || !canSubmit) return;
+    const selectedStart = startTime || availability.data?.recommended?.startTime;
+    if (!selectedStart) return;
     booking.mutate({
       serviceId: selectedService.id,
-      startTime: new Date(startTime).toISOString(),
+      startTime: new Date(selectedStart).toISOString(),
       customerName: form.customerName.trim(),
       phone: form.phone.trim(),
       email: form.email.trim() || undefined,
@@ -183,25 +180,38 @@ export default function BookingPage() {
                     </div>
 
                     <div className="grid gap-2">
-                      <label className="text-sm font-semibold text-steel">Preferred time</label>
+                      <label className="text-sm font-semibold text-steel">Preferred date</label>
                       <input
-                        type="datetime-local"
-                        value={startTime}
-                        onChange={(event) => setStartTime(event.target.value)}
+                        type="date"
+                        value={selectedDate}
+                        onChange={(event) => {
+                          setSelectedDate(event.target.value);
+                          setStartTime("");
+                        }}
                         className="h-12 rounded-[8px] border border-black/10 bg-mist px-4 text-base font-semibold outline-none focus:border-pine"
                       />
-                      <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
-                        {quickTimes.map((item) => (
+                      <div className="grid max-h-64 gap-2 overflow-auto pr-1 sm:grid-cols-2">
+                        {openSlots.slice(0, 12).map((slot) => (
                           <button
-                            key={item.label}
+                            key={slot.startTime}
                             type="button"
-                            onClick={() => setStartTime(nextSlot(item.days, item.hour))}
-                            className="rounded-[8px] border border-black/10 px-3 py-2 text-left text-sm font-semibold text-steel hover:border-pine hover:text-pine"
+                            onClick={() => setStartTime(slot.startTime)}
+                            className={cn(
+                              "rounded-[8px] border px-3 py-2 text-left text-sm font-semibold hover:border-pine hover:text-pine",
+                              startTime === slot.startTime ? "border-pine bg-pine text-white hover:text-white" : "border-black/10 text-steel"
+                            )}
                           >
-                            {item.label}
+                            {shortDate(slot.startTime)}
+                            {slot.staffName ? <span className="mt-1 block text-xs opacity-75">{slot.staffName}</span> : null}
                           </button>
                         ))}
                       </div>
+                      {availability.isLoading ? <p className="text-sm font-semibold text-steel">Finding open slots...</p> : null}
+                      {!availability.isLoading && !openSlots.length ? (
+                        <p className="rounded-[8px] bg-amber/20 p-3 text-sm font-semibold text-ink">
+                          No open slots on this date. Try another day.
+                        </p>
+                      ) : null}
                     </div>
 
                     <div className="grid gap-3">

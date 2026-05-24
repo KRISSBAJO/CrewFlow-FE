@@ -1674,6 +1674,10 @@ function FieldView({ items, onOpen }: { items?: Booking[]; onOpen: (state: Drawe
     queryKey: ["communication-health"],
     queryFn: api.communicationHealth
   });
+  const schedulingConflicts = useQuery({
+    queryKey: ["scheduling-conflicts", date],
+    queryFn: () => api.schedulingConflicts(date)
+  });
   const jobs = dispatch.data?.jobs ?? items ?? [];
   const complete = useMutation({
     mutationFn: (bookingId: string) =>
@@ -1767,6 +1771,35 @@ function FieldView({ items, onOpen }: { items?: Booking[]; onOpen: (state: Drawe
             </button>
           ))}
           <Empty show={!communicationHealth.isLoading && !(communicationHealth.data?.risks.length)} label="No communication gaps" />
+        </div>
+      </Panel>
+
+      <Panel title="Scheduling intelligence" icon={AlertTriangle}>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <MiniStat label="Bookings" value={schedulingConflicts.data?.summary.bookings ?? 0} />
+          <MiniStat label="Risks" value={schedulingConflicts.data?.summary.risks ?? 0} danger={(schedulingConflicts.data?.summary.risks ?? 0) > 0} />
+          <MiniStat label="Critical" value={schedulingConflicts.data?.summary.critical ?? 0} danger={(schedulingConflicts.data?.summary.critical ?? 0) > 0} />
+        </div>
+        <div className="mt-4 grid gap-2">
+          {(schedulingConflicts.data?.risks ?? []).slice(0, 6).map((risk) => (
+            <button
+              key={`${risk.bookingId}-${risk.type}`}
+              onClick={() => {
+                const match = jobs.find((job) => job.id === risk.bookingId);
+                if (match) onOpen({ type: "booking", item: match });
+              }}
+              className="flex items-center justify-between gap-3 rounded-[8px] bg-mist p-3 text-left"
+            >
+              <span className="min-w-0">
+                <span className="block truncate font-semibold text-ink">{risk.title}</span>
+                <span className="block truncate text-sm text-steel">
+                  {risk.customerName} · {risk.serviceTitle} · {risk.assignedStaffName ?? "Unassigned"}
+                </span>
+              </span>
+              <Status label={`${risk.score}% risk`} />
+            </button>
+          ))}
+          <Empty show={!schedulingConflicts.isLoading && !(schedulingConflicts.data?.risks.length)} label="No scheduling risks" />
         </div>
       </Panel>
 
