@@ -322,28 +322,27 @@ export default function LandingPage() {
 
       <section id="pricing" className="bg-white px-5 py-24 md:px-8">
         <div className="mx-auto max-w-7xl">
-          <div className="grid gap-8 lg:grid-cols-[0.82fr_1.18fr]">
-            <div className="lg:sticky lg:top-6 lg:self-start">
-              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-pine">Pricing</p>
-              <h2 className="mt-3 text-4xl font-semibold leading-tight md:text-5xl">
-                Priced around recovered revenue, not software seats.
-              </h2>
-              <p className="mt-5 text-lg leading-8 text-steel">
-                CrewFlow is sold as an operating system for cleaning and home-service teams that
-                are losing money to slow replies, missed follow-up, messy dispatch, and unpaid work.
-              </p>
-              <div className="mt-8 grid gap-3">
-                {roiSignals.map((item) => (
-                  <RoiRow key={item.title} {...item} />
-                ))}
-              </div>
-            </div>
+          <div className="mx-auto max-w-3xl text-center">
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-pine">Pricing</p>
+            <h2 className="mt-3 text-4xl font-semibold leading-tight md:text-5xl">
+              Priced around recovered revenue.
+            </h2>
+            <p className="mt-5 text-lg leading-8 text-steel">
+              Pick the operating package that matches how much revenue leakage, admin work,
+              and dispatch complexity the team needs to control.
+            </p>
+          </div>
 
-            <div className="grid gap-4 xl:grid-cols-3">
-              {pricingPlans.map((plan) => (
-                <PricingCard key={plan.name} {...plan} />
-              ))}
-            </div>
+          <div className="mt-10 grid gap-3 md:grid-cols-3">
+            {roiSignals.map((item) => (
+              <RoiRow key={item.title} {...item} compact />
+            ))}
+          </div>
+
+          <div className="mt-8 grid gap-5 lg:grid-cols-3">
+            {pricingPlans.map((plan) => (
+              <PricingCard key={plan.name} {...plan} />
+            ))}
           </div>
 
           <div className="mt-10 rounded-[8px] border border-ink/8 bg-[#f6f8f5] p-5 md:p-6">
@@ -482,14 +481,16 @@ function WorkflowRow({
 function RoiRow({
   title,
   body,
-  icon: Icon
+  icon: Icon,
+  compact
 }: {
   title: string;
   body: string;
   icon: typeof CalendarCheck2;
+  compact?: boolean;
 }) {
   return (
-    <div className="flex gap-4 rounded-[8px] border border-ink/8 bg-[#f6f8f5] p-4">
+    <div className={`flex gap-4 rounded-[8px] border border-ink/8 bg-[#f6f8f5] ${compact ? "p-5" : "p-4"}`}>
       <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[8px] bg-white text-pine shadow-soft">
         <Icon className="h-5 w-5" />
       </div>
@@ -520,7 +521,7 @@ function PricingCard({
 }) {
   return (
     <div
-      className={`flex min-h-[560px] flex-col rounded-[8px] border p-5 shadow-soft ${
+      className={`relative flex flex-col rounded-[8px] border p-5 shadow-soft md:p-6 ${
         highlighted ? "border-pine bg-ink text-white" : "border-ink/8 bg-white text-ink"
       }`}
     >
@@ -529,7 +530,7 @@ function PricingCard({
           <p className={`text-sm font-semibold uppercase tracking-[0.18em] ${highlighted ? "text-mint" : "text-pine"}`}>
             {name}
           </p>
-          <p className="mt-4 text-4xl font-semibold">
+          <p className="mt-4 text-4xl font-semibold md:text-5xl">
             {price}
             <span className={`text-base font-medium ${highlighted ? "text-white/58" : "text-steel"}`}> / mo</span>
           </p>
@@ -542,9 +543,9 @@ function PricingCard({
         ) : null}
       </div>
 
-      <p className={`mt-4 leading-7 ${highlighted ? "text-white/70" : "text-steel"}`}>{description}</p>
+      <p className={`mt-4 min-h-[84px] leading-7 ${highlighted ? "text-white/70" : "text-steel"}`}>{description}</p>
 
-      <div className={`mt-5 grid gap-2 rounded-[8px] p-4 ${highlighted ? "bg-white/8" : "bg-mist"}`}>
+      <div className={`mt-3 grid gap-2 rounded-[8px] p-4 ${highlighted ? "bg-white/8" : "bg-mist"}`}>
         <div className="flex items-center gap-2">
           <CreditCard className={`h-4 w-4 ${highlighted ? "text-mint" : "text-pine"}`} />
           <p className="font-semibold">{setup}</p>
