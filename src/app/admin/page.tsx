@@ -13,6 +13,9 @@ import {
   ListChecks,
   Loader2,
   LogOut,
+  Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   RefreshCw,
   Search,
   ServerCog,
@@ -20,7 +23,8 @@ import {
   SlidersHorizontal,
   TimerReset,
   Undo2,
-  UsersRound
+  UsersRound,
+  X
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FormEvent, useEffect, useMemo, useState } from "react";
@@ -159,6 +163,91 @@ function AdminLogin() {
   );
 }
 
+function AdminSidebar({
+  section,
+  collapsed,
+  onSelect,
+  onLogout,
+  onToggleDesktop,
+  onCloseMobile
+}: {
+  section: AdminSection;
+  collapsed: boolean;
+  onSelect: (section: AdminSection) => void;
+  onLogout: () => void;
+  onToggleDesktop?: () => void;
+  onCloseMobile?: () => void;
+}) {
+  return (
+    <div className="flex h-full flex-col">
+      <div className={cn("mb-6 flex items-center gap-3", collapsed && "justify-center")}>
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[8px] bg-ink text-white">
+          <ShieldCheck className="h-5 w-5" />
+        </div>
+        {!collapsed ? (
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-semibold text-ink">CrewFlow Admin</p>
+            <p className="truncate text-xs text-steel">Platform operations</p>
+          </div>
+        ) : null}
+        {onCloseMobile ? (
+          <button
+            onClick={onCloseMobile}
+            className="flex h-10 w-10 items-center justify-center rounded-[8px] bg-mist text-ink lg:hidden"
+            aria-label="Close navigation"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        ) : null}
+      </div>
+
+      {onToggleDesktop ? (
+        <button
+          onClick={onToggleDesktop}
+          className={cn(
+            "mb-3 hidden h-10 items-center rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink lg:flex",
+            collapsed ? "justify-center px-0" : "justify-between"
+          )}
+          aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
+          title={collapsed ? "Expand navigation" : "Collapse navigation"}
+        >
+          {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <><span>Collapse</span><PanelLeftClose className="h-4 w-4" /></>}
+        </button>
+      ) : null}
+
+      <nav className="grid gap-1">
+        {adminNav.map((item) => (
+          <button
+            key={item.id}
+            onClick={() => onSelect(item.id)}
+            title={collapsed ? item.label : undefined}
+            className={cn(
+              "flex h-11 items-center gap-3 rounded-[8px] px-3 text-left text-sm font-semibold transition",
+              collapsed && "justify-center px-0",
+              section === item.id ? "bg-pine text-white" : "text-steel hover:bg-mist hover:text-ink"
+            )}
+          >
+            <item.icon className="h-4 w-4 shrink-0" />
+            {!collapsed ? <span className="truncate">{item.label}</span> : null}
+          </button>
+        ))}
+      </nav>
+
+      <button
+        onClick={onLogout}
+        className={cn(
+          "mt-auto flex h-10 items-center justify-center gap-2 rounded-[8px] bg-ink px-3 text-sm font-semibold text-white",
+          collapsed && "px-0"
+        )}
+        title={collapsed ? "Logout" : undefined}
+      >
+        <LogOut className="h-4 w-4 shrink-0" />
+        {!collapsed ? "Logout" : null}
+      </button>
+    </div>
+  );
+}
+
 function AdminConsole() {
   const logout = useAuth((state) => state.logout);
   const user = useAuth((state) => state.user);
@@ -166,6 +255,8 @@ function AdminConsole() {
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
   const [section, setSection] = useState<AdminSection>("overview");
   const [search, setSearch] = useState("");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [desktopNavCollapsed, setDesktopNavCollapsed] = useState(false);
   const queryClient = useQueryClient();
   const metrics = useQuery({ queryKey: ["platform-metrics"], queryFn: api.platformMetrics });
   const risk = useQuery({ queryKey: ["platform-risk"], queryFn: api.platformRisk });
@@ -204,50 +295,68 @@ function AdminConsole() {
   }, [search, tenants.data]);
   const selectedTenant = (tenants.data ?? []).find((tenant) => tenant.id === selectedTenantId) ?? null;
   const showTenantDetail = section === "tenants" && Boolean(selectedTenantId);
+  const selectSection = (id: AdminSection) => {
+    setSection(id);
+    setMobileNavOpen(false);
+  };
 
   return (
     <main className="min-h-screen p-3 md:p-4">
-      <div className="mx-auto grid max-w-[1800px] gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
-        <aside className="rounded-[8px] border border-white/80 bg-white/90 p-4 shadow-soft lg:sticky lg:top-5 lg:h-[calc(100vh-40px)]">
-          <div className="mb-6 flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-[8px] bg-ink text-white">
-              <ShieldCheck className="h-5 w-5" />
-            </div>
-            <div className="min-w-0">
-              <p className="truncate font-semibold text-ink">CrewFlow Admin</p>
-              <p className="truncate text-xs text-steel">Platform operations</p>
-            </div>
+      {mobileNavOpen ? (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <button
+            aria-label="Close admin navigation"
+            className="absolute inset-0 bg-ink/35 backdrop-blur-sm"
+            onClick={() => setMobileNavOpen(false)}
+          />
+          <div className="absolute bottom-0 left-0 top-0 w-[min(86vw,320px)] bg-white p-4 shadow-soft">
+            <AdminSidebar
+              section={section}
+              collapsed={false}
+              onSelect={selectSection}
+              onLogout={logout}
+              onCloseMobile={() => setMobileNavOpen(false)}
+            />
           </div>
-          <nav className="grid gap-1">
-            {adminNav.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => setSection(item.id)}
-                className={cn(
-                  "flex h-11 items-center gap-3 rounded-[8px] px-3 text-left text-sm font-semibold transition",
-                  section === item.id ? "bg-pine text-white" : "text-steel hover:bg-mist hover:text-ink"
-                )}
-              >
-                <item.icon className="h-4 w-4" />
-                {item.label}
-              </button>
-            ))}
-          </nav>
-          <button onClick={logout} className="mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-[8px] bg-ink px-3 text-sm font-semibold text-white">
-            <LogOut className="h-4 w-4" />
-            Logout
-          </button>
+        </div>
+      ) : null}
+
+      <div
+        className={cn(
+          "mx-auto grid max-w-[1800px] gap-4",
+          desktopNavCollapsed ? "lg:grid-cols-[76px_minmax(0,1fr)]" : "lg:grid-cols-[240px_minmax(0,1fr)]"
+        )}
+      >
+        <aside className="hidden lg:block">
+          <div className="sticky top-5 h-[calc(100vh-40px)] rounded-[8px] border border-white/80 bg-white/90 p-4 shadow-soft">
+            <AdminSidebar
+              section={section}
+              collapsed={desktopNavCollapsed}
+              onSelect={selectSection}
+              onLogout={logout}
+              onToggleDesktop={() => setDesktopNavCollapsed((value) => !value)}
+            />
+          </div>
         </aside>
 
         <section className="grid min-w-0 gap-4">
           <header className="rounded-[8px] border border-white/80 bg-white/90 p-5 shadow-soft">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div>
+              <div className="flex min-w-0 items-start gap-3">
+                <button
+                  onClick={() => setMobileNavOpen(true)}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] bg-mist text-ink lg:hidden"
+                  aria-label="Open admin navigation"
+                >
+                  <Menu className="h-5 w-5" />
+                </button>
+                <div className="min-w-0">
                 <p className="text-sm font-semibold uppercase tracking-[0.18em] text-pine">CrewFlow</p>
                 <h1 className="text-2xl font-semibold text-ink md:text-3xl">Platform control center</h1>
                 <p className="mt-1 max-w-3xl text-sm text-steel">
                   Manage tenants, billing, support access, launch readiness, failures, and audit history.
                 </p>
+                </div>
               </div>
               <div className="flex gap-2">
                 <button onClick={() => queryClient.invalidateQueries()} className="flex h-10 items-center gap-2 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink">
