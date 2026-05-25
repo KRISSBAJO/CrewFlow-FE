@@ -356,6 +356,17 @@ export const api = {
   platformRisk: () => request<PlatformRiskRow[]>("/platform/risk"),
   platformSupportSessions: () => request<PlatformSupportAccess[]>("/platform/support-sessions"),
   platformTenants: () => request<PlatformTenant[]>("/platform/tenants"),
+  platformPlans: () => request<PlatformSubscriptionPlan[]>("/platform/plans"),
+  createPlatformPlan: (input: PlatformSubscriptionPlanInput) =>
+    request<PlatformSubscriptionPlan>("/platform/plans", {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
+  updatePlatformPlan: (id: string, input: PlatformSubscriptionPlanInput) =>
+    request<PlatformSubscriptionPlan>(`/platform/plans/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(input)
+    }),
   createPlatformTenant: (input: PlatformTenantCreateInput) =>
     request<PlatformTenantDetail>("/platform/tenants", {
       method: "POST",
@@ -390,6 +401,7 @@ export const api = {
         | "status"
         | "subscriptionStatus"
         | "subscriptionPlan"
+        | "subscriptionPlanId"
         | "billingEmail"
         | "monthlyPriceCents"
         | "setupFeeCents"
@@ -407,6 +419,11 @@ export const api = {
   ) =>
     request<PlatformTenant>(`/platform/tenants/${id}`, {
       method: "PATCH",
+      body: JSON.stringify(input)
+    }),
+  applyPlatformPlan: (id: string, input: { planId: string; overwriteBilling?: boolean; overwriteFeatures?: boolean }) =>
+    request<PlatformTenantDetail>(`/platform/tenants/${id}/apply-plan`, {
+      method: "POST",
       body: JSON.stringify(input)
     }),
   archivePlatformTenant: (id: string, input: { confirmation: string; reason: string }) =>
@@ -1186,6 +1203,8 @@ export type PlatformTenant = {
   status: "TRIAL" | "ACTIVE" | "SUSPENDED" | "ARCHIVED" | "CHURNED";
   subscriptionStatus?: "TRIALING" | "ACTIVE" | "PAST_DUE" | "CANCELED" | "UNPAID";
   subscriptionPlan: string;
+  subscriptionPlanId?: string | null;
+  plan?: PlatformSubscriptionPlan | null;
   billingEmail?: string | null;
   monthlyPriceCents?: number | null;
   setupFeeCents?: number | null;
@@ -1212,6 +1231,43 @@ export type PlatformTenant = {
   };
 };
 
+export type PlatformSubscriptionPlan = {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  active: boolean;
+  currency: string;
+  monthlyPriceCents: number;
+  setupFeeCents: number;
+  stripePriceId?: string | null;
+  paystackPlanCode?: string | null;
+  featureFlags?: Record<string, boolean> | null;
+  planLimits?: Record<string, number> | null;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+  _count?: { tenants: number };
+};
+
+export type PlatformSubscriptionPlanInput = Partial<
+  Pick<
+    PlatformSubscriptionPlan,
+    | "name"
+    | "slug"
+    | "description"
+    | "active"
+    | "currency"
+    | "monthlyPriceCents"
+    | "setupFeeCents"
+    | "stripePriceId"
+    | "paystackPlanCode"
+    | "featureFlags"
+    | "planLimits"
+    | "sortOrder"
+  >
+>;
+
 export type PlatformTenantCreateInput = {
   businessName: string;
   industry: string;
@@ -1223,6 +1279,7 @@ export type PlatformTenantCreateInput = {
   status?: PlatformTenant["status"];
   subscriptionStatus?: PlatformTenant["subscriptionStatus"];
   subscriptionPlan?: string;
+  subscriptionPlanId?: string;
   monthlyPriceCents?: number;
   setupFeeCents?: number;
   featureFlags?: Record<string, boolean>;

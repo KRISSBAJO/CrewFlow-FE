@@ -36,6 +36,8 @@ import {
   PlatformProviderHealth,
   PlatformAction,
   PlatformRiskRow,
+  PlatformSubscriptionPlan,
+  PlatformSubscriptionPlanInput,
   PlatformUser,
   Readiness,
   PlatformSupportAccess,
@@ -51,11 +53,12 @@ import {
 import { cn, money, shortDate } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
 
-type AdminSection = "overview" | "tenants" | "risk" | "search" | "users" | "actions" | "failures" | "audit";
+type AdminSection = "overview" | "tenants" | "plans" | "risk" | "search" | "users" | "actions" | "failures" | "audit";
 
 const adminNav: Array<{ id: AdminSection; label: string; icon: typeof ShieldCheck }> = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "tenants", label: "Tenants", icon: Building2 },
+  { id: "plans", label: "Plans", icon: SlidersHorizontal },
   { id: "risk", label: "Risk", icon: AlertTriangle },
   { id: "search", label: "Search", icon: Search },
   { id: "users", label: "Users", icon: UsersRound },
@@ -169,6 +172,7 @@ function AdminConsole() {
   const supportSessions = useQuery({ queryKey: ["platform-support-sessions"], queryFn: api.platformSupportSessions });
   const exportHistory = useQuery({ queryKey: ["platform-exports"], queryFn: api.platformExports });
   const tenants = useQuery({ queryKey: ["platform-tenants"], queryFn: api.platformTenants });
+  const plans = useQuery({ queryKey: ["platform-plans"], queryFn: api.platformPlans });
   const users = useQuery({ queryKey: ["platform-users"], queryFn: api.platformUsers });
   const platformActions = useQuery({ queryKey: ["platform-actions"], queryFn: api.platformActions });
   const automationFailures = useQuery({ queryKey: ["platform-automation-failures"], queryFn: api.platformAutomationFailures });
@@ -316,6 +320,10 @@ function AdminConsole() {
                 </Panel>
               )}
             </section>
+          ) : null}
+
+          {section === "plans" ? (
+            <PlanCatalog plans={plans.data} canManage={canManagePlatform} />
           ) : null}
 
           {section === "users" ? (
@@ -750,7 +758,7 @@ function TenantRow({
         </button>
         <div className="flex flex-wrap items-center gap-2">
           <Status label={tenant.subscriptionStatus ?? "TRIALING"} />
-          <Status label={tenant.subscriptionPlan} />
+          <Status label={tenant.plan?.name ?? tenant.subscriptionPlan} />
           {canManage ? (
             <select
               value={tenant.status}
@@ -780,12 +788,14 @@ function TenantRow({
 
 function CreateTenantBox({ canManage }: { canManage: boolean }) {
   const queryClient = useQueryClient();
+  const plans = useQuery({ queryKey: ["platform-plans"], queryFn: api.platformPlans });
   const [open, setOpen] = useState(false);
   const [businessName, setBusinessName] = useState("");
   const [industry, setIndustry] = useState("Cleaning + Home Services");
   const [ownerName, setOwnerName] = useState("");
   const [ownerEmail, setOwnerEmail] = useState("");
   const [ownerPassword, setOwnerPassword] = useState("Password123!");
+  const [planId, setPlanId] = useState("");
   const [monthlyPrice, setMonthlyPrice] = useState("299");
   const [setupFee, setSetupFee] = useState("1000");
   const create = useMutation({
@@ -796,6 +806,7 @@ function CreateTenantBox({ canManage }: { canManage: boolean }) {
         ownerName,
         ownerEmail,
         ownerPassword,
+        subscriptionPlanId: planId || undefined,
         monthlyPriceCents: Math.round(Number(monthlyPrice || 0) * 100),
         setupFeeCents: Math.round(Number(setupFee || 0) * 100),
         subscriptionPlan: "pilot"
@@ -830,6 +841,17 @@ function CreateTenantBox({ canManage }: { canManage: boolean }) {
         <AdminInput label="Owner name" value={ownerName} onChange={setOwnerName} />
         <AdminInput label="Owner email" value={ownerEmail} onChange={setOwnerEmail} />
         <AdminInput label="Owner password" value={ownerPassword} onChange={setOwnerPassword} />
+        <label>
+          <span className="mb-2 block text-sm font-medium text-steel">Plan template</span>
+          <select value={planId} onChange={(event) => setPlanId(event.target.value)} className="h-10 w-full rounded-[8px] border border-ink/10 bg-white px-3 text-sm outline-none focus:border-pine">
+            <option value="">Manual pilot defaults</option>
+            {(plans.data ?? []).map((plan) => (
+              <option key={plan.id} value={plan.id}>
+                {plan.name} - {money(plan.monthlyPriceCents)} / mo
+              </option>
+            ))}
+          </select>
+        </label>
         <div className="grid gap-3 sm:grid-cols-2">
           <AdminInput label="Monthly $" value={monthlyPrice} onChange={setMonthlyPrice} inputMode="decimal" />
           <AdminInput label="Setup $" value={setupFee} onChange={setSetupFee} inputMode="decimal" />
@@ -909,6 +931,190 @@ function PlatformSearch() {
   );
 }
 
+function PlanCatalog({
+  plans,
+  canManage
+}: {
+  plans?: PlatformSubscriptionPlan[];
+  canManage: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState<PlatformSubscriptionPlan | null>(null);
+  const [name, setName] = useState("Growth");
+  const [slug, setSlug] = useState("growth");
+  const [description, setDescription] = useState("For active service teams.");
+  const [active, setActive] = useState(true);
+  const [currency, setCurrency] = useState("USD");
+  const [monthly, setMonthly] = useState("299");
+  const [setup, setSetup] = useState("1000");
+  const [stripePriceId, setStripePriceId] = useState("");
+  const [paystackPlanCode, setPaystackPlanCode] = useState("");
+  const [sortOrder, setSortOrder] = useState("20");
+  const [features, setFeatures] = useState(
+    JSON.stringify(
+      {
+        aiReceptionist: true,
+        leadPipeline: true,
+        whatsappAutomation: true,
+        customerPortal: true,
+        fieldDispatch: true,
+        retention: true,
+        weeklyDigest: true
+      },
+      null,
+      2
+    )
+  );
+  const [limits, setLimits] = useState(
+    JSON.stringify(
+      {
+        staff: 25,
+        customers: 2000,
+        leads: 500,
+        monthlyBookings: 500,
+        monthlyMessages: 5000
+      },
+      null,
+      2
+    )
+  );
+
+  function reset(plan?: PlatformSubscriptionPlan | null) {
+    setEditing(plan ?? null);
+    setName(plan?.name ?? "Growth");
+    setSlug(plan?.slug ?? "growth");
+    setDescription(plan?.description ?? "For active service teams.");
+    setActive(plan?.active ?? true);
+    setCurrency(plan?.currency ?? "USD");
+    setMonthly(String((plan?.monthlyPriceCents ?? 29900) / 100));
+    setSetup(String((plan?.setupFeeCents ?? 100000) / 100));
+    setStripePriceId(plan?.stripePriceId ?? "");
+    setPaystackPlanCode(plan?.paystackPlanCode ?? "");
+    setSortOrder(String(plan?.sortOrder ?? 20));
+    setFeatures(JSON.stringify(plan?.featureFlags ?? JSON.parse(features), null, 2));
+    setLimits(JSON.stringify(plan?.planLimits ?? JSON.parse(limits), null, 2));
+  }
+
+  const savePlan = useMutation({
+    mutationFn: () => {
+      const monthlyAmount = Number(monthly);
+      const setupAmount = Number(setup);
+      const input: PlatformSubscriptionPlanInput = {
+        name: name.trim(),
+        slug: slug.trim(),
+        description: description.trim(),
+        active,
+        currency: currency.trim().toUpperCase(),
+        monthlyPriceCents: Number.isFinite(monthlyAmount) ? Math.round(monthlyAmount * 100) : 0,
+        setupFeeCents: Number.isFinite(setupAmount) ? Math.round(setupAmount * 100) : 0,
+        stripePriceId: stripePriceId.trim() || undefined,
+        paystackPlanCode: paystackPlanCode.trim() || undefined,
+        sortOrder: Number(sortOrder) || 0,
+        featureFlags: JSON.parse(features) as Record<string, boolean>,
+        planLimits: JSON.parse(limits) as Record<string, number>
+      };
+      return editing ? api.updatePlatformPlan(editing.id, input) : api.createPlatformPlan(input);
+    },
+    onSuccess: (plan) => {
+      reset(plan);
+      void queryClient.invalidateQueries({ queryKey: ["platform-plans"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-audit"] });
+    }
+  });
+
+  const activePlans = plans?.filter((plan) => plan.active).length ?? 0;
+  const assignedTenants = plans?.reduce((sum, plan) => sum + (plan._count?.tenants ?? 0), 0) ?? 0;
+
+  return (
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_440px]">
+      <Panel title="Subscription plans" icon={SlidersHorizontal}>
+        <div className="mb-4 grid gap-3 md:grid-cols-3">
+          <CommandStat label="Plans" value={plans?.length ?? 0} />
+          <CommandStat label="Active" value={activePlans} />
+          <CommandStat label="Assigned tenants" value={assignedTenants} />
+        </div>
+        <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+          {(plans ?? []).map((plan) => (
+            <button
+              key={plan.id}
+              onClick={() => reset(plan)}
+              className={cn(
+                "rounded-[8px] border p-4 text-left transition",
+                editing?.id === plan.id ? "border-pine bg-pine text-white shadow-soft" : "border-ink/5 bg-mist hover:bg-white"
+              )}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className={cn("truncate text-lg font-semibold", editing?.id === plan.id ? "text-white" : "text-ink")}>{plan.name}</p>
+                  <p className={cn("mt-1 text-sm", editing?.id === plan.id ? "text-white/75" : "text-steel")}>{plan.slug}</p>
+                </div>
+                <Status label={plan.active ? "ACTIVE" : "PAUSED"} />
+              </div>
+              <p className={cn("mt-3 text-2xl font-semibold", editing?.id === plan.id ? "text-white" : "text-ink")}>
+                {money(plan.monthlyPriceCents)}
+                <span className="text-sm font-medium"> / mo</span>
+              </p>
+              <p className={cn("mt-2 line-clamp-2 text-sm leading-6", editing?.id === plan.id ? "text-white/75" : "text-steel")}>
+                {plan.description || "No description yet."}
+              </p>
+              <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                <span className={cn("rounded-[8px] px-3 py-2", editing?.id === plan.id ? "bg-white/15" : "bg-white")}>
+                  Setup {money(plan.setupFeeCents)}
+                </span>
+                <span className={cn("rounded-[8px] px-3 py-2", editing?.id === plan.id ? "bg-white/15" : "bg-white")}>
+                  {plan._count?.tenants ?? 0} tenants
+                </span>
+              </div>
+            </button>
+          ))}
+          {!plans?.length ? <Empty label="No subscription plans yet" /> : null}
+        </div>
+      </Panel>
+
+      <Panel title={editing ? "Edit plan" : "Create plan"} icon={ListChecks}>
+        <div className="grid gap-3">
+          <button onClick={() => reset(null)} className="h-10 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink">
+            New plan
+          </button>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <AdminInput label="Name" value={name} onChange={setName} />
+            <AdminInput label="Slug" value={slug} onChange={setSlug} />
+            <AdminInput label="Currency" value={currency} onChange={(value) => setCurrency(value.toUpperCase())} />
+            <AdminInput label="Sort order" value={sortOrder} onChange={setSortOrder} inputMode="numeric" />
+            <AdminInput label="Monthly $" value={monthly} onChange={setMonthly} inputMode="decimal" />
+            <AdminInput label="Setup $" value={setup} onChange={setSetup} inputMode="decimal" />
+            <AdminInput label="Stripe price ID" value={stripePriceId} onChange={setStripePriceId} />
+            <AdminInput label="Paystack plan code" value={paystackPlanCode} onChange={setPaystackPlanCode} />
+          </div>
+          <label className="flex min-h-11 items-center gap-3 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink">
+            <input type="checkbox" checked={active} onChange={(event) => setActive(event.target.checked)} className="h-5 w-5 accent-pine" />
+            Plan is active
+          </label>
+          <label>
+            <span className="mb-2 block text-sm font-medium text-steel">Description</span>
+            <textarea value={description} onChange={(event) => setDescription(event.target.value)} className="min-h-20 w-full rounded-[8px] border border-ink/10 bg-mist p-3 text-sm outline-none focus:border-pine" />
+          </label>
+          <label>
+            <span className="mb-2 block text-sm font-medium text-steel">Feature flags JSON</span>
+            <textarea value={features} onChange={(event) => setFeatures(event.target.value)} className="min-h-36 w-full rounded-[8px] border border-ink/10 bg-mist p-3 font-mono text-xs outline-none focus:border-pine" />
+          </label>
+          <label>
+            <span className="mb-2 block text-sm font-medium text-steel">Plan limits JSON</span>
+            <textarea value={limits} onChange={(event) => setLimits(event.target.value)} className="min-h-36 w-full rounded-[8px] border border-ink/10 bg-mist p-3 font-mono text-xs outline-none focus:border-pine" />
+          </label>
+          {savePlan.error ? <p className="text-sm font-medium text-coral">{savePlan.error instanceof Error ? savePlan.error.message : "Unable to save plan"}</p> : null}
+          <button onClick={() => savePlan.mutate()} disabled={!canManage || savePlan.isPending || !name.trim()} className="h-11 rounded-[8px] bg-pine px-4 text-sm font-semibold text-white disabled:opacity-50">
+            {savePlan.isPending ? "Saving..." : editing ? "Save plan" : "Create plan"}
+          </button>
+          <p className="text-sm leading-6 text-steel">
+            Assign plans from a tenant detail page. The tenant inherits pricing, feature flags, and limits unless you keep overrides.
+          </p>
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
 function TenantDetail({ tenantId }: { tenantId: string }) {
   const queryClient = useQueryClient();
   const setSession = useAuth((state) => state.setSession);
@@ -920,6 +1126,7 @@ function TenantDetail({ tenantId }: { tenantId: string }) {
   const notes = useQuery({ queryKey: ["platform-support-notes", tenantId], queryFn: () => api.platformSupportNotes(tenantId) });
   const access = useQuery({ queryKey: ["platform-support-access", tenantId], queryFn: () => api.platformSupportAccess(tenantId) });
   const billing = useQuery({ queryKey: ["platform-billing", tenantId], queryFn: () => api.platformBilling(tenantId) });
+  const plans = useQuery({ queryKey: ["platform-plans"], queryFn: api.platformPlans });
   const timeline = useQuery({ queryKey: ["platform-tenant-timeline", tenantId], queryFn: () => api.platformTenantTimeline(tenantId) });
   const [note, setNote] = useState("");
   const [reason, setReason] = useState("Support troubleshooting for tenant setup.");
@@ -1057,7 +1264,7 @@ function TenantDetail({ tenantId }: { tenantId: string }) {
     <Panel title={tenant?.businessName ?? "Tenant detail"} icon={ShieldCheck}>
       <div className="grid gap-4">
         <HealthPanel health={health.data} usage={usage.data} tenant={tenant} />
-        {tenant ? <TenantControlPanel key={tenant.id} tenant={tenant} /> : null}
+        {tenant ? <TenantControlPanel key={tenant.id} tenant={tenant} plans={plans.data} /> : null}
         {tenant ? (
           <section className="grid gap-4 lg:grid-cols-[1fr_0.9fr]">
             <div className="rounded-[8px] bg-mist p-4">
@@ -1180,11 +1387,14 @@ function TenantDetail({ tenantId }: { tenantId: string }) {
   );
 }
 
-function TenantControlPanel({ tenant }: { tenant: PlatformTenantDetail }) {
+function TenantControlPanel({ tenant, plans }: { tenant: PlatformTenantDetail; plans?: PlatformSubscriptionPlan[] }) {
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<PlatformTenant["status"]>(tenant.status);
   const [subscriptionStatus, setSubscriptionStatus] = useState<NonNullable<PlatformTenant["subscriptionStatus"]>>(tenant.subscriptionStatus ?? "TRIALING");
   const [subscriptionPlan, setSubscriptionPlan] = useState(tenant.subscriptionPlan ?? "pilot");
+  const [selectedPlanId, setSelectedPlanId] = useState(tenant.subscriptionPlanId ?? tenant.plan?.id ?? "");
+  const [overwriteBilling, setOverwriteBilling] = useState(true);
+  const [overwriteFeatures, setOverwriteFeatures] = useState(true);
   const [billingEmail, setBillingEmail] = useState(tenant.billingEmail ?? "");
   const [monthlyPrice, setMonthlyPrice] = useState(String((tenant.monthlyPriceCents ?? 0) / 100));
   const [setupFee, setSetupFee] = useState(String((tenant.setupFeeCents ?? 0) / 100));
@@ -1222,7 +1432,17 @@ function TenantControlPanel({ tenant }: { tenant: PlatformTenantDetail }) {
     onSuccess: invalidateTenant
   });
 
-  const error = saveTenantControl.error ?? quickTenantUpdate.error;
+  const applyPlan = useMutation({
+    mutationFn: () =>
+      api.applyPlatformPlan(tenant.id, {
+        planId: selectedPlanId,
+        overwriteBilling,
+        overwriteFeatures
+      }),
+    onSuccess: invalidateTenant
+  });
+
+  const error = saveTenantControl.error ?? quickTenantUpdate.error ?? applyPlan.error;
 
   return (
     <section className="rounded-[8px] bg-mist p-4">
@@ -1276,6 +1496,36 @@ function TenantControlPanel({ tenant }: { tenant: PlatformTenantDetail }) {
         <div className="md:col-span-2 xl:col-span-3">
           <AdminInput label="Stripe subscription ID" value={stripeSubscriptionId} onChange={setStripeSubscriptionId} />
         </div>
+      </div>
+
+      <div className="mt-4 rounded-[8px] bg-white p-4">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-end">
+          <label className="min-w-0 flex-1">
+            <span className="mb-2 block text-sm font-medium text-steel">Apply plan template</span>
+            <select value={selectedPlanId} onChange={(event) => setSelectedPlanId(event.target.value)} className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 text-sm outline-none focus:border-pine">
+              <option value="">Choose a subscription plan</option>
+              {(plans ?? []).map((plan) => (
+                <option key={plan.id} value={plan.id}>
+                  {plan.name} - {money(plan.monthlyPriceCents)} / mo
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex h-11 items-center gap-2 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink">
+            <input type="checkbox" checked={overwriteBilling} onChange={(event) => setOverwriteBilling(event.target.checked)} className="h-5 w-5 accent-pine" />
+            Pricing
+          </label>
+          <label className="flex h-11 items-center gap-2 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink">
+            <input type="checkbox" checked={overwriteFeatures} onChange={(event) => setOverwriteFeatures(event.target.checked)} className="h-5 w-5 accent-pine" />
+            Features + limits
+          </label>
+          <button onClick={() => applyPlan.mutate()} disabled={!selectedPlanId || applyPlan.isPending} className="h-11 rounded-[8px] bg-pine px-5 text-sm font-semibold text-white disabled:opacity-50">
+            {applyPlan.isPending ? "Applying..." : "Apply plan"}
+          </button>
+        </div>
+        <p className="mt-2 text-sm text-steel">
+          Current template: {tenant.plan?.name ?? tenant.subscriptionPlan}. Uncheck pricing or features to keep tenant-specific overrides.
+        </p>
       </div>
 
       <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
