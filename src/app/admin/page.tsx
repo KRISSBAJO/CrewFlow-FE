@@ -978,6 +978,45 @@ function PlanCatalog({
       2
     )
   );
+  const featureOptions = [
+    ["aiReceptionist", "AI receptionist"],
+    ["leadPipeline", "Lead pipeline"],
+    ["whatsappAutomation", "WhatsApp automation"],
+    ["customerPortal", "Customer portal"],
+    ["fieldDispatch", "Field dispatch"],
+    ["retention", "Retention"],
+    ["weeklyDigest", "Weekly digest"],
+    ["prioritySupport", "Priority support"],
+    ["advancedAdmin", "Advanced admin"]
+  ] as const;
+  const limitOptions = [
+    ["staff", "Staff"],
+    ["customers", "Customers"],
+    ["leads", "Leads"],
+    ["monthlyBookings", "Monthly bookings"],
+    ["monthlyMessages", "Monthly messages"]
+  ] as const;
+
+  function parsedObject(value: string) {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+    } catch {
+      return {};
+    }
+  }
+
+  function updateFeature(key: string, value: boolean) {
+    const parsed = parsedObject(features);
+    parsed[key] = value;
+    setFeatures(JSON.stringify(parsed, null, 2));
+  }
+
+  function updateLimit(key: string, value: string) {
+    const parsed = parsedObject(limits);
+    parsed[key] = Number(value) || 0;
+    setLimits(JSON.stringify(parsed, null, 2));
+  }
 
   function reset(plan?: PlatformSubscriptionPlan | null) {
     setEditing(plan ?? null);
@@ -1094,6 +1133,38 @@ function PlanCatalog({
             <span className="mb-2 block text-sm font-medium text-steel">Description</span>
             <textarea value={description} onChange={(event) => setDescription(event.target.value)} className="min-h-20 w-full rounded-[8px] border border-ink/10 bg-mist p-3 text-sm outline-none focus:border-pine" />
           </label>
+          <div className="rounded-[8px] bg-mist p-3">
+            <p className="mb-3 text-sm font-semibold text-ink">Features</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {featureOptions.map(([key, label]) => (
+                <label key={key} className="flex min-h-10 items-center gap-2 rounded-[8px] bg-white px-3 text-sm font-semibold text-ink">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(parsedObject(features)[key])}
+                    onChange={(event) => updateFeature(key, event.target.checked)}
+                    className="h-5 w-5 accent-pine"
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-[8px] bg-mist p-3">
+            <p className="mb-3 text-sm font-semibold text-ink">Limits</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {limitOptions.map(([key, label]) => (
+                <label key={key}>
+                  <span className="mb-2 block text-sm font-medium text-steel">{label}</span>
+                  <input
+                    value={String(parsedObject(limits)[key] ?? "")}
+                    onChange={(event) => updateLimit(key, event.target.value)}
+                    inputMode="numeric"
+                    className="h-10 w-full rounded-[8px] border border-ink/10 bg-white px-3 text-sm outline-none focus:border-pine"
+                  />
+                </label>
+              ))}
+            </div>
+          </div>
           <label>
             <span className="mb-2 block text-sm font-medium text-steel">Feature flags JSON</span>
             <textarea value={features} onChange={(event) => setFeatures(event.target.value)} className="min-h-36 w-full rounded-[8px] border border-ink/10 bg-mist p-3 font-mono text-xs outline-none focus:border-pine" />
