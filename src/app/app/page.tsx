@@ -47,6 +47,7 @@ import {
 import { AnimatePresence, motion } from "framer-motion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   api,
   AutomationRun,
@@ -3300,82 +3301,87 @@ function ServiceManager({ services }: { services: Service[] }) {
         <Empty show={!services.length} label="No services yet" />
       </div>
 
-      <AnimatePresence>
-        {serviceModalOpen ? (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-ink/35 p-4 backdrop-blur-sm"
-          >
-            <motion.div
-              initial={{ opacity: 0, y: 18, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 18, scale: 0.98 }}
-              className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[8px] border border-white/80 bg-white p-5 shadow-soft"
-            >
-              <div className="mb-5 flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pine">Service setup</p>
-                  <h3 className="mt-1 text-2xl font-semibold text-ink">{editing ? "Edit service" : "Create service"}</h3>
-                  <p className="mt-1 text-sm leading-6 text-steel">
-                    This is what customers see on the booking page and what staff use during scheduling.
-                  </p>
-                </div>
-                <button
-                  onClick={closeModal}
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] bg-mist text-ink"
-                  aria-label="Close service editor"
+      {typeof document !== "undefined"
+        ? createPortal(
+            <AnimatePresence>
+              {serviceModalOpen ? (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-ink/35 px-4 py-6 backdrop-blur-sm sm:py-10"
                 >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
+                  <motion.div
+                    initial={{ opacity: 0, y: -10, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -10, scale: 0.98 }}
+                    className="w-full max-w-2xl rounded-[8px] border border-white/80 bg-white p-5 shadow-soft"
+                  >
+                    <div className="mb-5 flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pine">Service setup</p>
+                        <h3 className="mt-1 text-2xl font-semibold text-ink">{editing ? "Edit service" : "Create service"}</h3>
+                        <p className="mt-1 text-sm leading-6 text-steel">
+                          This is what customers see on the booking page and what staff use during scheduling.
+                        </p>
+                      </div>
+                      <button
+                        onClick={closeModal}
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] bg-mist text-ink"
+                        aria-label="Close service editor"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
+                    </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <InputField label="Title" value={title} onChange={setTitle} />
-                <InputField label="Price" value={price} onChange={setPrice} />
-                <InputField label="Duration minutes" value={durationMinutes} onChange={setDurationMinutes} />
-                <InputField label="Description" value={description} onChange={setDescription} />
-                <div className="md:col-span-2">
-                  <MediaUploadField label="Service image" value={imageUrl} onChange={setImageUrl} folder="services" />
-                </div>
-              </div>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <InputField label="Title" value={title} onChange={setTitle} />
+                      <InputField label="Price" value={price} onChange={setPrice} />
+                      <InputField label="Duration minutes" value={durationMinutes} onChange={setDurationMinutes} />
+                      <InputField label="Description" value={description} onChange={setDescription} />
+                      <div className="md:col-span-2">
+                        <MediaUploadField label="Service image" value={imageUrl} onChange={setImageUrl} folder="services" />
+                      </div>
+                    </div>
 
-              {imageUrl ? (
-                <div className="relative mt-4 h-44 overflow-hidden rounded-[8px] bg-mist">
-                  <Image src={imageUrl} alt="" fill sizes="640px" className="object-cover" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-ink/60 to-transparent" />
-                  <div className="absolute bottom-4 left-4 right-4 text-white">
-                    <p className="text-lg font-semibold">{title || "Service preview"}</p>
-                    <p className="text-sm text-white/76">
-                      {Number(durationMinutes) || 0} min · {money(Math.round((Number(price) || 0) * 100))}
-                    </p>
-                  </div>
-                </div>
+                    {imageUrl ? (
+                      <div className="relative mt-4 h-44 overflow-hidden rounded-[8px] bg-mist">
+                        <Image src={imageUrl} alt="" fill sizes="640px" className="object-cover" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-ink/60 to-transparent" />
+                        <div className="absolute bottom-4 left-4 right-4 text-white">
+                          <p className="text-lg font-semibold">{title || "Service preview"}</p>
+                          <p className="text-sm text-white/76">
+                            {Number(durationMinutes) || 0} min · {money(Math.round((Number(price) || 0) * 100))}
+                          </p>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {save.error ? <ErrorText error={save.error} /> : null}
+                    <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                      <button
+                        onClick={closeModal}
+                        disabled={save.isPending}
+                        className="h-11 rounded-[8px] bg-mist px-4 text-sm font-semibold text-ink disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => save.mutate()}
+                        disabled={!canSave || save.isPending}
+                        className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 text-sm font-semibold text-white disabled:opacity-50"
+                      >
+                        {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                        {editing ? "Save service" : "Create service"}
+                      </button>
+                    </div>
+                  </motion.div>
+                </motion.div>
               ) : null}
-
-              {save.error ? <ErrorText error={save.error} /> : null}
-              <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                <button
-                  onClick={closeModal}
-                  disabled={save.isPending}
-                  className="h-11 rounded-[8px] bg-mist px-4 text-sm font-semibold text-ink disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => save.mutate()}
-                  disabled={!canSave || save.isPending}
-                  className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 text-sm font-semibold text-white disabled:opacity-50"
-                >
-                  {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  {editing ? "Save service" : "Create service"}
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+            </AnimatePresence>,
+            document.body
+          )
+        : null}
     </Panel>
   );
 }
@@ -3383,6 +3389,7 @@ function ServiceManager({ services }: { services: Service[] }) {
 function StaffManager({ staff }: { staff: StaffMember[] }) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<StaffMember | null>(null);
+  const [staffModalOpen, setStaffModalOpen] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -3400,6 +3407,22 @@ function StaffManager({ staff }: { staff: StaffMember[] }) {
     setPassword("Password123!");
   }
 
+  function openCreate() {
+    reset();
+    setStaffModalOpen(true);
+  }
+
+  function openEdit(member: StaffMember) {
+    reset(member);
+    setStaffModalOpen(true);
+  }
+
+  function closeModal() {
+    if (save.isPending) return;
+    setStaffModalOpen(false);
+    reset();
+  }
+
   const save = useMutation({
     mutationFn: () =>
       editing
@@ -3407,6 +3430,7 @@ function StaffManager({ staff }: { staff: StaffMember[] }) {
         : api.createStaff({ name, email, phone, avatarUrl, role, password }),
     onSuccess: () => {
       reset();
+      setStaffModalOpen(false);
       void queryClient.invalidateQueries({ queryKey: ["staff"] });
       void queryClient.invalidateQueries({ queryKey: ["tenant"] });
     }
@@ -3422,7 +3446,25 @@ function StaffManager({ staff }: { staff: StaffMember[] }) {
   const canSave = name.trim() && /^\S+@\S+\.\S+$/.test(email) && (editing || password.length >= 8);
 
   return (
-    <Panel title="Team roster" icon={UsersRound}>
+    <Panel
+      title="Team roster"
+      icon={UsersRound}
+      action={
+        <button
+          onClick={openCreate}
+          className="flex h-10 items-center justify-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white"
+        >
+          <Plus className="h-4 w-4" />
+          Add staff
+        </button>
+      }
+    >
+      <div className="mb-4 grid gap-3 sm:grid-cols-3">
+        <MiniStat label="Staff" value={staff.length} />
+        <MiniStat label="Active" value={staff.filter((member) => member.active !== false).length} />
+        <MiniStat label="Managers" value={staff.filter((member) => member.role === "OWNER" || member.role === "MANAGER").length} />
+      </div>
+
       <div className="grid gap-3">
         {staff.map((member) => (
           <Row key={member.id}>
@@ -3434,7 +3476,7 @@ function StaffManager({ staff }: { staff: StaffMember[] }) {
             <Status label={member.role} />
             <Status label={member.active === false ? "INACTIVE" : "ACTIVE"} />
             <button
-              onClick={() => reset(member)}
+              onClick={() => openEdit(member)}
               className="h-9 rounded-[8px] bg-white px-3 text-sm font-semibold text-ink"
             >
               Edit
@@ -3450,47 +3492,92 @@ function StaffManager({ staff }: { staff: StaffMember[] }) {
         <Empty show={!staff.length} label="No staff yet" />
       </div>
 
-      <div className="mt-4 rounded-[8px] bg-mist p-4">
-        <p className="mb-3 font-semibold text-ink">{editing ? "Edit staff" : "Add staff"}</p>
-        <div className="grid gap-3 md:grid-cols-2">
-          <InputField label="Name" value={name} onChange={setName} />
-          <InputField label="Email" value={email} onChange={setEmail} />
-          <InputField label="Phone" value={phone} onChange={setPhone} />
-          <MediaUploadField label="Staff photo" value={avatarUrl} onChange={setAvatarUrl} folder="staff" />
-          <label className="block">
-            <span className="mb-2 block text-sm font-medium text-ink">Role</span>
-            <select
-              value={role}
-              onChange={(event) => setRole(event.target.value as "OWNER" | "MANAGER" | "STAFF")}
-              className="h-11 w-full rounded-[8px] border border-ink/10 bg-white px-3 outline-none focus:border-pine"
-            >
-              <option value="STAFF">Staff</option>
-              <option value="MANAGER">Manager</option>
-              <option value="OWNER">Owner</option>
-            </select>
-          </label>
-          {!editing ? <InputField label="Temporary password" value={password} onChange={setPassword} /> : null}
-        </div>
-        {save.error ? <ErrorText error={save.error} /> : null}
-        <div className="mt-3 flex gap-2">
-          <button
-            onClick={() => save.mutate()}
-            disabled={!canSave || save.isPending}
-            className="flex h-10 items-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
-          >
-            {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            {editing ? "Save staff" : "Add staff"}
-          </button>
-          {editing ? (
-            <button
-              onClick={() => reset()}
-              className="h-10 rounded-[8px] bg-white px-3 text-sm font-semibold text-ink"
-            >
-              Cancel
-            </button>
-          ) : null}
-        </div>
-      </div>
+      {typeof document !== "undefined"
+        ? createPortal(
+            <AnimatePresence>
+              {staffModalOpen ? (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-ink/35 px-4 py-6 backdrop-blur-sm sm:py-10"
+                >
+                  <motion.div
+                    initial={{ opacity: 0, y: -10, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -10, scale: 0.98 }}
+                    className="w-full max-w-2xl rounded-[8px] border border-white/80 bg-white p-5 shadow-soft"
+                  >
+                    <div className="mb-5 flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pine">Team access</p>
+                        <h3 className="mt-1 text-2xl font-semibold text-ink">{editing ? "Edit staff member" : "Add staff member"}</h3>
+                        <p className="mt-1 text-sm leading-6 text-steel">
+                          Create team access for owners, managers, and field staff.
+                        </p>
+                      </div>
+                      <button
+                        onClick={closeModal}
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] bg-mist text-ink"
+                        aria-label="Close staff editor"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-[auto_1fr] md:items-start">
+                      <div className="flex flex-col items-center gap-3 rounded-[8px] bg-mist p-4">
+                        <Avatar name={name} imageUrl={avatarUrl} size="lg" />
+                        <Status label={role} />
+                      </div>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <InputField label="Name" value={name} onChange={setName} />
+                        <InputField label="Email" value={email} onChange={setEmail} />
+                        <InputField label="Phone" value={phone} onChange={setPhone} />
+                        <label className="block">
+                          <span className="mb-2 block text-sm font-medium text-ink">Role</span>
+                          <select
+                            value={role}
+                            onChange={(event) => setRole(event.target.value as "OWNER" | "MANAGER" | "STAFF")}
+                            className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
+                          >
+                            <option value="STAFF">Staff</option>
+                            <option value="MANAGER">Manager</option>
+                            <option value="OWNER">Owner</option>
+                          </select>
+                        </label>
+                        {!editing ? <InputField label="Temporary password" value={password} onChange={setPassword} /> : null}
+                        <div className="md:col-span-2">
+                          <MediaUploadField label="Staff photo" value={avatarUrl} onChange={setAvatarUrl} folder="staff" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {save.error ? <ErrorText error={save.error} /> : null}
+                    <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                      <button
+                        onClick={closeModal}
+                        disabled={save.isPending}
+                        className="h-11 rounded-[8px] bg-mist px-4 text-sm font-semibold text-ink disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => save.mutate()}
+                        disabled={!canSave || save.isPending}
+                        className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 text-sm font-semibold text-white disabled:opacity-50"
+                      >
+                        {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                        {editing ? "Save staff" : "Add staff"}
+                      </button>
+                    </div>
+                  </motion.div>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>,
+            document.body
+          )
+        : null}
     </Panel>
   );
 }
