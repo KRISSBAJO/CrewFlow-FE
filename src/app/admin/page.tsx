@@ -202,7 +202,8 @@ function AdminConsole() {
       ].join(" ").toLowerCase().includes(needle)
     );
   }, [search, tenants.data]);
-  const selectedTenant = filteredTenants.find((tenant) => tenant.id === selectedTenantId) ?? null;
+  const selectedTenant = (tenants.data ?? []).find((tenant) => tenant.id === selectedTenantId) ?? null;
+  const showTenantDetail = section === "tenants" && Boolean(selectedTenantId);
 
   return (
     <main className="min-h-screen p-3 md:p-4">
@@ -280,8 +281,8 @@ function AdminConsole() {
             </>
           ) : null}
 
-          {section === "tenants" ? (
-            <section className="grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,1fr)_560px]">
+          {section === "tenants" && !showTenantDetail ? (
+            <section className="grid min-w-0 gap-4">
               <Panel title="Tenants" icon={Building2}>
                 <CreateTenantBox canManage={canManagePlatform} />
                 <div className="mb-4 flex h-11 items-center gap-2 rounded-[8px] bg-mist px-3">
@@ -295,25 +296,19 @@ function AdminConsole() {
                 </div>
                 <TenantTable
                   tenants={filteredTenants}
-                  selectedTenantId={selectedTenantId}
                   canManage={canManagePlatform}
                   onSelect={setSelectedTenantId}
                 />
               </Panel>
-              {selectedTenantId ? (
-                <TenantDetail tenantId={selectedTenantId} />
-              ) : (
-                <Panel title="Select tenant" icon={SlidersHorizontal}>
-                  <div className="flex min-h-[360px] items-center justify-center rounded-[8px] bg-mist p-6 text-center">
-                    <div>
-                      <Building2 className="mx-auto h-8 w-8 text-pine" />
-                      <p className="mt-3 font-semibold text-ink">Choose a tenant to control</p>
-                      <p className="mt-1 text-sm text-steel">Status, subscription, pricing, support access, billing, feature flags, and limits live here.</p>
-                    </div>
-                  </div>
-                </Panel>
-              )}
             </section>
+          ) : null}
+
+          {showTenantDetail && selectedTenantId ? (
+            <TenantDetailPage
+              tenantId={selectedTenantId}
+              tenantName={selectedTenant?.businessName}
+              onBack={() => setSelectedTenantId(null)}
+            />
           ) : null}
 
           {section === "plans" ? (
@@ -370,7 +365,10 @@ function AdminConsole() {
 
           {section !== "tenants" && selectedTenant ? (
             <button
-              onClick={() => setSection("tenants")}
+              onClick={() => {
+                setSection("tenants");
+                setSelectedTenantId(selectedTenant.id);
+              }}
               className="fixed bottom-5 right-5 rounded-[8px] bg-ink px-4 py-3 text-sm font-semibold text-white shadow-soft"
             >
               Managing {selectedTenant.businessName}
@@ -782,12 +780,10 @@ function TenantRow({
 
 function TenantTable({
   tenants,
-  selectedTenantId,
   canManage,
   onSelect
 }: {
   tenants: PlatformTenant[];
-  selectedTenantId: string | null;
   canManage: boolean;
   onSelect: (id: string) => void;
 }) {
@@ -849,7 +845,7 @@ function TenantTable({
               <tr
                 key={tenant.id}
                 onClick={() => onSelect(tenant.id)}
-                className={cn("cursor-pointer transition hover:bg-mist/70", selectedTenantId === tenant.id && "bg-pine/10")}
+                className="cursor-pointer transition hover:bg-mist/70"
               >
                 <td className="px-3 py-3">
                   <p className="font-semibold text-ink">{tenant.businessName}</p>
@@ -1294,6 +1290,37 @@ function PlanCatalog({
           </p>
         </div>
       </Panel>
+    </div>
+  );
+}
+
+function TenantDetailPage({
+  tenantId,
+  tenantName,
+  onBack
+}: {
+  tenantId: string;
+  tenantName?: string;
+  onBack: () => void;
+}) {
+  return (
+    <div className="grid gap-4">
+      <section className="rounded-[8px] border border-white/80 bg-white/90 p-4 shadow-soft">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pine">Tenant detail</p>
+            <h2 className="mt-1 text-2xl font-semibold text-ink">{tenantName ?? "Tenant control"}</h2>
+            <p className="mt-1 text-sm text-steel">Billing, access, risk, exports, notes, plan assignment, and audit history.</p>
+          </div>
+          <button
+            onClick={onBack}
+            className="flex h-10 items-center justify-center gap-2 rounded-[8px] bg-mist px-4 text-sm font-semibold text-ink"
+          >
+            Back to tenants
+          </button>
+        </div>
+      </section>
+      <TenantDetail tenantId={tenantId} />
     </div>
   );
 }
