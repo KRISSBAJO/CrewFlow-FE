@@ -281,7 +281,7 @@ function AdminConsole() {
           ) : null}
 
           {section === "tenants" ? (
-            <section className="grid min-w-0 gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
+            <section className="grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,1fr)_560px]">
               <Panel title="Tenants" icon={Building2}>
                 <CreateTenantBox canManage={canManagePlatform} />
                 <div className="mb-4 flex h-11 items-center gap-2 rounded-[8px] bg-mist px-3">
@@ -293,18 +293,12 @@ function AdminConsole() {
                     className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none"
                   />
                 </div>
-                <div className="grid gap-3">
-                  {filteredTenants.map((tenant) => (
-                    <TenantRow
-                      key={tenant.id}
-                      tenant={tenant}
-                      selected={selectedTenantId === tenant.id}
-                      canManage={canManagePlatform}
-                      onSelect={() => setSelectedTenantId(tenant.id)}
-                    />
-                  ))}
-                  {!filteredTenants.length ? <Empty label="No tenants found" /> : null}
-                </div>
+                <TenantTable
+                  tenants={filteredTenants}
+                  selectedTenantId={selectedTenantId}
+                  canManage={canManagePlatform}
+                  onSelect={setSelectedTenantId}
+                />
               </Panel>
               {selectedTenantId ? (
                 <TenantDetail tenantId={selectedTenantId} />
@@ -782,6 +776,124 @@ function TenantRow({
         <TenantMiniStat label="Actions" value={tenant._count?.operationalActions ?? 0} />
         <TenantMiniStat label="Monthly" value={money(tenant.monthlyPriceCents)} />
       </div>
+    </div>
+  );
+}
+
+function TenantTable({
+  tenants,
+  selectedTenantId,
+  canManage,
+  onSelect
+}: {
+  tenants: PlatformTenant[];
+  selectedTenantId: string | null;
+  canManage: boolean;
+  onSelect: (id: string) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [status, setStatus] = useState("");
+  const [plan, setPlan] = useState("");
+  const [page, setPage] = useState(1);
+  const pageSize = 12;
+  const update = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: PlatformTenant["status"] }) => api.updatePlatformTenant(id, { status }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["platform-tenants"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-metrics"] });
+    }
+  });
+  const plans = Array.from(new Set(tenants.map((tenant) => tenant.plan?.name ?? tenant.subscriptionPlan))).filter(Boolean);
+  const filtered = tenants.filter((tenant) => {
+    const tenantPlan = tenant.plan?.name ?? tenant.subscriptionPlan;
+    return (!status || tenant.status === status) && (!plan || tenantPlan === plan);
+  });
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const visible = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  return (
+    <div className="grid gap-3">
+      <div className="grid gap-3 rounded-[8px] bg-mist p-3 md:grid-cols-[1fr_1fr_auto]">
+        <select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }} className="h-10 rounded-[8px] border border-ink/10 bg-white px-2 text-sm outline-none focus:border-pine">
+          <option value="">All statuses</option>
+          {tenantStatuses.map((item) => (
+            <option key={item} value={item}>{item}</option>
+          ))}
+        </select>
+        <select value={plan} onChange={(event) => { setPlan(event.target.value); setPage(1); }} className="h-10 rounded-[8px] border border-ink/10 bg-white px-2 text-sm outline-none focus:border-pine">
+          <option value="">All plans</option>
+          {plans.map((item) => (
+            <option key={item} value={item}>{item}</option>
+          ))}
+        </select>
+        <div className="flex h-10 items-center rounded-[8px] bg-white px-3 text-sm font-semibold text-steel">
+          {filtered.length} tenants
+        </div>
+      </div>
+
+      <div className="overflow-x-auto rounded-[8px] border border-ink/5 bg-white">
+        <table className="min-w-[920px] w-full text-left text-sm">
+          <thead className="bg-mist text-xs font-semibold uppercase tracking-[0.14em] text-steel">
+            <tr>
+              <th className="px-3 py-3">Tenant</th>
+              <th className="px-3 py-3">Status</th>
+              <th className="px-3 py-3">Plan</th>
+              <th className="px-3 py-3">Monthly</th>
+              <th className="px-3 py-3">Usage</th>
+              <th className="px-3 py-3">Control</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-ink/5">
+            {visible.map((tenant) => (
+              <tr
+                key={tenant.id}
+                onClick={() => onSelect(tenant.id)}
+                className={cn("cursor-pointer transition hover:bg-mist/70", selectedTenantId === tenant.id && "bg-pine/10")}
+              >
+                <td className="px-3 py-3">
+                  <p className="font-semibold text-ink">{tenant.businessName}</p>
+                  <p className="mt-1 max-w-[260px] truncate text-xs text-steel">{tenant.slug} · {tenant.industry}</p>
+                </td>
+                <td className="px-3 py-3">
+                  <div className="flex flex-wrap gap-1">
+                    <Status label={tenant.status} />
+                    <Status label={tenant.subscriptionStatus ?? "TRIALING"} />
+                  </div>
+                </td>
+                <td className="px-3 py-3">
+                  <p className="font-semibold text-ink">{tenant.plan?.name ?? tenant.subscriptionPlan}</p>
+                  <p className="text-xs text-steel">{tenant.plan?.slug ?? tenant.subscriptionPlan}</p>
+                </td>
+                <td className="px-3 py-3 font-semibold text-ink">{money(tenant.monthlyPriceCents)}</td>
+                <td className="px-3 py-3 text-steel">
+                  {(tenant._count?.users ?? 0)} users · {(tenant._count?.bookings ?? 0)} bookings · {(tenant._count?.leads ?? 0)} leads
+                </td>
+                <td className="px-3 py-3" onClick={(event) => event.stopPropagation()}>
+                  {canManage ? (
+                    <select
+                      value={tenant.status}
+                      onChange={(event) => update.mutate({ id: tenant.id, status: event.target.value as PlatformTenant["status"] })}
+                      className="h-9 min-w-[128px] rounded-[8px] border border-ink/10 bg-mist px-2 text-sm outline-none focus:border-pine"
+                    >
+                      <option value="TRIAL">Trial</option>
+                      <option value="ACTIVE">Active</option>
+                      <option value="SUSPENDED">Suspended</option>
+                      <option value="ARCHIVED">Archived</option>
+                      <option value="CHURNED">Churned</option>
+                    </select>
+                  ) : (
+                    <span className="text-sm text-steel">Locked</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!visible.length ? <Empty label="No tenants found" /> : null}
+      </div>
+      <PaginationControls page={currentPage} totalPages={totalPages} total={filtered.length} onPage={setPage} />
+      {update.error ? <p className="text-sm font-medium text-coral">{update.error instanceof Error ? update.error.message : "Unable to update tenant"}</p> : null}
     </div>
   );
 }
@@ -2023,6 +2135,11 @@ function UserAdminList({ items, tenants, canManage }: { items?: PlatformUser[]; 
 
 function ActionList({ items, expanded }: { items?: PlatformAction[]; expanded?: boolean }) {
   const queryClient = useQueryClient();
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("");
+  const [priority, setPriority] = useState("");
+  const [page, setPage] = useState(1);
+  const pageSize = expanded ? 15 : 8;
   const update = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) =>
       api.updatePlatformAction(id, { status, note: `Platform marked ${status.toLowerCase()}` }),
@@ -2032,38 +2149,92 @@ function ActionList({ items, expanded }: { items?: PlatformAction[]; expanded?: 
       void queryClient.invalidateQueries({ queryKey: ["platform-metrics"] });
     }
   });
-  const visible = (items ?? []).slice(0, expanded ? 80 : 8);
+  const filtered = (items ?? []).filter((item) => {
+    const haystack = [
+      item.title,
+      item.description ?? "",
+      item.type,
+      item.status,
+      item.priority,
+      item.tenant?.businessName ?? "",
+      item.assignedTo?.email ?? ""
+    ].join(" ").toLowerCase();
+    return (
+      (!query || haystack.includes(query.toLowerCase())) &&
+      (!status || item.status === status) &&
+      (!priority || item.priority === priority)
+    );
+  });
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const visible = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   return (
     <div className="grid gap-3">
-      {visible.map((item) => (
-        <div key={item.id} className="rounded-[8px] bg-mist p-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <Status label={item.priority} />
-                <Status label={item.status} />
-                <Status label={item.type} />
-              </div>
-              <p className="mt-3 font-semibold text-ink">{item.title}</p>
-              {item.description ? <p className="mt-1 line-clamp-2 text-sm text-steel">{item.description}</p> : null}
-            </div>
-            <div className="shrink-0 text-sm text-steel lg:text-right">
-              <p className="font-semibold text-ink">{item.tenant?.businessName ?? "No tenant"}</p>
-              <p>{item.assignedTo?.email ?? "Unassigned"}</p>
-              <p>{item.dueAt ? shortDate(item.dueAt) : shortDate(item.createdAt ?? null)}</p>
-              <div className="mt-3 flex gap-2 lg:justify-end">
-                <button onClick={() => update.mutate({ id: item.id, status: "COMPLETED" })} className="h-9 rounded-[8px] bg-pine px-3 text-xs font-semibold text-white">
-                  Complete
-                </button>
-                <button onClick={() => update.mutate({ id: item.id, status: "DISMISSED" })} className="h-9 rounded-[8px] bg-white px-3 text-xs font-semibold text-ink">
-                  Dismiss
-                </button>
-              </div>
-            </div>
-          </div>
+      <div className="grid gap-3 rounded-[8px] bg-mist p-3 md:grid-cols-[1fr_180px_180px]">
+        <div className="flex h-10 items-center gap-2 rounded-[8px] bg-white px-3">
+          <Search className="h-4 w-4 text-steel" />
+          <input value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search action, tenant, owner..." className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none" />
         </div>
-      ))}
-      {!visible.length ? <Empty label="No platform actions" /> : null}
+        <select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }} className="h-10 rounded-[8px] border border-ink/10 bg-white px-2 text-sm outline-none focus:border-pine">
+          <option value="">All statuses</option>
+          {["OPEN", "IN_PROGRESS", "COMPLETED", "DISMISSED"].map((item) => (
+            <option key={item} value={item}>{item}</option>
+          ))}
+        </select>
+        <select value={priority} onChange={(event) => { setPriority(event.target.value); setPage(1); }} className="h-10 rounded-[8px] border border-ink/10 bg-white px-2 text-sm outline-none focus:border-pine">
+          <option value="">All priorities</option>
+          {["URGENT", "HIGH", "MEDIUM", "LOW"].map((item) => (
+            <option key={item} value={item}>{item}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="overflow-x-auto rounded-[8px] border border-ink/5 bg-white">
+        <table className="min-w-[920px] w-full text-left text-sm">
+          <thead className="bg-mist text-xs font-semibold uppercase tracking-[0.14em] text-steel">
+            <tr>
+              <th className="px-3 py-3">Action</th>
+              <th className="px-3 py-3">Tenant</th>
+              <th className="px-3 py-3">Priority</th>
+              <th className="px-3 py-3">Status</th>
+              <th className="px-3 py-3">Due</th>
+              <th className="px-3 py-3">Control</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-ink/5">
+            {visible.map((item) => (
+              <tr key={item.id} className="hover:bg-mist/70">
+                <td className="px-3 py-3">
+                  <div className="flex flex-wrap gap-1">
+                    <Status label={item.type} />
+                  </div>
+                  <p className="mt-2 font-semibold text-ink">{item.title}</p>
+                  {item.description ? <p className="mt-1 max-w-[360px] truncate text-xs text-steel">{item.description}</p> : null}
+                </td>
+                <td className="px-3 py-3">
+                  <p className="font-semibold text-ink">{item.tenant?.businessName ?? "No tenant"}</p>
+                  <p className="text-xs text-steel">{item.assignedTo?.email ?? "Unassigned"}</p>
+                </td>
+                <td className="px-3 py-3"><Status label={item.priority} /></td>
+                <td className="px-3 py-3"><Status label={item.status} /></td>
+                <td className="px-3 py-3 text-steel">{item.dueAt ? shortDate(item.dueAt) : shortDate(item.createdAt ?? null)}</td>
+                <td className="px-3 py-3">
+                  <div className="flex gap-2">
+                    <button onClick={() => update.mutate({ id: item.id, status: "COMPLETED" })} className="h-9 rounded-[8px] bg-pine px-3 text-xs font-semibold text-white">
+                      Complete
+                    </button>
+                    <button onClick={() => update.mutate({ id: item.id, status: "DISMISSED" })} className="h-9 rounded-[8px] bg-mist px-3 text-xs font-semibold text-ink">
+                      Dismiss
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!visible.length ? <Empty label="No platform actions" /> : null}
+      </div>
+      <PaginationControls page={currentPage} totalPages={totalPages} total={filtered.length} onPage={setPage} />
       {update.error ? <p className="text-sm font-medium text-coral">{update.error instanceof Error ? update.error.message : "Unable to update action"}</p> : null}
     </div>
   );
@@ -2215,6 +2386,40 @@ function Panel({
       </div>
       {children}
     </section>
+  );
+}
+
+function PaginationControls({
+  page,
+  totalPages,
+  total,
+  onPage
+}: {
+  page: number;
+  totalPages: number;
+  total: number;
+  onPage: (page: number) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2 rounded-[8px] bg-mist px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+      <span className="font-medium text-steel">{total} results · page {page} of {totalPages}</span>
+      <div className="flex gap-2">
+        <button
+          onClick={() => onPage(Math.max(1, page - 1))}
+          disabled={page <= 1}
+          className="h-9 rounded-[8px] bg-white px-3 font-semibold text-ink disabled:opacity-50"
+        >
+          Previous
+        </button>
+        <button
+          onClick={() => onPage(Math.min(totalPages, page + 1))}
+          disabled={page >= totalPages}
+          className="h-9 rounded-[8px] bg-white px-3 font-semibold text-ink disabled:opacity-50"
+        >
+          Next
+        </button>
+      </div>
+    </div>
   );
 }
 
