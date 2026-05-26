@@ -125,6 +125,13 @@ const bookingStatuses: Array<{ value: BookingStatus; label: string }> = [
   { value: "NO_SHOW", label: "No-show" },
   { value: "CANCELLED", label: "Cancelled" }
 ];
+const invoiceStatuses: Array<{ value: InvoiceStatus; label: string }> = [
+  { value: "DRAFT", label: "Draft" },
+  { value: "SENT", label: "Sent" },
+  { value: "OVERDUE", label: "Overdue" },
+  { value: "PAID", label: "Paid" },
+  { value: "VOID", label: "Void" }
+];
 type DrawerState =
   | { type: "booking"; item: Booking }
   | { type: "field-job"; item: Booking }
@@ -2557,6 +2564,9 @@ function MoneyView({
   onOpen: (state: DrawerState) => void;
 }) {
   const queryClient = useQueryClient();
+  const [invoiceQuery, setInvoiceQuery] = useState("");
+  const [invoiceStatus, setInvoiceStatus] = useState<InvoiceStatus | "all">("all");
+  const [riskFilter, setRiskFilter] = useState<"all" | "high" | "no-link" | "overdue">("all");
   const collections = useQuery({ queryKey: ["collections"], queryFn: api.collectionSummary });
   const scanCollections = useMutation({
     mutationFn: api.scanCollections,
@@ -2590,10 +2600,57 @@ function MoneyView({
         .reduce((sum, invoice) => sum + invoice.totalCents, 0),
     [invoices]
   );
-  const priorityInvoices = collections.data?.priorityInvoices ?? openInvoices.slice(0, 8);
   const agingBuckets = collections.data?.agingBuckets ?? [];
   const overdueTotal = collections.data?.summary.overdueCents ?? 0;
   const noLinkCount = collections.data?.summary.noPaymentLinkCount ?? openInvoices.filter((invoice) => !invoice.paymentUrl).length;
+  const invoicePool = useMemo(
+    () => collections.data?.invoices ?? invoices ?? [],
+    [collections.data?.invoices, invoices]
+  );
+  const filteredInvoices = useMemo(() => {
+    const query = invoiceQuery.trim().toLowerCase();
+    return invoicePool
+      .filter((invoice) => {
+        const matchesStatus = invoiceStatus === "all" || invoice.status === invoiceStatus;
+        const matchesRisk =
+          riskFilter === "all" ||
+          (riskFilter === "high" && (invoice.collectionRisk ?? 0) >= 70) ||
+          (riskFilter === "no-link" && !invoice.paymentUrl && !invoice.hasPaymentLink) ||
+          (riskFilter === "overdue" && invoice.status === "OVERDUE");
+        const haystack = [
+          invoice.invoiceNo,
+          invoice.customer.name,
+          invoice.customer.phone,
+          invoice.booking?.service?.title ?? "",
+          invoice.status
+        ]
+          .join(" ")
+          .toLowerCase();
+        return matchesStatus && matchesRisk && (!query || haystack.includes(query));
+      })
+      .sort((a, b) => {
+        const riskDiff = (b.collectionRisk ?? 0) - (a.collectionRisk ?? 0);
+        if (riskDiff) return riskDiff;
+        return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+      });
+  }, [invoicePool, invoiceQuery, invoiceStatus, riskFilter]);
+  const collectionSignals = [
+    {
+      label: "Send payment links",
+      value: noLinkCount,
+      detail: "Invoices cannot be paid fast without a link."
+    },
+    {
+      label: "Chase overdue",
+      value: collections.data?.summary.overdueCount ?? openInvoices.filter((invoice) => invoice.status === "OVERDUE").length,
+      detail: "These should get a reminder or manager action."
+    },
+    {
+      label: "High risk",
+      value: collections.data?.summary.highRiskCount ?? openInvoices.filter((invoice) => (invoice.collectionRisk ?? 0) >= 70).length,
+      detail: "Prioritize before cash goes cold."
+    }
+  ];
 
   return (
     <div className="grid gap-4">
@@ -2664,9 +2721,59 @@ function MoneyView({
       </Panel>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(340px,0.75fr)]">
-        <Panel title="Priority invoices" icon={CreditCard}>
+        <Panel title="Invoice workbench" icon={CreditCard}>
+          <div className="mb-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_160px_160px]">
+            <input
+              value={invoiceQuery}
+              onChange={(event) => setInvoiceQuery(event.target.value)}
+              placeholder="Search invoice, customer, service..."
+              className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
+            />
+            <select
+              value={riskFilter}
+              onChange={(event) => setRiskFilter(event.target.value as typeof riskFilter)}
+              className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
+            >
+              <option value="all">All risk</option>
+              <option value="high">High risk</option>
+              <option value="no-link">No link</option>
+              <option value="overdue">Overdue</option>
+            </select>
+            <select
+              value={invoiceStatus}
+              onChange={(event) => setInvoiceStatus(event.target.value as InvoiceStatus | "all")}
+              className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
+            >
+              <option value="all">All statuses</option>
+              {invoiceStatuses.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="mb-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+            {invoiceStatuses.map((item) => {
+              const count = invoicePool.filter((invoice) => invoice.status === item.value).length;
+              return (
+                <button
+                  key={item.value}
+                  onClick={() => setInvoiceStatus(invoiceStatus === item.value ? "all" : item.value)}
+                  className={cn(
+                    "rounded-[8px] border border-ink/5 bg-mist p-3 text-left transition hover:border-pine/30 hover:bg-white",
+                    invoiceStatus === item.value && "border-pine/40 bg-pine text-white"
+                  )}
+                >
+                  <p className={cn("text-xs font-semibold uppercase tracking-[0.14em] text-steel", invoiceStatus === item.value && "text-white/70")}>
+                    {item.label}
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold">{count}</p>
+                </button>
+              );
+            })}
+          </div>
           <div className="grid gap-3">
-            {priorityInvoices.map((invoice) => (
+            {filteredInvoices.map((invoice) => (
               <Row key={invoice.id} onClick={() => onOpen({ type: "invoice", item: invoice })}>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
@@ -2685,10 +2792,33 @@ function MoneyView({
                 <p className="font-semibold text-ink">{money(invoice.totalCents)}</p>
               </Row>
             ))}
-            <Empty show={!priorityInvoices.length} label="No collection risk right now" />
+            <Empty show={!filteredInvoices.length} label="No invoices match these filters" />
           </div>
         </Panel>
         <Panel title="Payment timeline" icon={Banknote}>
+          <div className="mb-4 grid gap-3">
+            {collectionSignals.map((signal) => (
+              <button
+                key={signal.label}
+                onClick={() =>
+                  setRiskFilter(
+                    signal.label === "Send payment links"
+                      ? "no-link"
+                      : signal.label === "Chase overdue"
+                        ? "overdue"
+                        : "high"
+                  )
+                }
+                className="rounded-[8px] bg-mist p-3 text-left transition hover:bg-white"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-semibold text-ink">{signal.label}</p>
+                  <span className="rounded-[8px] bg-white px-2.5 py-1 text-sm font-bold text-pine">{signal.value}</span>
+                </div>
+                <p className="mt-1 text-sm leading-6 text-steel">{signal.detail}</p>
+              </button>
+            ))}
+          </div>
           <div className="grid gap-3">
             {(payments ?? []).slice(0, 8).map((payment) => (
               <Row key={payment.id}>
