@@ -28,7 +28,7 @@ function toInputDate(date: Date) {
 export default function BookingPage() {
   const params = useParams<{ slug: string }>();
   const router = useRouter();
-  const slug = params.slug;
+  const slug = params?.slug ?? "";
   const [selectedServiceId, setSelectedServiceId] = useState<string>("");
   const [selectedDate, setSelectedDate] = useState(() => toInputDate(new Date(Date.now() + 24 * 60 * 60_000)));
   const [startTime, setStartTime] = useState("");

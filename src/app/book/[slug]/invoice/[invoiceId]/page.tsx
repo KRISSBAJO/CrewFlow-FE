@@ -10,9 +10,12 @@ import { cn, money, shortDate } from "@/lib/utils";
 
 export default function PublicInvoicePage() {
   const params = useParams<{ slug: string; invoiceId: string }>();
+  const slug = params?.slug ?? "";
+  const invoiceId = params?.invoiceId ?? "";
   const invoice = useQuery({
-    queryKey: ["portal-invoice", params.slug, params.invoiceId],
-    queryFn: () => api.portalInvoice(params.slug, params.invoiceId),
+    queryKey: ["portal-invoice", slug, invoiceId],
+    queryFn: () => api.portalInvoice(slug, invoiceId),
+    enabled: Boolean(slug && invoiceId),
   });
 
   const paid = invoice.data?.invoice.status === "PAID";
@@ -28,7 +31,7 @@ export default function PublicInvoicePage() {
               <p className="truncate text-sm text-steel">Secure customer invoice</p>
             </div>
           </div>
-          <Link href={`/book/${params.slug}`} className="hidden rounded-[8px] bg-mist px-4 py-2 text-sm font-semibold text-pine sm:block">
+          <Link href={`/book/${slug}`} className="hidden rounded-[8px] bg-mist px-4 py-2 text-sm font-semibold text-pine sm:block">
             New booking
           </Link>
         </header>
@@ -49,7 +52,7 @@ export default function PublicInvoicePage() {
         {invoice.data ? (
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
             <section className="rounded-[8px] bg-white p-6 shadow-soft sm:p-8">
-              <Link href={`/book/${params.slug}/success?bookingId=${invoice.data.invoice.booking?.id ?? ""}`} className="inline-flex items-center gap-2 text-sm font-semibold text-pine">
+              <Link href={`/book/${slug}/success?bookingId=${invoice.data.invoice.booking?.id ?? ""}`} className="inline-flex items-center gap-2 text-sm font-semibold text-pine">
                 <ArrowLeft className="h-4 w-4" />
                 Booking status
               </Link>

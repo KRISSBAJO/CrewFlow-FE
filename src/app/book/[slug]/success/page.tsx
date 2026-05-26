@@ -19,17 +19,18 @@ import { money, shortDate } from "@/lib/utils";
 
 export default function BookingSuccessPage() {
   const params = useParams<{ slug: string }>();
+  const slug = params?.slug ?? "";
   const search = useSearchParams();
-  const bookingId = search.get("bookingId") ?? "";
+  const bookingId = search?.get("bookingId") ?? "";
 
   const status = useQuery({
-    queryKey: ["portal-booking", params.slug, bookingId],
-    queryFn: () => api.portalBooking(params.slug, bookingId),
-    enabled: Boolean(bookingId),
+    queryKey: ["portal-booking", slug, bookingId],
+    queryFn: () => api.portalBooking(slug, bookingId),
+    enabled: Boolean(slug && bookingId),
   });
 
   const invoiceUrl = status.data?.invoice
-    ? `/book/${params.slug}/invoice/${status.data.invoice.id}`
+    ? `/book/${slug}/invoice/${status.data.invoice.id}`
     : null;
 
   return (
@@ -45,7 +46,7 @@ export default function BookingSuccessPage() {
               <p className="truncate text-sm text-steel">Customer appointment</p>
             </div>
           </div>
-          <Link href={`/book/${params.slug}`} className="hidden rounded-[8px] bg-mist px-4 py-2 text-sm font-semibold text-pine sm:block">
+          <Link href={`/book/${slug}`} className="hidden rounded-[8px] bg-mist px-4 py-2 text-sm font-semibold text-pine sm:block">
             Book again
           </Link>
         </header>

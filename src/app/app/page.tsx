@@ -611,37 +611,65 @@ function Overview({
 
 function InboxView({ items, onOpen }: { items?: Conversation[]; onOpen: (state: DrawerState) => void }) {
   const [filter, setFilter] = useState("active");
+  const [search, setSearch] = useState("");
+  const source = useMemo(() => items ?? [], [items]);
+  const [now] = useState(() => Date.now());
+  const activeConversations = source.filter((item) => !["RESOLVED", "CLOSED"].includes(item.status));
+  const revenueConversations = source.filter((item) =>
+    item.bookingIntents?.some((intent) => intent.status !== "BOOKED") || item.leads?.some((lead) => lead.status !== "WON" && lead.status !== "LOST")
+  );
+  const waitingConversations = source.filter((item) => item.status === "WAITING_ON_CUSTOMER");
+  const staleConversations = activeConversations.filter((item) => now - new Date(item.lastMessageAt).getTime() > 24 * 60 * 60_000);
   const filtered = useMemo(() => {
-    const source = items ?? [];
+    const query = search.trim().toLowerCase();
     if (filter === "active") {
-      return source.filter((item) => !["RESOLVED", "CLOSED"].includes(item.status));
+      return source.filter((item) => !["RESOLVED", "CLOSED"].includes(item.status) && conversationMatches(item, query));
     }
     if (filter === "intent") {
-      return source.filter((item) => item.bookingIntents?.some((intent) => intent.status !== "BOOKED"));
+      return source.filter((item) => item.bookingIntents?.some((intent) => intent.status !== "BOOKED") && conversationMatches(item, query));
     }
-    return source.filter((item) => item.status === filter);
-  }, [items, filter]);
+    if (filter === "stale") {
+      return staleConversations.filter((item) => conversationMatches(item, query));
+    }
+    return source.filter((item) => item.status === filter && conversationMatches(item, query));
+  }, [filter, search, source, staleConversations]);
 
   return (
-    <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(360px,420px)_minmax(0,1fr)]">
-      <div className="min-w-0">
-        <ReceptionistSimulator onOpen={onOpen} />
+    <div className="grid min-w-0 gap-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Metric icon={Inbox} label="Active conversations" value={activeConversations.length} tone="pine" />
+        <Metric icon={Target} label="Revenue intent" value={revenueConversations.length} tone="mint" />
+        <Metric icon={Clock3} label="Waiting customer" value={waitingConversations.length} tone="amber" />
+        <Metric icon={AlertTriangle} label="Stale replies" value={staleConversations.length} tone="coral" />
       </div>
-      <div className="min-w-0">
-        <Panel title="Customer inbox" icon={MessageSquareText}>
-          <div className="mb-4 flex flex-wrap gap-2">
+
+      <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <Panel
+          title="Customer inbox"
+          icon={MessageSquareText}
+          action={
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search customer, phone, message..."
+              className="h-10 w-full rounded-[8px] border border-ink/10 bg-mist px-3 text-sm outline-none focus:border-pine sm:w-80"
+            />
+          }
+        >
+          <div className="mb-4 grid gap-2 sm:grid-cols-3 xl:grid-cols-6">
             {[
               ["active", "Active"],
               ["intent", "Revenue intent"],
               ["BOOKING_READY", "Booking ready"],
               ["WAITING_ON_CUSTOMER", "Waiting"],
+              ["stale", "Stale"],
               ["RESOLVED", "Resolved"]
             ].map(([value, label]) => (
               <button
                 key={value}
                 onClick={() => setFilter(value)}
                 className={cn(
-                  "h-9 shrink-0 rounded-[8px] px-3 text-sm font-semibold",
+                  "h-10 shrink-0 rounded-[8px] px-3 text-sm font-semibold",
                   filter === value ? "bg-pine text-white" : "bg-mist text-steel"
                 )}
               >
@@ -660,12 +688,27 @@ function InboxView({ items, onOpen }: { items?: Conversation[]; onOpen: (state: 
             <Empty show={!filtered.length} label="No conversations found" />
           </div>
         </Panel>
+
+        <aside className="grid content-start gap-4">
+          <ReceptionistSimulator onOpen={onOpen} />
+          <div className="rounded-[8px] bg-pine p-4 text-white">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-mint">Operator rhythm</p>
+            <div className="mt-4 grid gap-2">
+              <InboxSignal label="Reply stale messages" value={staleConversations.length} />
+              <InboxSignal label="Convert revenue chats" value={revenueConversations.length} />
+              <InboxSignal label="Resolve waiting threads" value={waitingConversations.length} />
+            </div>
+          </div>
+        </aside>
       </div>
     </div>
   );
 }
 
 function ConversationRow({ item, onClick }: { item: Conversation; onClick: () => void }) {
+  const [now] = useState(() => Date.now());
+  const isStale = !["RESOLVED", "CLOSED"].includes(item.status) && now - new Date(item.lastMessageAt).getTime() > 24 * 60 * 60_000;
+  const hasRevenueIntent = item.bookingIntents?.some((intent) => intent.status !== "BOOKED") || item.leads?.some((lead) => lead.status !== "WON" && lead.status !== "LOST");
   return (
     <button
       onClick={onClick}
@@ -682,12 +725,44 @@ function ConversationRow({ item, onClick }: { item: Conversation; onClick: () =>
         <p className="mt-1 truncate text-sm text-steel">
           {item.messages?.[0]?.content ?? item.channel}
         </p>
+        <div className="mt-2 flex flex-wrap gap-2 lg:hidden">
+          {hasRevenueIntent ? <Status label="REVENUE" /> : null}
+          {isStale ? <Status label="STALE" /> : null}
+          <Status label={item.status} />
+        </div>
       </div>
       <div className="hidden shrink-0 flex-wrap justify-end gap-2 lg:flex">
+        {hasRevenueIntent ? <Status label="REVENUE" /> : null}
+        {isStale ? <Status label="STALE" /> : null}
         {item.bookingIntents?.[0] ? <Status label={item.bookingIntents[0].status} /> : null}
         <Status label={item.status} />
       </div>
     </button>
+  );
+}
+
+function conversationMatches(item: Conversation, query: string) {
+  if (!query) return true;
+  return [
+    item.customer?.name ?? "",
+    item.customer?.phone ?? "",
+    item.channel,
+    item.status,
+    item.messages?.[0]?.content ?? "",
+    item.bookingIntents?.map((intent) => `${intent.status} ${intent.service?.title ?? ""}`).join(" ") ?? "",
+    item.leads?.map((lead) => `${lead.title} ${lead.status}`).join(" ") ?? ""
+  ]
+    .join(" ")
+    .toLowerCase()
+    .includes(query);
+}
+
+function InboxSignal({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex items-center justify-between rounded-[8px] bg-white/10 px-3 py-2">
+      <p className="text-sm font-semibold text-white/85">{label}</p>
+      <span className="rounded-[8px] bg-mint px-2.5 py-1 text-sm font-bold text-ink">{value}</span>
+    </div>
   );
 }
 
@@ -5208,6 +5283,7 @@ function ConversationDetail({ item }: { item: Conversation }) {
   const [startTime, setStartTime] = useState("");
   const [assignedStaffId, setAssignedStaffId] = useState("");
   const [bookingNotes, setBookingNotes] = useState("");
+  const [now] = useState(() => Date.now());
   const conversation = full.data ?? item;
   const sendReply = useMutation({
     mutationFn: () => api.replyConversation(item.id, reply),
@@ -5247,6 +5323,16 @@ function ConversationDetail({ item }: { item: Conversation }) {
   const activeIntent = conversation.bookingIntents?.find((intent) =>
     ["READY", "COLLECTING"].includes(intent.status)
   );
+  const activeLead = conversation.leads?.find((lead) => lead.status !== "WON" && lead.status !== "LOST") ?? conversation.leads?.[0];
+  const latestMessage = conversation.messages?.[0];
+  const replyAgeHours = Math.max(0, Math.round((now - new Date(conversation.lastMessageAt).getTime()) / 36_000) / 100);
+  const nextBestAction = activeIntent
+    ? "Book the customer"
+    : customerInvoices.length
+      ? "Send payment link"
+      : activeLead
+        ? "Follow up lead"
+        : "Create lead";
   const bookIntent = useMutation({
     mutationFn: () =>
       api.bookConversationIntent(conversation.id, activeIntent!.id, {
@@ -5270,8 +5356,16 @@ function ConversationDetail({ item }: { item: Conversation }) {
         <Info label="Channel" value={conversation.channel} />
         <Info label="Status" value={conversation.status} />
         <Info label="Last message" value={shortDate(conversation.lastMessageAt)} />
-        {conversation.leads?.[0] ? <Info label="Lead" value={`${conversation.leads[0].status} · ${money(conversation.leads[0].estimatedValueCents)}`} /> : null}
+        <Info label="Next action" value={nextBestAction} />
+        {activeLead ? <Info label="Lead" value={`${activeLead.status} · ${money(activeLead.estimatedValueCents)}`} /> : null}
+        {conversation.customer?.phone ? <Info label="Phone" value={conversation.customer.phone} /> : null}
       </DetailCard>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <MiniStat label="Reply age" value={`${replyAgeHours}h`} danger={replyAgeHours >= 24} />
+        <MiniStat label="Open invoices" value={customerInvoices.length} danger={customerInvoices.length > 0} />
+        <MiniStat label="Intake status" value={activeIntent?.status ?? "None"} />
+      </div>
 
       <section className="rounded-[8px] bg-mist p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
@@ -5356,6 +5450,32 @@ function ConversationDetail({ item }: { item: Conversation }) {
             Resolve
           </button>
         </div>
+        <div className="mt-2 grid gap-2 sm:grid-cols-3">
+          <button
+            onClick={() => updateConversation.mutate({ followUpAt: followUpAt ? new Date(followUpAt).toISOString() : undefined })}
+            disabled={!followUpAt || updateConversation.isPending}
+            className="flex h-10 items-center justify-center gap-2 rounded-[8px] bg-white px-3 text-sm font-semibold text-ink disabled:opacity-50"
+          >
+            <Clock3 className="h-4 w-4" />
+            Set follow-up
+          </button>
+          <button
+            onClick={() => updateConversation.mutate({ status: "WAITING_ON_CUSTOMER" })}
+            disabled={updateConversation.isPending}
+            className="flex h-10 items-center justify-center gap-2 rounded-[8px] bg-white px-3 text-sm font-semibold text-ink disabled:opacity-50"
+          >
+            <Headphones className="h-4 w-4" />
+            Waiting
+          </button>
+          <button
+            onClick={() => suggest.mutate()}
+            disabled={suggest.isPending}
+            className="flex h-10 items-center justify-center gap-2 rounded-[8px] bg-white px-3 text-sm font-semibold text-ink disabled:opacity-50"
+          >
+            {suggest.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
+            Draft reply
+          </button>
+        </div>
         {convertLead.error || sendQuote.error || sendInvoiceLink.error || updateConversation.error ? (
           <ErrorText error={convertLead.error ?? sendQuote.error ?? sendInvoiceLink.error ?? updateConversation.error} />
         ) : null}
@@ -5437,6 +5557,12 @@ function ConversationDetail({ item }: { item: Conversation }) {
       ) : null}
 
       <div className="grid gap-2">
+        {latestMessage ? (
+          <div className="rounded-[8px] border border-pine/20 bg-mint/20 p-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-pine">Latest customer context</p>
+            <p className="mt-2 line-clamp-3 text-sm leading-6 text-ink">{latestMessage.content}</p>
+          </div>
+        ) : null}
         {(conversation.messages ?? []).map((message) => (
           <div
             key={message.id ?? `${message.createdAt}-${message.role}`}
