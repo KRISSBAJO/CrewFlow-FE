@@ -690,6 +690,9 @@ function LeadsView({
 }) {
   const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
+  const [leadModalOpen, setLeadModalOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<LeadStatus | "ALL">("ALL");
+  const [sourceFilter, setSourceFilter] = useState<LeadSource | "ALL">("ALL");
   const [title, setTitle] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [assignedToId, setAssignedToId] = useState("");
@@ -698,22 +701,43 @@ function LeadsView({
   const [followUpAt, setFollowUpAt] = useState("");
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    if (!needle) return items ?? [];
-    return (items ?? []).filter((lead) =>
-      [
-        lead.title,
-        lead.status,
-        lead.source,
-        lead.customer?.name ?? "",
-        lead.customer?.phone ?? "",
-        lead.assignedTo?.name ?? "",
-        lead.notes ?? ""
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(needle)
-    );
-  }, [items, query]);
+    return (items ?? []).filter((lead) => {
+      const matchesSearch =
+        !needle ||
+        [
+          lead.title,
+          lead.status,
+          lead.source,
+          lead.customer?.name ?? "",
+          lead.customer?.phone ?? "",
+          lead.assignedTo?.name ?? "",
+          lead.notes ?? ""
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(needle);
+      const matchesStatus = statusFilter === "ALL" || lead.status === statusFilter;
+      const matchesSource = sourceFilter === "ALL" || lead.source === sourceFilter;
+      return matchesSearch && matchesStatus && matchesSource;
+    });
+  }, [items, query, sourceFilter, statusFilter]);
+  const dueLeads = useMemo(
+    () =>
+      [...(items ?? [])]
+        .filter((lead) => lead.followUpAt && lead.status !== "WON" && lead.status !== "LOST")
+        .sort((a, b) => new Date(a.followUpAt!).getTime() - new Date(b.followUpAt!).getTime())
+        .slice(0, 5),
+    [items]
+  );
+
+  function resetLeadForm() {
+    setTitle("");
+    setCustomerId("");
+    setAssignedToId("");
+    setSource("MANUAL");
+    setEstimatedValue("299");
+    setFollowUpAt("");
+  }
 
   const create = useMutation({
     mutationFn: () =>
@@ -727,11 +751,8 @@ function LeadsView({
         conversionProbability: 25
       }),
     onSuccess: () => {
-      setTitle("");
-      setCustomerId("");
-      setAssignedToId("");
-      setEstimatedValue("299");
-      setFollowUpAt("");
+      resetLeadForm();
+      setLeadModalOpen(false);
       void queryClient.invalidateQueries({ queryKey: ["leads"] });
       void queryClient.invalidateQueries({ queryKey: ["lead-analytics"] });
     }
@@ -739,6 +760,51 @@ function LeadsView({
 
   return (
     <div className="grid gap-4">
+      <Panel
+        title="Lead pipeline"
+        icon={Target}
+        action={
+          <button
+            onClick={() => setLeadModalOpen(true)}
+            className="flex h-10 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 text-sm font-semibold text-white"
+          >
+            <Plus className="h-4 w-4" />
+            New lead
+          </button>
+        }
+      >
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+          <div className="rounded-[8px] bg-mist p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-pine">Simple meaning</p>
+            <h3 className="mt-2 text-2xl font-semibold text-ink">A lead is a possible customer before they book.</h3>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-steel">
+              Use this page to track every inquiry from WhatsApp, phone, web chat, referral, or manual entry until it becomes a real booking or gets marked lost.
+            </p>
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <LeadEducationStep title="Capture" body="Someone asks for a quote, price, date, or service." />
+              <LeadEducationStep title="Follow up" body="Assign staff, set the next touch, and keep the deal moving." />
+              <LeadEducationStep title="Convert" body="Move good leads to booking ready, then won when work is booked." />
+            </div>
+          </div>
+          <div className="rounded-[8px] bg-pine p-4 text-white">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-mint">Pipeline stages</p>
+            <div className="mt-4 grid gap-2">
+              {leadStatuses.map((stage, index) => (
+                <div key={stage.value} className="flex items-center gap-3 rounded-[8px] bg-white/10 px-3 py-2">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-mint text-xs font-bold text-ink">
+                    {index + 1}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="font-semibold">{stage.label}</p>
+                    <p className="text-xs text-white/70">{leadStageDescriptions[stage.value]}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </Panel>
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Metric icon={Target} label="Open pipeline" value={money(analytics?.openPipelineCents)} tone="pine" />
         <Metric icon={TrendingUp} label="Weighted value" value={money(analytics?.weightedPipelineCents)} tone="mint" />
@@ -750,121 +816,245 @@ function LeadsView({
         title="Pipeline board"
         icon={Target}
         action={
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search leads..."
-            className="h-10 w-full rounded-[8px] border border-ink/10 bg-mist px-3 text-sm outline-none focus:border-pine sm:w-80"
-          />
-        }
-      >
-        <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-          {leadStatuses.map((stage) => {
-            const stageLeads = filtered.filter((lead) => lead.status === stage.value);
-            const stageValue = stageLeads.reduce(
-              (sum, lead) => sum + (lead.estimatedValueCents ?? 0),
-              0
-            );
-            return (
-              <section key={stage.value} className="min-h-[420px] rounded-[8px] bg-mist p-4">
-                <div className="mb-4 flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="font-semibold text-ink">{stage.label}</p>
-                    <p className="mt-1 text-sm font-medium text-steel">
-                      {stageLeads.length} leads · {money(stageValue)}
-                    </p>
-                  </div>
-                  <Status label={stage.value} />
-                </div>
-                <div className="grid gap-3">
-                  {stageLeads.map((lead) => (
-                    <LeadCard
-                      key={lead.id}
-                      lead={lead}
-                      staff={staff ?? []}
-                      onOpen={onOpen}
-                    />
-                  ))}
-                  <Empty show={!stageLeads.length} label="No leads here" />
-                </div>
-              </section>
-            );
-          })}
-        </div>
-      </Panel>
-
-      <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-        <Panel title="New lead" icon={Plus}>
-          <div className="grid gap-3 md:grid-cols-2">
-            <InputField label="Lead title" value={title} onChange={setTitle} />
-            <SelectField label="Customer" value={customerId} onChange={setCustomerId}>
-              <option value="">Unlinked lead</option>
-              {(customers ?? []).map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.name} · {customer.phone}
+          <div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:items-center">
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search name, source, staff..."
+              className="h-10 w-full rounded-[8px] border border-ink/10 bg-mist px-3 text-sm outline-none focus:border-pine lg:w-72"
+            />
+            <select
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value as LeadStatus | "ALL")}
+              className="h-10 rounded-[8px] border border-ink/10 bg-mist px-3 text-sm outline-none focus:border-pine"
+            >
+              <option value="ALL">All stages</option>
+              {leadStatuses.map((stage) => (
+                <option key={stage.value} value={stage.value}>
+                  {stage.label}
                 </option>
               ))}
-            </SelectField>
-            <SelectField label="Assigned to" value={assignedToId} onChange={setAssignedToId}>
-              <option value="">Unassigned</option>
-              {(staff ?? []).map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.name} · {member.role}
-                </option>
-              ))}
-            </SelectField>
-            <SelectField label="Source" value={source} onChange={(value) => setSource(value as LeadSource)}>
+            </select>
+            <select
+              value={sourceFilter}
+              onChange={(event) => setSourceFilter(event.target.value as LeadSource | "ALL")}
+              className="h-10 rounded-[8px] border border-ink/10 bg-mist px-3 text-sm outline-none focus:border-pine"
+            >
+              <option value="ALL">All sources</option>
               {leadSources.map((item) => (
                 <option key={item} value={item}>
                   {item.replaceAll("_", " ")}
                 </option>
               ))}
-            </SelectField>
-            <InputField label="Estimated value" value={estimatedValue} onChange={setEstimatedValue} />
-            <label className="block">
-              <span className="mb-2 block text-sm font-medium text-ink">Follow-up</span>
-              <input
-                type="datetime-local"
-                value={followUpAt}
-                onChange={(event) => setFollowUpAt(event.target.value)}
-                className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
-              />
-            </label>
+            </select>
           </div>
-          {create.error ? <ErrorText error={create.error} /> : null}
-          <button
-            onClick={() => create.mutate()}
-            disabled={!title.trim() || create.isPending}
-            className="mt-4 flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 font-semibold text-white disabled:opacity-50"
-          >
-            {create.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-            Add lead
-          </button>
-        </Panel>
-
-        <Panel title="Lead-to-booking" icon={TrendingUp}>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <MiniStat label="Won leads" value={analytics?.wonCount ?? 0} />
-            <MiniStat label="Lost leads" value={analytics?.lostCount ?? 0} danger={(analytics?.lostCount ?? 0) > 0} />
-            <MiniStat label="Booked value" value={money(analytics?.leadToBooking.bookingValueCents)} />
+        }
+      >
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+            {leadStatuses.map((stage) => {
+              const stageLeads = filtered.filter((lead) => lead.status === stage.value);
+              const stageValue = stageLeads.reduce(
+                (sum, lead) => sum + (lead.estimatedValueCents ?? 0),
+                0
+              );
+              return (
+                <section key={stage.value} className="min-h-[360px] rounded-[8px] bg-mist p-4">
+                  <div className="mb-4 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-ink">{stage.label}</p>
+                      <p className="mt-1 text-sm font-medium text-steel">
+                        {stageLeads.length} leads · {money(stageValue)}
+                      </p>
+                    </div>
+                    <Status label={stage.value} />
+                  </div>
+                  <div className="grid gap-3">
+                    {stageLeads.slice(0, 8).map((lead) => (
+                      <LeadCard
+                        key={lead.id}
+                        lead={lead}
+                        staff={staff ?? []}
+                        onOpen={onOpen}
+                      />
+                    ))}
+                    {stageLeads.length > 8 ? (
+                      <p className="rounded-[8px] bg-white p-2 text-center text-sm font-medium text-steel">
+                        {stageLeads.length - 8} more leads match this stage
+                      </p>
+                    ) : null}
+                    <Empty show={!stageLeads.length} label="No leads here" />
+                  </div>
+                </section>
+              );
+            })}
           </div>
-          <div className="mt-4 rounded-[8px] bg-mist p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-steel">Best sources</p>
-            <div className="mt-3 grid gap-2">
-              {Object.entries(analytics?.bySource ?? {})
-                .filter(([, count]) => count > 0)
-                .sort((a, b) => b[1] - a[1])
-                .slice(0, 6)
-                .map(([sourceName, count]) => (
-                  <div key={sourceName} className="flex items-center justify-between rounded-[8px] bg-white px-3 py-2 text-sm">
-                    <span className="font-medium text-ink">{sourceName.replaceAll("_", " ")}</span>
-                    <span className="font-semibold text-steel">{count}</span>
+          <aside className="grid content-start gap-4">
+            <div className="rounded-[8px] bg-mist p-4">
+              <p className="font-semibold text-ink">Next follow-ups</p>
+              <p className="mt-1 text-sm leading-6 text-steel">These are the leads most likely to leak revenue if nobody replies.</p>
+              <div className="mt-4 grid gap-2">
+                {dueLeads.map((lead) => (
+                  <div key={lead.id} className="rounded-[8px] bg-white p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="line-clamp-2 font-semibold text-ink">{lead.title}</p>
+                      <Status label={lead.status} />
+                    </div>
+                    <p className="mt-1 text-sm text-steel">{shortDate(lead.followUpAt)}</p>
                   </div>
                 ))}
+                <Empty show={!dueLeads.length} label="No follow-ups queued" />
+              </div>
             </div>
-          </div>
-        </Panel>
-      </div>
+            <div className="rounded-[8px] bg-mist p-4">
+              <p className="font-semibold text-ink">Lead-to-booking</p>
+              <div className="mt-3 grid gap-3">
+                <MiniStat label="Won leads" value={analytics?.wonCount ?? 0} />
+                <MiniStat label="Lost leads" value={analytics?.lostCount ?? 0} danger={(analytics?.lostCount ?? 0) > 0} />
+                <MiniStat label="Booked value" value={money(analytics?.leadToBooking.bookingValueCents)} />
+              </div>
+              <div className="mt-4 rounded-[8px] bg-white p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-steel">Best sources</p>
+                <div className="mt-3 grid gap-2">
+                  {Object.entries(analytics?.bySource ?? {})
+                    .filter(([, count]) => count > 0)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 5)
+                    .map(([sourceName, count]) => (
+                      <div key={sourceName} className="flex items-center justify-between text-sm">
+                        <span className="font-medium text-ink">{sourceName.replaceAll("_", " ")}</span>
+                        <span className="font-semibold text-steel">{count}</span>
+                      </div>
+                    ))}
+                  <Empty show={!Object.values(analytics?.bySource ?? {}).some((count) => count > 0)} label="No source data yet" />
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </Panel>
+
+      {typeof document !== "undefined"
+        ? createPortal(
+            <AnimatePresence>
+              {leadModalOpen ? (
+                <motion.div
+                  className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-ink/35 px-4 py-8 backdrop-blur-sm sm:py-12"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                >
+                  <motion.form
+                    onSubmit={(event: FormEvent<HTMLFormElement>) => {
+                      event.preventDefault();
+                      if (title.trim()) create.mutate();
+                    }}
+                    initial={{ opacity: 0, y: 16 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 16 }}
+                    className="w-full max-w-3xl rounded-[8px] bg-white p-6 shadow-2xl"
+                  >
+                    <div className="mb-5 flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pine">Sales opportunity</p>
+                        <h3 className="mt-2 text-2xl font-semibold text-ink">Create lead</h3>
+                        <p className="mt-2 text-sm leading-6 text-steel">
+                          Add a possible job, assign the next owner, and set the follow-up date before it becomes a missed booking.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLeadModalOpen(false);
+                          resetLeadForm();
+                        }}
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[8px] bg-mist text-ink"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <InputField label="Lead title" value={title} onChange={setTitle} />
+                      <SelectField label="Customer" value={customerId} onChange={setCustomerId}>
+                        <option value="">Unlinked lead</option>
+                        {(customers ?? []).map((customer) => (
+                          <option key={customer.id} value={customer.id}>
+                            {customer.name} · {customer.phone}
+                          </option>
+                        ))}
+                      </SelectField>
+                      <SelectField label="Assigned to" value={assignedToId} onChange={setAssignedToId}>
+                        <option value="">Unassigned</option>
+                        {(staff ?? []).map((member) => (
+                          <option key={member.id} value={member.id}>
+                            {member.name} · {member.role}
+                          </option>
+                        ))}
+                      </SelectField>
+                      <SelectField label="Source" value={source} onChange={(value) => setSource(value as LeadSource)}>
+                        {leadSources.map((item) => (
+                          <option key={item} value={item}>
+                            {item.replaceAll("_", " ")}
+                          </option>
+                        ))}
+                      </SelectField>
+                      <InputField label="Estimated value" value={estimatedValue} onChange={setEstimatedValue} />
+                      <label className="block">
+                        <span className="mb-2 block text-sm font-medium text-ink">Follow-up</span>
+                        <input
+                          type="datetime-local"
+                          value={followUpAt}
+                          onChange={(event) => setFollowUpAt(event.target.value)}
+                          className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
+                        />
+                      </label>
+                    </div>
+                    {create.error ? <ErrorText error={create.error} /> : null}
+                    <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLeadModalOpen(false);
+                          resetLeadForm();
+                        }}
+                        className="flex h-11 items-center justify-center rounded-[8px] bg-mist px-4 font-semibold text-ink"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={!title.trim() || create.isPending}
+                        className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 font-semibold text-white disabled:opacity-50"
+                      >
+                        {create.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                        Add lead
+                      </button>
+                    </div>
+                  </motion.form>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>,
+            document.body
+          )
+        : null}
+    </div>
+  );
+}
+
+const leadStageDescriptions: Record<LeadStatus, string> = {
+  NEW: "Fresh inquiry, not worked yet.",
+  CONTACTED: "Your team replied or called.",
+  QUALIFIED: "Need, budget, and details look real.",
+  BOOKING_READY: "Ready to schedule as a job.",
+  WON: "Converted into revenue.",
+  LOST: "Not moving forward."
+};
+
+function LeadEducationStep({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="rounded-[8px] bg-white p-3">
+      <p className="font-semibold text-ink">{title}</p>
+      <p className="mt-1 text-sm leading-6 text-steel">{body}</p>
     </div>
   );
 }
