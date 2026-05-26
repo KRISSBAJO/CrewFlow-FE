@@ -117,6 +117,14 @@ const leadSources: LeadSource[] = [
   "REFERRAL",
   "MANUAL"
 ];
+const bookingStatuses: Array<{ value: BookingStatus; label: string }> = [
+  { value: "REQUESTED", label: "Requested" },
+  { value: "CONFIRMED", label: "Confirmed" },
+  { value: "IN_PROGRESS", label: "On the way" },
+  { value: "COMPLETED", label: "Completed" },
+  { value: "NO_SHOW", label: "No-show" },
+  { value: "CANCELLED", label: "Cancelled" }
+];
 type DrawerState =
   | { type: "booking"; item: Booking }
   | { type: "field-job"; item: Booking }
@@ -1946,11 +1954,49 @@ function CustomersView({ items, onOpen }: { items?: Customer[]; onOpen: (state: 
 function BookingsView({ items, onOpen }: { items?: Booking[]; onOpen: (state: DrawerState) => void }) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
+  const [dateFilter, setDateFilter] = useState<"all" | "today" | "upcoming" | "attention">("all");
+  const now = useMemo(() => new Date(), []);
+  const todayStart = useMemo(() => {
+    const value = new Date(now);
+    value.setHours(0, 0, 0, 0);
+    return value;
+  }, [now]);
+  const todayEnd = useMemo(() => {
+    const value = new Date(todayStart);
+    value.setDate(value.getDate() + 1);
+    return value;
+  }, [todayStart]);
+  const bookings = items ?? [];
+  const todayBookings = bookings.filter((booking) => {
+    const start = new Date(booking.startTime);
+    return start >= todayStart && start < todayEnd;
+  });
+  const attentionBookings = bookings
+    .filter((booking) => {
+      const start = new Date(booking.startTime);
+      const isActive = !["COMPLETED", "CANCELLED"].includes(booking.status);
+      return (
+        booking.status === "REQUESTED" ||
+        booking.status === "NO_SHOW" ||
+        (!booking.assignedStaff && isActive) ||
+        (start < now && ["REQUESTED", "CONFIRMED"].includes(booking.status))
+      );
+    })
+    .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+  const activeRevenueCents = bookings
+    .filter((booking) => !["CANCELLED", "NO_SHOW"].includes(booking.status))
+    .reduce((sum, booking) => sum + (booking.service.priceCents ?? 0), 0);
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
     return (items ?? []).filter((booking) => {
       const matchesStatus = status === "all" || booking.status === status;
+      const start = new Date(booking.startTime);
+      const matchesDate =
+        dateFilter === "all" ||
+        (dateFilter === "today" && start >= todayStart && start < todayEnd) ||
+        (dateFilter === "upcoming" && start >= now) ||
+        (dateFilter === "attention" && attentionBookings.some((item) => item.id === booking.id));
       const haystack = [
         booking.customer.name,
         booking.customer.phone,
@@ -1961,44 +2007,124 @@ function BookingsView({ items, onOpen }: { items?: Booking[]; onOpen: (state: Dr
         .join(" ")
         .toLowerCase();
 
-      return matchesStatus && (!query || haystack.includes(query));
+      return matchesStatus && matchesDate && (!query || haystack.includes(query));
     });
-  }, [items, search, status]);
+  }, [attentionBookings, dateFilter, items, now, search, status, todayEnd, todayStart]);
 
   return (
-    <Panel
-      title="Booking board"
-      icon={CalendarDays}
-      action={
-        <button onClick={() => onOpen({ type: "new-booking" })} className="flex h-9 items-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white">
-          <Plus className="h-4 w-4" />
-          New
-        </button>
-      }
-    >
-      <div className="mb-4 grid gap-3 md:grid-cols-[1fr_220px]">
-        <input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search customer, service, staff..."
-          className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
-        />
-        <select
-          value={status}
-          onChange={(event) => setStatus(event.target.value)}
-          className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
-        >
-          <option value="all">All statuses</option>
-          <option value="REQUESTED">Requested</option>
-          <option value="CONFIRMED">Confirmed</option>
-          <option value="IN_PROGRESS">On the way</option>
-          <option value="COMPLETED">Completed</option>
-          <option value="NO_SHOW">No-show</option>
-          <option value="CANCELLED">Cancelled</option>
-        </select>
+    <div className="grid gap-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Metric icon={CalendarDays} label="Today" value={todayBookings.length} tone="pine" />
+        <Metric icon={AlertTriangle} label="Needs attention" value={attentionBookings.length} tone="amber" />
+        <Metric icon={UsersRound} label="Unassigned" value={bookings.filter((booking) => !booking.assignedStaff && !["COMPLETED", "CANCELLED"].includes(booking.status)).length} tone="coral" />
+        <Metric icon={Banknote} label="Active value" value={money(activeRevenueCents)} tone="mint" />
       </div>
-      <BookingRows items={filtered} onOpen={onOpen} />
-    </Panel>
+
+      <Panel
+        title="Booking command center"
+        icon={CalendarDays}
+        action={
+          <button onClick={() => onOpen({ type: "new-booking" })} className="flex h-9 items-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white">
+            <Plus className="h-4 w-4" />
+            New booking
+          </button>
+        }
+      >
+        <div className="mb-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_180px_180px]">
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search customer, service, staff..."
+            className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
+          />
+          <select
+            value={dateFilter}
+            onChange={(event) => setDateFilter(event.target.value as typeof dateFilter)}
+            className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
+          >
+            <option value="all">All dates</option>
+            <option value="today">Today</option>
+            <option value="upcoming">Upcoming</option>
+            <option value="attention">Attention</option>
+          </select>
+          <select
+            value={status}
+            onChange={(event) => setStatus(event.target.value)}
+            className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
+          >
+            <option value="all">All statuses</option>
+            {bookingStatuses.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="mb-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
+          {bookingStatuses.map((item) => {
+            const count = bookings.filter((booking) => booking.status === item.value).length;
+            return (
+              <button
+                key={item.value}
+                onClick={() => setStatus(status === item.value ? "all" : item.value)}
+                className={cn(
+                  "rounded-[8px] border border-ink/5 bg-mist p-3 text-left transition hover:border-pine/30 hover:bg-white",
+                  status === item.value && "border-pine/40 bg-pine text-white"
+                )}
+              >
+                <p className={cn("text-xs font-semibold uppercase tracking-[0.14em] text-steel", status === item.value && "text-white/70")}>
+                  {item.label}
+                </p>
+                <p className="mt-1 text-2xl font-semibold">{count}</p>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+          <BookingRows items={filtered} onOpen={onOpen} />
+          <aside className="grid content-start gap-4">
+            <div className="rounded-[8px] bg-mist p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-semibold text-ink">Operations watchlist</p>
+                  <p className="mt-1 text-sm leading-6 text-steel">Jobs that can create confusion, missed work, or lost revenue.</p>
+                </div>
+                <Status label={`${attentionBookings.length}`} />
+              </div>
+              <div className="mt-4 grid gap-2">
+                {attentionBookings.slice(0, 6).map((booking) => (
+                  <button
+                    key={booking.id}
+                    onClick={() => onOpen({ type: "booking", item: booking })}
+                    className="rounded-[8px] bg-white p-3 text-left transition hover:bg-mint/20"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="line-clamp-2 font-semibold text-ink">{booking.service.title}</p>
+                      <Status label={booking.status} />
+                    </div>
+                    <p className="mt-1 text-sm text-steel">
+                      {booking.customer.name} · {booking.assignedStaff?.name ?? "Unassigned"}
+                    </p>
+                    <p className="mt-1 text-sm font-medium text-ink">{shortDate(booking.startTime)}</p>
+                  </button>
+                ))}
+                <Empty show={!attentionBookings.length} label="No booking risks right now" />
+              </div>
+            </div>
+            <div className="rounded-[8px] bg-pine p-4 text-white">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-mint">Manager rhythm</p>
+              <div className="mt-4 grid gap-3">
+                <BookingSignal label="Confirm requested jobs" value={bookings.filter((booking) => booking.status === "REQUESTED").length} />
+                <BookingSignal label="Assign every active job" value={bookings.filter((booking) => !booking.assignedStaff && !["COMPLETED", "CANCELLED"].includes(booking.status)).length} />
+                <BookingSignal label="Invoice completed jobs" value={bookings.filter((booking) => booking.status === "COMPLETED" && !booking.invoice).length} />
+              </div>
+            </div>
+          </aside>
+        </div>
+      </Panel>
+    </div>
   );
 }
 
@@ -3913,16 +4039,36 @@ function BookingRows({ items, onOpen }: { items?: Booking[]; onOpen: (state: Dra
         <Row key={item.id} onClick={() => onOpen({ type: "booking", item })}>
           <Avatar name={item.customer.name} />
           <div className="min-w-0 flex-1">
-            <p className="truncate font-semibold text-ink">{item.service.title}</p>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <p className="truncate font-semibold text-ink">{item.service.title}</p>
+              {!item.assignedStaff && !["COMPLETED", "CANCELLED"].includes(item.status) ? (
+                <span className="rounded-[8px] bg-coral/10 px-2 py-1 text-xs font-bold text-coral">Needs staff</span>
+              ) : null}
+              {item.status === "COMPLETED" && !item.invoice ? (
+                <span className="rounded-[8px] bg-amber/20 px-2 py-1 text-xs font-bold text-ink">Invoice next</span>
+              ) : null}
+            </div>
             <p className="truncate text-sm text-steel">
               {item.customer.name} · {item.assignedStaff?.name ?? "Unassigned"}
             </p>
           </div>
-          <p className="hidden text-sm font-medium text-ink md:block">{shortDate(item.startTime)}</p>
+          <div className="hidden text-right md:block">
+            <p className="text-sm font-medium text-ink">{shortDate(item.startTime)}</p>
+            <p className="text-xs font-semibold text-steel">{money(item.service.priceCents)}</p>
+          </div>
           <Status label={item.status} />
         </Row>
       ))}
       <Empty show={!items?.length} label="No bookings found" />
+    </div>
+  );
+}
+
+function BookingSignal({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex items-center justify-between rounded-[8px] bg-white/10 px-3 py-2">
+      <p className="text-sm font-semibold text-white/85">{label}</p>
+      <span className="rounded-[8px] bg-mint px-2.5 py-1 text-sm font-bold text-ink">{value}</span>
     </div>
   );
 }
