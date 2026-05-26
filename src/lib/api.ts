@@ -174,6 +174,11 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(input)
     }),
+  convertLeadToBooking: (id: string, input: ConvertLeadToBookingInput) =>
+    request<{ lead: Lead; booking: Booking }>(`/leads/${id}/convert-to-booking`, {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
   portal: (slug: string) => request<PublicBookingPortal>(`/portal/${slug}`),
   portalAvailability: (slug: string, serviceId: string, date: string) =>
     request<AvailabilityResponse>(
@@ -773,6 +778,14 @@ export type BookingInput = {
   notes?: string;
   repeatFrequency?: RepeatFrequency;
   repeatCount?: number;
+};
+
+export type ConvertLeadToBookingInput = {
+  serviceId: string;
+  assignedStaffId?: string;
+  startTime: string;
+  status?: BookingStatus;
+  notes?: string;
 };
 
 export type BookingUpdateType =

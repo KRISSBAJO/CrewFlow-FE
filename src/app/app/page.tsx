@@ -120,6 +120,7 @@ const leadSources: LeadSource[] = [
 type DrawerState =
   | { type: "booking"; item: Booking }
   | { type: "field-job"; item: Booking }
+  | { type: "lead"; item: Lead }
   | { type: "conversation"; item: Conversation }
   | { type: "customer"; item: Customer }
   | { type: "invoice"; item: Invoice }
@@ -1480,6 +1481,17 @@ function LeadCard({
           {update.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           Save
         </button>
+        {!lead.booking && lead.customer ? (
+          <button
+            onClick={() => onOpen({ type: "lead", item: lead })}
+            className="flex h-9 items-center justify-center gap-2 rounded-[8px] bg-mint px-3 text-sm font-semibold text-ink"
+          >
+            <CalendarDays className="h-4 w-4" />
+            Convert
+          </button>
+        ) : null}
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-2">
         {lead.conversation ? (
           <button
             onClick={() => onOpen({ type: "conversation", item: lead.conversation! })}
@@ -1497,8 +1509,24 @@ function LeadCard({
             Job
           </button>
         ) : (
+          <button
+            onClick={() => onOpen({ type: "lead", item: lead })}
+            className="flex h-9 items-center justify-center rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink"
+          >
+            Details
+          </button>
+        )}
+        {lead.customer ? (
+          <button
+            onClick={() => onOpen({ type: "customer", item: lead.customer! })}
+            className="flex h-9 items-center justify-center gap-2 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink"
+          >
+            <ContactRound className="h-4 w-4" />
+            Customer
+          </button>
+        ) : (
           <span className="flex h-9 items-center justify-center rounded-[8px] bg-mist px-3 text-sm font-semibold text-steel">
-            Manual
+            Unlinked
           </span>
         )}
       </div>
@@ -4148,6 +4176,7 @@ function DetailDrawer({
               {state.type === "new-booking" ? <NewBookingForm onDone={onClose} /> : null}
               {state.type === "booking" ? <BookingDetail item={state.item} /> : null}
               {state.type === "field-job" ? <FieldJobDetail item={state.item} onDone={onClose} /> : null}
+              {state.type === "lead" ? <LeadDetail item={state.item} onDone={onClose} /> : null}
               {state.type === "conversation" ? <ConversationDetail item={state.item} /> : null}
               {state.type === "customer" ? <CustomerDetail item={state.item} /> : null}
               {state.type === "invoice" ? <InvoiceDetail item={state.item} /> : null}
@@ -4323,6 +4352,147 @@ function NewBookingForm({ onDone }: { onDone: () => void }) {
         Create booking
       </button>
     </form>
+  );
+}
+
+function LeadDetail({ item, onDone }: { item: Lead; onDone: () => void }) {
+  const queryClient = useQueryClient();
+  const services = useQuery({ queryKey: ["services"], queryFn: api.services });
+  const staff = useQuery({ queryKey: ["staff"], queryFn: api.staff });
+  const [serviceId, setServiceId] = useState(item.bookingIntent?.service?.id ?? "");
+  const [assignedStaffId, setAssignedStaffId] = useState(item.assignedTo?.id ?? "");
+  const [startTime, setStartTime] = useState(item.bookingIntent?.requestedDate ? toDateTimeLocal(item.bookingIntent.requestedDate) : "");
+  const [notes, setNotes] = useState(
+    [item.notes, item.bookingIntent?.notes, item.bookingIntent?.address ? `Address: ${item.bookingIntent.address}` : undefined]
+      .filter(Boolean)
+      .join("\n")
+  );
+  const [lostReason, setLostReason] = useState(item.wonLostReason ?? "");
+
+  const convert = useMutation({
+    mutationFn: () =>
+      api.convertLeadToBooking(item.id, {
+        serviceId,
+        assignedStaffId: assignedStaffId || undefined,
+        startTime: new Date(startTime).toISOString(),
+        status: "CONFIRMED",
+        notes: notes || undefined
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries();
+      onDone();
+    }
+  });
+  const markLost = useMutation({
+    mutationFn: () =>
+      api.updateLead(item.id, {
+        title: item.title,
+        status: "LOST",
+        conversionProbability: 0,
+        wonLostReason: lostReason || "Marked lost from lead detail"
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["leads"] });
+      void queryClient.invalidateQueries({ queryKey: ["lead-analytics"] });
+      onDone();
+    }
+  });
+  const canConvert = Boolean(item.customer && serviceId && startTime && !item.booking);
+
+  return (
+    <div className="grid gap-4">
+      <DetailCard icon={Target} title={item.title}>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Info label="Status" value={item.status.replaceAll("_", " ")} />
+          <Info label="Source" value={item.source.replaceAll("_", " ")} />
+          <Info label="Estimated value" value={money(item.estimatedValueCents)} />
+          <Info label="Probability" value={`${item.conversionProbability}%`} />
+          <Info label="Customer" value={item.customer?.name ?? "Not linked"} />
+          <Info label="Follow-up" value={shortDate(item.followUpAt)} />
+        </div>
+        {item.notes ? <p className="mt-3 rounded-[8px] bg-mist p-3 text-sm leading-6 text-steel">{item.notes}</p> : null}
+      </DetailCard>
+
+      {item.booking ? (
+        <DetailCard icon={CalendarDays} title="Converted booking">
+          <Info label="Service" value={item.booking.service.title} />
+          <Info label="Start time" value={shortDate(item.booking.startTime)} />
+          <p className="mt-3 text-sm leading-6 text-steel">
+            This lead is already won and connected to an active booking.
+          </p>
+        </DetailCard>
+      ) : (
+        <DetailCard icon={CalendarDays} title="Convert to booking">
+          {!item.customer ? (
+            <p className="rounded-[8px] bg-coral/10 p-3 text-sm font-medium text-coral">
+              Connect this lead to a customer before converting it to a booking.
+            </p>
+          ) : null}
+          <div className="mt-3 grid gap-3">
+            <SelectField label="Service" value={serviceId} onChange={setServiceId}>
+              <option value="">Choose service</option>
+              {(services.data ?? []).map((service) => (
+                <option key={service.id} value={service.id}>
+                  {service.title} · {money(service.priceCents)}
+                </option>
+              ))}
+            </SelectField>
+            <SelectField label="Staff" value={assignedStaffId} onChange={setAssignedStaffId}>
+              <option value="">Unassigned</option>
+              {(staff.data ?? []).map((member: StaffMember) => (
+                <option key={member.id} value={member.id}>
+                  {member.name} · {member.role}
+                </option>
+              ))}
+            </SelectField>
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-ink">Start time</span>
+              <input
+                type="datetime-local"
+                value={startTime}
+                onChange={(event) => setStartTime(event.target.value)}
+                className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-ink">Booking notes</span>
+              <textarea
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                className="min-h-28 w-full rounded-[8px] border border-ink/10 bg-mist p-3 outline-none focus:border-pine"
+              />
+            </label>
+            {convert.error ? <ErrorText error={convert.error} /> : null}
+            <button
+              onClick={() => convert.mutate()}
+              disabled={!canConvert || convert.isPending}
+              className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 font-semibold text-white disabled:opacity-50"
+            >
+              {convert.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarDays className="h-4 w-4" />}
+              Convert to booking
+            </button>
+          </div>
+        </DetailCard>
+      )}
+
+      {!item.booking && item.status !== "LOST" ? (
+        <DetailCard icon={AlertTriangle} title="Mark lost">
+          <p className="text-sm leading-6 text-steel">
+            Use this when the customer is not moving forward, the price was not a fit, or the job went cold.
+          </p>
+          <InputField label="Lost reason" value={lostReason} onChange={setLostReason} />
+          {markLost.error ? <ErrorText error={markLost.error} /> : null}
+          <button
+            onClick={() => markLost.mutate()}
+            disabled={markLost.isPending}
+            className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-coral px-4 font-semibold text-white disabled:opacity-50"
+          >
+            {markLost.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+            Mark lead lost
+          </button>
+        </DetailCard>
+      ) : null}
+    </div>
   );
 }
 
@@ -5537,6 +5707,7 @@ function drawerTitle(state: NonNullable<DrawerState>) {
   if (state.type === "new-booking") return "New booking";
   if (state.type === "booking") return "Booking details";
   if (state.type === "field-job") return "Field job";
+  if (state.type === "lead") return "Lead details";
   if (state.type === "conversation") return "Conversation";
   if (state.type === "customer") return "Customer profile";
   if (state.type === "invoice") return "Invoice";
