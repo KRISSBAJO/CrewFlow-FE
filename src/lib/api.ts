@@ -3,7 +3,8 @@ import { useAuth } from "@/store/auth";
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3002/api";
 
 type LoginResponse = {
-  accessToken: string;
+  accessToken?: string;
+  refreshToken?: string;
   user: {
     id?: string;
     sub: string;
@@ -28,16 +29,29 @@ type LoginResponse = {
   };
 };
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = useAuth.getState().token;
+async function request<T>(path: string, init?: RequestInit, retry = true): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...init?.headers
     }
   });
+
+  if (response.status === 401 && retry && !path.startsWith("/auth/login") && !path.startsWith("/auth/refresh")) {
+    const refreshed = await fetch(`${API_URL}/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" }
+    });
+    if (refreshed.ok) {
+      const session = (await refreshed.json()) as LoginResponse;
+      useAuth.getState().setSession(session.user);
+      return request<T>(path, init, false);
+    }
+    useAuth.getState().setUser(null);
+  }
 
   if (!response.ok) {
     const message = await response.text();
@@ -60,10 +74,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  me: () => request<LoginResponse>("/auth/me"),
   login: (email: string, password: string) =>
     request<LoginResponse>("/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password })
+    }),
+  logout: () =>
+    request<{ ok: true }>("/auth/logout", {
+      method: "POST"
     }),
   register: (input: RegisterInput) =>
     request<LoginResponse>("/auth/register", {

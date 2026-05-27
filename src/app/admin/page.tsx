@@ -82,15 +82,31 @@ const subscriptionStatuses: NonNullable<PlatformTenant["subscriptionStatus"]>[] 
 ];
 
 export default function AdminPage() {
-  const token = useAuth((state) => state.token);
   const user = useAuth((state) => state.user);
-  if (token && user && user.role !== "PLATFORM_ADMIN" && user.role !== "PLATFORM_SUPPORT") {
+  const checked = useAuth((state) => state.checked);
+  const hydrate = useAuth((state) => state.hydrate);
+  useEffect(() => {
+    void hydrate();
+  }, [hydrate]);
+  if (!checked) return <AdminAuthLoading />;
+  if (user && user.role !== "PLATFORM_ADMIN" && user.role !== "PLATFORM_SUPPORT") {
     return <TenantRedirect />;
   }
-  if (!token || (user?.role !== "PLATFORM_ADMIN" && user?.role !== "PLATFORM_SUPPORT")) {
+  if (!user || (user?.role !== "PLATFORM_ADMIN" && user?.role !== "PLATFORM_SUPPORT")) {
     return <AdminLogin />;
   }
   return <AdminConsole />;
+}
+
+function AdminAuthLoading() {
+  return (
+    <main className="flex min-h-screen items-center justify-center px-5">
+      <div className="rounded-[8px] border border-white/80 bg-white/90 p-6 text-center shadow-soft">
+        <Loader2 className="mx-auto h-6 w-6 animate-spin text-pine" />
+        <p className="mt-3 font-semibold text-ink">Checking admin session</p>
+      </div>
+    </main>
+  );
 }
 
 function TenantRedirect() {
@@ -122,7 +138,7 @@ function AdminLogin() {
         setError("This account is not a platform admin or support user.");
         return;
       }
-      setSession(data.accessToken, data.user);
+      setSession(data.user);
     },
     onError: (err) => setError(err instanceof Error ? err.message : "Login failed")
   });
@@ -1491,7 +1507,7 @@ function TenantDetail({ tenantId }: { tenantId: string }) {
   const impersonate = useMutation({
     mutationFn: (token: string) => api.impersonatePlatformTenant(token),
     onSuccess: (data) => {
-      setSession(data.accessToken, data.user);
+      setSession(data.user);
       window.location.href = "/app";
     }
   });

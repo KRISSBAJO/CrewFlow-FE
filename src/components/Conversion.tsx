@@ -65,7 +65,7 @@ export function ConversionSection() {
         whatsappNumber: form.whatsapp || undefined,
         biggestProblem: form.biggestProblem || undefined
       });
-      setSession(response.accessToken, response.user);
+      setSession(response.user);
       setSubmitted(true);
       router.push("/app");
     } catch (err) {

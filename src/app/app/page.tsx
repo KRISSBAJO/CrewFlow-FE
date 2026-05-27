@@ -144,11 +144,27 @@ type DrawerState =
   | null;
 
 export default function Home() {
-  const token = useAuth((state) => state.token);
   const user = useAuth((state) => state.user);
-  if (!token) return <Login />;
+  const checked = useAuth((state) => state.checked);
+  const hydrate = useAuth((state) => state.hydrate);
+  useEffect(() => {
+    void hydrate();
+  }, [hydrate]);
+  if (!checked) return <AuthLoading label="Checking session" />;
+  if (!user) return <Login />;
   if (user?.role === "PLATFORM_ADMIN" || user?.role === "PLATFORM_SUPPORT") return <AdminRedirect />;
   return <Console />;
+}
+
+function AuthLoading({ label }: { label: string }) {
+  return (
+    <main className="flex min-h-screen items-center justify-center px-5">
+      <div className="rounded-[8px] border border-white/80 bg-white/90 p-6 text-center shadow-soft">
+        <Loader2 className="mx-auto h-6 w-6 animate-spin text-pine" />
+        <p className="mt-3 font-semibold text-ink">{label}</p>
+      </div>
+    </main>
+  );
 }
 
 function AdminRedirect() {
@@ -176,7 +192,7 @@ function Login() {
 
   const login = useMutation({
     mutationFn: () => api.login(email, password),
-    onSuccess: (data) => setSession(data.accessToken, data.user),
+    onSuccess: (data) => setSession(data.user),
     onError: (err) => setError(err instanceof Error ? err.message : "Login failed")
   });
 
