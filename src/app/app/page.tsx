@@ -308,8 +308,8 @@ function Console() {
   };
 
   return (
-    <main className="min-h-screen p-3 md:p-5">
-      <div className="mx-auto flex max-w-[1500px] gap-4">
+    <main className="min-h-screen overflow-x-hidden p-3 md:p-5">
+      <div className="mx-auto flex w-full max-w-[1500px] gap-4">
         <aside
           className={cn(
             "hidden shrink-0 rounded-[8px] border border-white/80 bg-white/90 shadow-soft backdrop-blur transition-all duration-300 lg:block",
@@ -379,7 +379,7 @@ function Console() {
           </div>
         </aside>
 
-        <section className="min-w-0 flex-1">
+        <section className="min-w-0 flex-1 overflow-x-hidden">
           <header className="mb-4 rounded-[8px] border border-white/80 bg-white/90 p-4 shadow-soft backdrop-blur">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
@@ -526,7 +526,7 @@ function Overview({
 
   if (loading) return <LoadingPanel />;
   return (
-    <div className="grid gap-4">
+    <div className="grid min-w-0 gap-4">
       <SetupChecklist
         customers={customers?.length ?? 0}
         services={services?.length ?? 0}
@@ -880,7 +880,7 @@ function LeadsView({
           </button>
         }
       >
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+        <div className="grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
           <div className="rounded-[8px] bg-mist p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-pine">Simple meaning</p>
             <h3 className="mt-2 text-2xl font-semibold text-ink">A lead is a possible customer before they book.</h3>
@@ -912,7 +912,7 @@ function LeadsView({
         </div>
       </Panel>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Metric icon={Target} label="Open pipeline" value={money(analytics?.openPipelineCents)} tone="pine" />
         <Metric icon={TrendingUp} label="Weighted value" value={money(analytics?.weightedPipelineCents)} tone="mint" />
         <Metric icon={Clock3} label="Follow-ups due" value={analytics?.followUpsDue ?? 0} tone="amber" />
@@ -923,17 +923,17 @@ function LeadsView({
         title="Pipeline board"
         icon={Target}
         action={
-          <div className="flex w-full flex-col gap-2 lg:w-auto lg:flex-row lg:items-center">
+          <div className="grid w-full min-w-0 gap-2 lg:w-[min(100%,760px)] lg:grid-cols-[minmax(220px,1fr)_160px_160px]">
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search name, source, staff..."
-              className="h-10 w-full rounded-[8px] border border-ink/10 bg-mist px-3 text-sm outline-none focus:border-pine lg:w-72"
+              className="h-10 min-w-0 rounded-[8px] border border-ink/10 bg-mist px-3 text-sm outline-none focus:border-pine"
             />
             <select
               value={statusFilter}
               onChange={(event) => setStatusFilter(event.target.value as LeadStatus | "ALL")}
-              className="h-10 rounded-[8px] border border-ink/10 bg-mist px-3 text-sm outline-none focus:border-pine"
+              className="h-10 min-w-0 rounded-[8px] border border-ink/10 bg-mist px-3 text-sm outline-none focus:border-pine"
             >
               <option value="ALL">All stages</option>
               {leadStatuses.map((stage) => (
@@ -945,7 +945,7 @@ function LeadsView({
             <select
               value={sourceFilter}
               onChange={(event) => setSourceFilter(event.target.value as LeadSource | "ALL")}
-              className="h-10 rounded-[8px] border border-ink/10 bg-mist px-3 text-sm outline-none focus:border-pine"
+              className="h-10 min-w-0 rounded-[8px] border border-ink/10 bg-mist px-3 text-sm outline-none focus:border-pine"
             >
               <option value="ALL">All sources</option>
               {leadSources.map((item) => (
@@ -957,8 +957,8 @@ function LeadsView({
           </div>
         }
       >
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+        <div className="grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="grid min-w-0 gap-4">
             {leadStatuses.map((stage) => {
               const stageLeads = filtered.filter((lead) => lead.status === stage.value);
               const stageValue = stageLeads.reduce(
@@ -966,17 +966,17 @@ function LeadsView({
                 0
               );
               return (
-                <section key={stage.value} className="min-h-[360px] rounded-[8px] bg-mist p-4">
-                  <div className="mb-4 flex items-start justify-between gap-3">
+                <section key={stage.value} className="min-w-0 rounded-[8px] bg-mist p-4">
+                  <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
-                      <p className="font-semibold text-ink">{stage.label}</p>
+                      <p className="text-lg font-semibold text-ink">{stage.label}</p>
                       <p className="mt-1 text-sm font-medium text-steel">
                         {stageLeads.length} leads · {money(stageValue)}
                       </p>
                     </div>
                     <Status label={stage.value} />
                   </div>
-                  <div className="grid gap-3">
+                  <div className="grid min-w-0 gap-3 xl:grid-cols-2">
                     {stageLeads.slice(0, 8).map((lead) => (
                       <LeadCard
                         key={lead.id}
@@ -1511,7 +1511,7 @@ function LeadCard({
   const isDue = lead.followUpAt ? new Date(lead.followUpAt).getTime() <= now : false;
 
   return (
-    <article className="rounded-[8px] border border-ink/5 bg-white p-3 shadow-soft">
+    <article className="min-w-0 rounded-[8px] border border-ink/5 bg-white p-3 shadow-soft">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="line-clamp-2 font-semibold leading-5 text-ink">{lead.title}</p>
@@ -1521,7 +1521,7 @@ function LeadCard({
         </div>
         <Status label={`${lead.conversionProbability}%`} />
       </div>
-      <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+      <div className="mt-3 grid min-w-0 gap-2 text-sm sm:grid-cols-2">
         <div className="rounded-[8px] bg-mist p-2">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-steel">Value</p>
           <p className="mt-1 font-semibold text-ink">{money(lead.estimatedValueCents)}</p>
@@ -1533,11 +1533,11 @@ function LeadCard({
           <p className="mt-1 truncate font-semibold text-ink">{shortDate(lead.followUpAt)}</p>
         </div>
       </div>
-      <div className="mt-3 grid gap-2">
+      <div className="mt-3 grid min-w-0 gap-2 md:grid-cols-2">
         <select
           value={status}
           onChange={(event) => setStatus(event.target.value as LeadStatus)}
-          className="h-9 rounded-[8px] border border-ink/10 bg-mist px-2 text-sm outline-none focus:border-pine"
+          className="h-9 min-w-0 rounded-[8px] border border-ink/10 bg-mist px-2 text-sm outline-none focus:border-pine"
         >
           {leadStatuses.map((stage) => (
             <option key={stage.value} value={stage.value}>
@@ -1548,7 +1548,7 @@ function LeadCard({
         <select
           value={assignedToId}
           onChange={(event) => setAssignedToId(event.target.value)}
-          className="h-9 rounded-[8px] border border-ink/10 bg-mist px-2 text-sm outline-none focus:border-pine"
+          className="h-9 min-w-0 rounded-[8px] border border-ink/10 bg-mist px-2 text-sm outline-none focus:border-pine"
         >
           <option value="">Unassigned</option>
           {staff.map((member) => (
@@ -1557,7 +1557,7 @@ function LeadCard({
             </option>
           ))}
         </select>
-        <div className="grid grid-cols-[1fr_88px] gap-2">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_76px] gap-2 md:col-span-2">
           <input
             type="datetime-local"
             value={followUpAt}
@@ -1570,7 +1570,7 @@ function LeadCard({
             max={100}
             value={probability}
             onChange={(event) => setProbability(event.target.value)}
-            className="h-9 rounded-[8px] border border-ink/10 bg-mist px-2 text-sm outline-none focus:border-pine"
+            className="h-9 min-w-0 rounded-[8px] border border-ink/10 bg-mist px-2 text-sm outline-none focus:border-pine"
           />
         </div>
       </div>
@@ -1578,7 +1578,7 @@ function LeadCard({
         <p className="mt-3 rounded-[8px] bg-mist p-2 text-sm text-steel">{lead.wonLostReason}</p>
       ) : null}
       {update.error ? <ErrorText error={update.error} /> : null}
-      <div className="mt-3 grid grid-cols-2 gap-2">
+      <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-2">
         <button
           onClick={() => update.mutate()}
           disabled={update.isPending}
@@ -1597,7 +1597,7 @@ function LeadCard({
           </button>
         ) : null}
       </div>
-      <div className="mt-2 grid grid-cols-2 gap-2">
+      <div className="mt-2 grid min-w-0 gap-2 sm:grid-cols-2">
         {lead.conversation ? (
           <button
             onClick={() => onOpen({ type: "conversation", item: lead.conversation! })}
