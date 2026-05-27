@@ -798,6 +798,7 @@ function LeadsView({
   const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
   const [leadModalOpen, setLeadModalOpen] = useState(false);
+  const [leadTab, setLeadTab] = useState<"board" | "followups" | "analytics" | "guide">("board");
   const [statusFilter, setStatusFilter] = useState<LeadStatus | "ALL">("ALL");
   const [sourceFilter, setSourceFilter] = useState<LeadSource | "ALL">("ALL");
   const [title, setTitle] = useState("");
@@ -833,9 +834,19 @@ function LeadsView({
       [...(items ?? [])]
         .filter((lead) => lead.followUpAt && lead.status !== "WON" && lead.status !== "LOST")
         .sort((a, b) => new Date(a.followUpAt!).getTime() - new Date(b.followUpAt!).getTime())
-        .slice(0, 5),
+        .slice(0, 12),
     [items]
   );
+  const leadTabs: Array<{
+    id: "board" | "followups" | "analytics" | "guide";
+    label: string;
+    count?: number;
+  }> = [
+    { id: "board", label: "Board", count: filtered.length },
+    { id: "followups", label: "Follow-ups", count: dueLeads.length },
+    { id: "analytics", label: "Analytics" },
+    { id: "guide", label: "Guide" }
+  ];
 
   function resetLeadForm() {
     setTitle("");
@@ -868,7 +879,7 @@ function LeadsView({
   return (
     <div className="grid gap-4">
       <Panel
-        title="Lead pipeline"
+        title="Lead pipeline CRM"
         icon={Target}
         action={
           <button
@@ -880,50 +891,43 @@ function LeadsView({
           </button>
         }
       >
-        <div className="grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
-          <div className="rounded-[8px] bg-mist p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-pine">Simple meaning</p>
-            <h3 className="mt-2 text-2xl font-semibold text-ink">A lead is a possible customer before they book.</h3>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-steel">
-              Use this page to track every inquiry from WhatsApp, phone, web chat, referral, or manual entry until it becomes a real booking or gets marked lost.
-            </p>
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
-              <LeadEducationStep title="Capture" body="Someone asks for a quote, price, date, or service." />
-              <LeadEducationStep title="Follow up" body="Assign staff, set the next touch, and keep the deal moving." />
-              <LeadEducationStep title="Convert" body="Move good leads to booking ready, then won when work is booked." />
-            </div>
-          </div>
-          <div className="rounded-[8px] bg-pine p-4 text-white">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-mint">Pipeline stages</p>
-            <div className="mt-4 grid gap-2">
-              {leadStatuses.map((stage, index) => (
-                <div key={stage.value} className="flex items-center gap-3 rounded-[8px] bg-white/10 px-3 py-2">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-mint text-xs font-bold text-ink">
-                    {index + 1}
+        <div className="grid gap-4">
+          <p className="max-w-3xl text-sm leading-6 text-steel">
+            Track every possible customer from first message to booked job without crowding the screen.
+          </p>
+          <div className="grid gap-2 sm:grid-cols-4">
+            {leadTabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setLeadTab(tab.id)}
+                className={cn(
+                  "flex h-11 items-center justify-center gap-2 rounded-[8px] border px-3 text-sm font-semibold transition",
+                  leadTab === tab.id
+                    ? "border-pine bg-pine text-white shadow-soft"
+                    : "border-ink/10 bg-mist text-steel hover:border-pine/30 hover:text-ink"
+                )}
+              >
+                <span>{tab.label}</span>
+                {typeof tab.count === "number" ? (
+                  <span
+                    className={cn(
+                      "rounded-[8px] px-2 py-0.5 text-xs font-bold",
+                      leadTab === tab.id ? "bg-white/15 text-white" : "bg-white text-steel"
+                    )}
+                  >
+                    {tab.count}
                   </span>
-                  <div className="min-w-0">
-                    <p className="font-semibold">{stage.label}</p>
-                    <p className="text-xs text-white/70">{leadStageDescriptions[stage.value]}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ) : null}
+              </button>
+            ))}
           </div>
         </div>
       </Panel>
 
-      <div className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Metric icon={Target} label="Open pipeline" value={money(analytics?.openPipelineCents)} tone="pine" />
-        <Metric icon={TrendingUp} label="Weighted value" value={money(analytics?.weightedPipelineCents)} tone="mint" />
-        <Metric icon={Clock3} label="Follow-ups due" value={analytics?.followUpsDue ?? 0} tone="amber" />
-        <Metric icon={DollarSign} label="Lead conversion" value={`${analytics?.conversionRate ?? 0}%`} tone="coral" />
-      </div>
-
-      <Panel
-        title="Pipeline board"
-        icon={Target}
-        action={
-          <div className="grid w-full min-w-0 gap-2 lg:w-[min(100%,760px)] lg:grid-cols-[minmax(220px,1fr)_160px_160px]">
+      {leadTab === "board" ? (
+        <Panel title="Pipeline board" icon={Target}>
+          <div className="mb-4 grid min-w-0 gap-2 lg:grid-cols-[minmax(220px,1fr)_160px_160px]">
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
@@ -955,80 +959,103 @@ function LeadsView({
               ))}
             </select>
           </div>
-        }
-      >
-        <div className="grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,1fr)_340px]">
           <div className="grid min-w-0 gap-4">
             {leadStatuses.map((stage) => {
-              const stageLeads = filtered.filter((lead) => lead.status === stage.value);
-              const stageValue = stageLeads.reduce(
-                (sum, lead) => sum + (lead.estimatedValueCents ?? 0),
-                0
-              );
-              return (
-                <section key={stage.value} className="min-w-0 rounded-[8px] bg-mist p-4">
-                  <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0">
-                      <p className="text-lg font-semibold text-ink">{stage.label}</p>
-                      <p className="mt-1 text-sm font-medium text-steel">
-                        {stageLeads.length} leads · {money(stageValue)}
-                      </p>
+                const stageLeads = filtered.filter((lead) => lead.status === stage.value);
+                const stageValue = stageLeads.reduce(
+                  (sum, lead) => sum + (lead.estimatedValueCents ?? 0),
+                  0
+                );
+                return (
+                  <section key={stage.value} className="min-w-0 rounded-[8px] bg-mist p-4">
+                    <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-lg font-semibold text-ink">{stage.label}</p>
+                        <p className="mt-1 text-sm font-medium text-steel">
+                          {stageLeads.length} leads · {money(stageValue)}
+                        </p>
+                      </div>
+                      <Status label={stage.value} />
                     </div>
-                    <Status label={stage.value} />
-                  </div>
-                  <div className="grid min-w-0 gap-3 xl:grid-cols-2">
-                    {stageLeads.slice(0, 8).map((lead) => (
-                      <LeadCard
-                        key={lead.id}
-                        lead={lead}
-                        staff={staff ?? []}
-                        onOpen={onOpen}
-                      />
-                    ))}
-                    {stageLeads.length > 8 ? (
-                      <p className="rounded-[8px] bg-white p-2 text-center text-sm font-medium text-steel">
-                        {stageLeads.length - 8} more leads match this stage
-                      </p>
-                    ) : null}
-                    <Empty show={!stageLeads.length} label="No leads here" />
-                  </div>
-                </section>
-              );
-            })}
+                    <div className="grid min-w-0 gap-3 xl:grid-cols-2">
+                      {stageLeads.slice(0, 8).map((lead) => (
+                        <LeadCard
+                          key={lead.id}
+                          lead={lead}
+                          staff={staff ?? []}
+                          onOpen={onOpen}
+                        />
+                      ))}
+                      {stageLeads.length > 8 ? (
+                        <p className="rounded-[8px] bg-white p-2 text-center text-sm font-medium text-steel">
+                          {stageLeads.length - 8} more leads match this stage
+                        </p>
+                      ) : null}
+                      <Empty show={!stageLeads.length} label="No leads here" />
+                    </div>
+                  </section>
+                );
+              })}
           </div>
-          <aside className="grid content-start gap-4">
-            <div className="rounded-[8px] bg-mist p-4">
-              <p className="font-semibold text-ink">Next follow-ups</p>
-              <p className="mt-1 text-sm leading-6 text-steel">These are the leads most likely to leak revenue if nobody replies.</p>
-              <div className="mt-4 grid gap-2">
-                {dueLeads.map((lead) => (
-                  <div key={lead.id} className="rounded-[8px] bg-white p-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="line-clamp-2 font-semibold text-ink">{lead.title}</p>
-                      <Status label={lead.status} />
-                    </div>
-                    <p className="mt-1 text-sm text-steel">{shortDate(lead.followUpAt)}</p>
+        </Panel>
+      ) : null}
+
+      {leadTab === "followups" ? (
+        <Panel title="Follow-up queue" icon={Clock3}>
+          <p className="mb-4 max-w-3xl text-sm leading-6 text-steel">
+            These are the opportunities most likely to leak revenue if nobody replies today.
+          </p>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {dueLeads.map((lead) => (
+              <div key={lead.id} className="rounded-[8px] bg-mist p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="line-clamp-2 text-lg font-semibold text-ink">{lead.title}</p>
+                    <p className="mt-1 text-sm text-steel">
+                      {lead.customer?.name ?? "Unlinked"} · {lead.source.replaceAll("_", " ")}
+                    </p>
                   </div>
-                ))}
-                <Empty show={!dueLeads.length} label="No follow-ups queued" />
+                  <Status label={lead.status} />
+                </div>
+                <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                  <MiniStat label="Follow-up" value={shortDate(lead.followUpAt)} />
+                  <MiniStat label="Value" value={money(lead.estimatedValueCents)} />
+                  <MiniStat label="Owner" value={lead.assignedTo?.name ?? "Unassigned"} />
+                </div>
               </div>
-            </div>
-            <div className="rounded-[8px] bg-mist p-4">
-              <p className="font-semibold text-ink">Lead-to-booking</p>
-              <div className="mt-3 grid gap-3">
-                <MiniStat label="Won leads" value={analytics?.wonCount ?? 0} />
-                <MiniStat label="Lost leads" value={analytics?.lostCount ?? 0} danger={(analytics?.lostCount ?? 0) > 0} />
-                <MiniStat label="Booked value" value={money(analytics?.leadToBooking.bookingValueCents)} />
+            ))}
+            <Empty show={!dueLeads.length} label="No follow-ups queued" />
+          </div>
+        </Panel>
+      ) : null}
+
+      {leadTab === "analytics" ? (
+        <div className="grid gap-4">
+          <div className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <Metric icon={Target} label="Open pipeline" value={money(analytics?.openPipelineCents)} tone="pine" />
+            <Metric icon={TrendingUp} label="Weighted value" value={money(analytics?.weightedPipelineCents)} tone="mint" />
+            <Metric icon={Clock3} label="Follow-ups due" value={analytics?.followUpsDue ?? 0} tone="amber" />
+            <Metric icon={DollarSign} label="Lead conversion" value={`${analytics?.conversionRate ?? 0}%`} tone="coral" />
+          </div>
+          <Panel title="Lead-to-booking analytics" icon={TrendingUp}>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="rounded-[8px] bg-mist p-4">
+                <p className="font-semibold text-ink">Conversion summary</p>
+                <div className="mt-4 grid gap-3">
+                  <MiniStat label="Won leads" value={analytics?.wonCount ?? 0} />
+                  <MiniStat label="Lost leads" value={analytics?.lostCount ?? 0} danger={(analytics?.lostCount ?? 0) > 0} />
+                  <MiniStat label="Booked value" value={money(analytics?.leadToBooking.bookingValueCents)} />
+                </div>
               </div>
-              <div className="mt-4 rounded-[8px] bg-white p-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-steel">Best sources</p>
-                <div className="mt-3 grid gap-2">
+              <div className="rounded-[8px] bg-mist p-4">
+                <p className="font-semibold text-ink">Best sources</p>
+                <div className="mt-4 grid gap-2">
                   {Object.entries(analytics?.bySource ?? {})
                     .filter(([, count]) => count > 0)
                     .sort((a, b) => b[1] - a[1])
-                    .slice(0, 5)
+                    .slice(0, 8)
                     .map(([sourceName, count]) => (
-                      <div key={sourceName} className="flex items-center justify-between text-sm">
+                      <div key={sourceName} className="flex items-center justify-between rounded-[8px] bg-white px-3 py-2 text-sm">
                         <span className="font-medium text-ink">{sourceName.replaceAll("_", " ")}</span>
                         <span className="font-semibold text-steel">{count}</span>
                       </div>
@@ -1037,9 +1064,44 @@ function LeadsView({
                 </div>
               </div>
             </div>
-          </aside>
+          </Panel>
         </div>
-      </Panel>
+      ) : null}
+
+      {leadTab === "guide" ? (
+        <Panel title="Lead guide" icon={Sparkles}>
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+            <div className="rounded-[8px] bg-mist p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-pine">Simple meaning</p>
+              <h3 className="mt-2 text-2xl font-semibold text-ink">A lead is a possible customer before they book.</h3>
+              <p className="mt-3 text-sm leading-6 text-steel">
+                Someone asks for pricing, availability, or service details. CrewFlow keeps that opportunity visible until your team books the work or marks it lost.
+              </p>
+              <div className="mt-4 grid gap-3">
+                <LeadEducationStep title="Capture" body="Add the inquiry from WhatsApp, phone, web chat, referral, or manual entry." />
+                <LeadEducationStep title="Follow up" body="Assign an owner, set the next touch, and protect the booking from being forgotten." />
+                <LeadEducationStep title="Convert" body="Move good leads to booking ready, then won when the job is scheduled." />
+              </div>
+            </div>
+            <div className="rounded-[8px] bg-mist p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-pine">Pipeline stages</p>
+              <div className="mt-4 grid gap-2">
+                {leadStatuses.map((stage, index) => (
+                  <div key={stage.value} className="flex items-center gap-3 rounded-[8px] bg-white px-3 py-2">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-pine text-xs font-bold text-white">
+                      {index + 1}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-ink">{stage.label}</p>
+                      <p className="text-xs text-steel">{leadStageDescriptions[stage.value]}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </Panel>
+      ) : null}
 
       {typeof document !== "undefined"
         ? createPortal(
