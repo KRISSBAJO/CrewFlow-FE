@@ -847,6 +847,10 @@ function LeadsView({
     { id: "analytics", label: "Analytics" },
     { id: "guide", label: "Guide" }
   ];
+  const visibleLeadStatuses =
+    statusFilter === "ALL"
+      ? leadStatuses
+      : leadStatuses.filter((stage) => stage.value === statusFilter);
 
   function resetLeadForm() {
     setTitle("");
@@ -959,25 +963,28 @@ function LeadsView({
               ))}
             </select>
           </div>
-          <div className="grid min-w-0 gap-4">
-            {leadStatuses.map((stage) => {
+          <div className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {visibleLeadStatuses.map((stage) => {
                 const stageLeads = filtered.filter((lead) => lead.status === stage.value);
                 const stageValue = stageLeads.reduce(
                   (sum, lead) => sum + (lead.estimatedValueCents ?? 0),
                   0
                 );
                 return (
-                  <section key={stage.value} className="min-w-0 rounded-[8px] bg-mist p-4">
-                    <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <section
+                    key={stage.value}
+                    className="flex min-h-[260px] min-w-0 flex-col rounded-[8px] border border-ink/10 bg-mist p-3"
+                  >
+                    <div className="mb-3 flex items-start justify-between gap-3 rounded-[8px] bg-white px-3 py-2">
                       <div className="min-w-0">
-                        <p className="text-lg font-semibold text-ink">{stage.label}</p>
-                        <p className="mt-1 text-sm font-medium text-steel">
+                        <p className="truncate font-semibold text-ink">{stage.label}</p>
+                        <p className="mt-1 text-xs font-medium text-steel">
                           {stageLeads.length} leads · {money(stageValue)}
                         </p>
                       </div>
                       <Status label={stage.value} />
                     </div>
-                    <div className="grid min-w-0 gap-3 xl:grid-cols-2">
+                    <div className="grid min-w-0 flex-1 content-start gap-3">
                       {stageLeads.slice(0, 8).map((lead) => (
                         <LeadCard
                           key={lead.id}
@@ -1595,7 +1602,7 @@ function LeadCard({
           <p className="mt-1 truncate font-semibold text-ink">{shortDate(lead.followUpAt)}</p>
         </div>
       </div>
-      <div className="mt-3 grid min-w-0 gap-2 md:grid-cols-2">
+      <div className="mt-3 grid min-w-0 gap-2 2xl:grid-cols-2">
         <select
           value={status}
           onChange={(event) => setStatus(event.target.value as LeadStatus)}
@@ -1619,7 +1626,7 @@ function LeadCard({
             </option>
           ))}
         </select>
-        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_76px] gap-2 md:col-span-2">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_76px] gap-2 2xl:col-span-2">
           <input
             type="datetime-local"
             value={followUpAt}
@@ -1640,7 +1647,7 @@ function LeadCard({
         <p className="mt-3 rounded-[8px] bg-mist p-2 text-sm text-steel">{lead.wonLostReason}</p>
       ) : null}
       {update.error ? <ErrorText error={update.error} /> : null}
-      <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-2">
+      <div className="mt-3 grid min-w-0 gap-2 2xl:grid-cols-2">
         <button
           onClick={() => update.mutate()}
           disabled={update.isPending}
@@ -1659,7 +1666,7 @@ function LeadCard({
           </button>
         ) : null}
       </div>
-      <div className="mt-2 grid min-w-0 gap-2 sm:grid-cols-2">
+      <div className="mt-2 grid min-w-0 gap-2 2xl:grid-cols-2">
         {lead.conversation ? (
           <button
             onClick={() => onOpen({ type: "conversation", item: lead.conversation! })}
