@@ -17,6 +17,8 @@ import {
   Copy,
   CreditCard,
   DollarSign,
+  Eye,
+  EyeOff,
   ExternalLink,
   FileText,
   Headphones,
@@ -69,6 +71,7 @@ import {
   OnboardingProfile,
   OperationalAction,
   Payment,
+  PlatformSubscriptionPlan,
   RetentionCustomer,
   RetentionSummary,
   Service,
@@ -76,6 +79,7 @@ import {
   TenantActivationSummary,
   TenantBillingSummary,
   TenantProfile,
+  TimeslotGenerationResult,
   WebhookEvent,
   WhatsappOnboarding,
   WhatsappStatus
@@ -188,6 +192,7 @@ function Login() {
   const setSession = useAuth((state) => state.setSession);
   const [email, setEmail] = useState("owner@sparkle.test");
   const [password, setPassword] = useState("Password123!");
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [error, setError] = useState("");
 
   const login = useMutation({
@@ -251,12 +256,22 @@ function Login() {
           </label>
           <label className="block">
             <span className="mb-2 block text-sm font-medium text-ink">Password</span>
-            <input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className="h-12 w-full rounded-[8px] border border-ink/10 bg-mist px-4 outline-none transition focus:border-pine"
-            />
+            <div className="relative">
+              <input
+                type={passwordVisible ? "text" : "password"}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                className="h-12 w-full rounded-[8px] border border-ink/10 bg-mist px-4 pr-12 outline-none transition focus:border-pine"
+              />
+              <button
+                type="button"
+                aria-label={passwordVisible ? "Hide password" : "Show password"}
+                onClick={() => setPasswordVisible((visible) => !visible)}
+                className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-[8px] text-steel transition hover:bg-white hover:text-ink"
+              >
+                {passwordVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
           </label>
           {error ? (
             <p className="mt-4 rounded-[8px] bg-coral/10 px-3 py-2 text-sm text-coral">
@@ -3061,6 +3076,7 @@ function SettingsForm({
   const [section, setSection] = useState<SettingsSection>("overview");
   const whatsappStatus = useQuery({ queryKey: ["whatsapp-status"], queryFn: api.whatsappStatus });
   const whatsappOnboarding = useQuery({ queryKey: ["whatsapp-onboarding"], queryFn: api.whatsappOnboarding });
+  const tenantPlans = useQuery({ queryKey: ["tenant-plans"], queryFn: api.tenantPlans });
   const automationRuns = useQuery({ queryKey: ["automation-runs"], queryFn: api.automationRuns });
   const webhookEvents = useQuery({ queryKey: ["whatsapp-events"], queryFn: api.whatsappEvents });
   const createCheckout = useMutation({
@@ -3284,17 +3300,23 @@ function SettingsForm({
         </div>
       ) : null}
 
-      {section === "services" ? <ServiceManager services={services} /> : null}
+      {section === "services" ? (
+        <div className="grid gap-4">
+          <ServiceManager services={services} />
+          <TimeslotGenerator services={services} staff={staff} />
+        </div>
+      ) : null}
       {section === "team" ? <StaffManager staff={staff} /> : null}
 
       {section === "billing" ? (
         <BillingSelfServePanel
           billing={billing}
+          plans={tenantPlans.data ?? []}
           checkoutPending={createCheckout.isPending}
           portalPending={createPortal.isPending}
           scanPending={scanBilling.isPending}
           error={createCheckout.error ?? createPortal.error ?? scanBilling.error}
-          onCheckout={() => createCheckout.mutate()}
+          onCheckout={(planId) => createCheckout.mutate(planId)}
           onPortal={() => createPortal.mutate()}
           onScan={() => scanBilling.mutate()}
         />
@@ -3498,6 +3520,7 @@ function PortalLinkPanel({ tenant }: { tenant: TenantProfile }) {
 
 function BillingSelfServePanel({
   billing,
+  plans,
   checkoutPending,
   portalPending,
   scanPending,
@@ -3507,16 +3530,20 @@ function BillingSelfServePanel({
   onScan
 }: {
   billing?: TenantBillingSummary;
+  plans: PlatformSubscriptionPlan[];
   checkoutPending: boolean;
   portalPending: boolean;
   scanPending: boolean;
   error: unknown;
-  onCheckout: () => void;
+  onCheckout: (planId?: string) => void;
   onPortal: () => void;
   onScan: () => void;
 }) {
+  const [selectedPlanId, setSelectedPlanId] = useState("");
   const limits = billing?.limits ?? {};
   const usage = billing?.usage ?? {};
+  const currentPlanId = billing?.subscriptionPlanId ?? billing?.plan?.id ?? "";
+  const selectedPlan = plans.find((plan) => plan.id === selectedPlanId) ?? plans.find((plan) => plan.id === currentPlanId) ?? plans[0];
   const blocked =
     billing?.subscriptionStatus === "CANCELED" ||
     billing?.subscriptionStatus === "UNPAID";
@@ -3535,6 +3562,45 @@ function BillingSelfServePanel({
         ))}
       </div>
 
+      <div className="mt-4 grid gap-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="font-semibold text-ink">Plan catalog</p>
+            <p className="text-sm text-steel">Choose the plan to use for checkout.</p>
+          </div>
+          <Status label={`${plans.length} PLANS`} />
+        </div>
+        <div className="grid gap-3 lg:grid-cols-3">
+          {plans.map((plan) => {
+            const current = plan.id === currentPlanId || plan.slug === billing?.subscriptionPlan;
+            const active = selectedPlan?.id === plan.id;
+            return (
+              <button
+                key={plan.id}
+                type="button"
+                onClick={() => setSelectedPlanId(plan.id)}
+                className={cn(
+                  "rounded-[8px] border p-4 text-left transition",
+                  active ? "border-pine bg-pine text-white shadow-soft" : "border-ink/5 bg-mist hover:bg-white"
+                )}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className={cn("font-semibold", active ? "text-white" : "text-ink")}>{plan.name}</p>
+                    <p className={cn("mt-1 text-sm", active ? "text-white/75" : "text-steel")}>{money(plan.monthlyPriceCents)} / mo</p>
+                  </div>
+                  {current ? <Status label="CURRENT" /> : null}
+                </div>
+                <p className={cn("mt-3 line-clamp-2 text-sm", active ? "text-white/80" : "text-steel")}>{plan.description ?? "CrewFlow plan"}</p>
+                <p className={cn("mt-3 text-xs font-semibold uppercase tracking-[0.12em]", active ? "text-white/70" : "text-steel")}>
+                  {(plan.planLimits?.staff ?? "Unlimited")} staff · {(plan.planLimits?.monthlyBookings ?? "Unlimited")} bookings
+                </p>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {billing?.pastDueAt ? (
         <p className="mt-4 rounded-[8px] bg-coral/10 px-3 py-2 text-sm font-semibold text-coral">
           Payment is past due since {shortDate(billing.pastDueAt)}.
@@ -3544,12 +3610,12 @@ function BillingSelfServePanel({
 
       <div className="mt-4 flex flex-col gap-2 sm:flex-row">
         <button
-          onClick={onCheckout}
+          onClick={() => onCheckout(selectedPlan?.id)}
           disabled={checkoutPending}
           className="flex h-10 flex-1 items-center justify-center gap-2 rounded-[8px] bg-ink px-3 text-sm font-semibold text-white disabled:opacity-50"
         >
           {checkoutPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
-          Upgrade plan
+          {selectedPlan ? `Checkout ${selectedPlan.name}` : "Upgrade plan"}
         </button>
         <button
           onClick={onPortal}
@@ -4018,6 +4084,191 @@ function ServiceManager({ services }: { services: Service[] }) {
         : null}
     </Panel>
   );
+}
+
+function TimeslotGenerator({ services, staff }: { services: Service[]; staff: StaffMember[] }) {
+  const activeServices = services.filter((service) => service.active !== false);
+  const today = new Date().toISOString().slice(0, 10);
+  const defaultEnd = new Date();
+  defaultEnd.setDate(defaultEnd.getDate() + 7);
+  const [serviceId, setServiceId] = useState(activeServices[0]?.id ?? "");
+  const [staffId, setStaffId] = useState("");
+  const [startDate, setStartDate] = useState(today);
+  const [endDate, setEndDate] = useState(defaultEnd.toISOString().slice(0, 10));
+  const [slotMinutes, setSlotMinutes] = useState(30);
+  const [bufferMinutes, setBufferMinutes] = useState("30");
+  const [includeUnavailable, setIncludeUnavailable] = useState(false);
+  const [result, setResult] = useState<TimeslotGenerationResult | null>(null);
+
+  useEffect(() => {
+    if (!serviceId && activeServices[0]?.id) setServiceId(activeServices[0].id);
+  }, [activeServices, serviceId]);
+
+  const dateError = validateTimeslotRange(startDate, endDate, today);
+  const bufferNumber = Number(bufferMinutes);
+  const canGenerate = Boolean(serviceId) && !dateError && Number.isFinite(bufferNumber) && bufferNumber >= 0 && bufferNumber <= 240;
+
+  const generate = useMutation({
+    mutationFn: () =>
+      api.generateTimeslots({
+        serviceId,
+        startDate,
+        endDate,
+        slotMinutes,
+        bufferMinutes: bufferNumber,
+        staffId: staffId || undefined,
+        includeUnavailable
+      }),
+    onSuccess: (data) => setResult(data)
+  });
+
+  return (
+    <Panel
+      title="Availability generator"
+      icon={Clock3}
+      action={
+        <button
+          onClick={() => generate.mutate()}
+          disabled={!canGenerate || generate.isPending}
+          className="flex h-10 items-center justify-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+        >
+          {generate.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+          Generate
+        </button>
+      }
+    >
+      <div className="mb-4 grid gap-3 sm:grid-cols-4">
+        <MiniStat label="Active services" value={activeServices.length} />
+        <MiniStat label="Crew" value={staff.length} />
+        <MiniStat label="Interval" value={`${slotMinutes}m`} />
+        <MiniStat label="Buffer" value={`${bufferMinutes || 0}m`} />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
+        <div className="rounded-[8px] border border-ink/5 bg-mist/80 p-4">
+          <div className="grid gap-3">
+            <SelectField label="Service" value={serviceId} onChange={setServiceId}>
+              <option value="">Choose service</option>
+              {activeServices.map((service) => (
+                <option key={service.id} value={service.id}>
+                  {service.title}
+                </option>
+              ))}
+            </SelectField>
+            <SelectField label="Crew restriction" value={staffId} onChange={setStaffId}>
+              <option value="">Any crew</option>
+              {staff.map((member) => (
+                <option key={member.id} value={member.id}>
+                  {member.name}
+                </option>
+              ))}
+            </SelectField>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <InputField label="Start date" value={startDate} onChange={setStartDate} />
+              <InputField label="End date" value={endDate} onChange={setEndDate} />
+            </div>
+            <div>
+              <p className="mb-2 text-sm font-medium text-ink">Slot interval</p>
+              <div className="grid grid-cols-4 gap-2 rounded-[8px] bg-ink p-1">
+                {[15, 30, 45, 60].map((minutes) => (
+                  <button
+                    key={minutes}
+                    onClick={() => setSlotMinutes(minutes)}
+                    className={cn(
+                      "h-10 rounded-[8px] text-sm font-bold transition",
+                      slotMinutes === minutes ? "bg-mint text-ink" : "text-white/75 hover:bg-white/10 hover:text-white"
+                    )}
+                  >
+                    {minutes}m
+                  </button>
+                ))}
+              </div>
+            </div>
+            <InputField label="Buffer minutes" value={bufferMinutes} onChange={setBufferMinutes} />
+            <button
+              onClick={() => setIncludeUnavailable((value) => !value)}
+              className={cn(
+                "flex min-h-11 items-center justify-between rounded-[8px] border px-3 text-left text-sm font-semibold",
+                includeUnavailable ? "border-pine/20 bg-mint/60 text-ink" : "border-ink/10 bg-white text-steel"
+              )}
+            >
+              Include unavailable slots with reasons
+              <span className={cn("h-5 w-9 rounded-full p-0.5 transition", includeUnavailable ? "bg-pine" : "bg-ink/15")}>
+                <span className={cn("block h-4 w-4 rounded-full bg-white transition", includeUnavailable && "translate-x-4")} />
+              </span>
+            </button>
+            {dateError ? <p className="rounded-[8px] bg-coral/10 px-3 py-2 text-sm font-semibold text-coral">{dateError}</p> : null}
+            {!dateError && (!Number.isFinite(bufferNumber) || bufferNumber < 0 || bufferNumber > 240) ? (
+              <p className="rounded-[8px] bg-amber/15 px-3 py-2 text-sm font-semibold text-ink">Buffer must be between 0 and 240 minutes.</p>
+            ) : null}
+            {generate.error ? <ErrorText error={generate.error} /> : null}
+          </div>
+        </div>
+
+        <div className="rounded-[8px] border border-ink/5 bg-white p-4">
+          {result ? (
+            <div className="grid gap-3">
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pine">Generated availability</p>
+                  <h3 className="mt-1 text-2xl font-semibold text-ink">
+                    {result.summary.availableSlots} open of {result.summary.totalSlots}
+                  </h3>
+                </div>
+                <Status label={`${result.summary.days} DAYS`} />
+              </div>
+              <div className="grid gap-2">
+                {result.days.slice(0, 5).map((day) => (
+                  <div key={day.date} className="rounded-[8px] bg-mist p-3">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <p className="font-semibold text-ink">{shortDate(day.date)}</p>
+                      <p className="text-sm font-semibold text-pine">{day.slots.filter((slot) => slot.available).length} open</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {day.slots.slice(0, 8).map((slot) => (
+                        <span
+                          key={`${day.date}-${slot.startTime}-${slot.staffId ?? "any"}`}
+                          className={cn(
+                            "rounded-[8px] border px-2.5 py-1 text-xs font-bold",
+                            slot.available ? "border-pine/15 bg-mint/55 text-pine" : "border-ink/10 bg-white text-steel"
+                          )}
+                        >
+                          {slot.startTime}
+                        </span>
+                      ))}
+                      {day.slots.length > 8 ? <span className="px-2.5 py-1 text-xs font-bold text-steel">+{day.slots.length - 8}</span> : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="flex min-h-[320px] flex-col justify-center rounded-[8px] border border-dashed border-ink/10 bg-mist/60 p-5">
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-[8px] bg-pine text-white">
+                <Clock3 className="h-6 w-6" />
+              </div>
+              <h3 className="text-2xl font-semibold text-ink">Generate clean booking windows</h3>
+              <p className="mt-2 max-w-lg text-sm leading-6 text-steel">
+                Uses service duration, crew restriction, business hours, buffer time, and existing bookings. Past dates are blocked and bulk generation is capped at 31 days.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function validateTimeslotRange(startDate: string, endDate: string, today: string) {
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T00:00:00`);
+  const min = new Date(`${today}T00:00:00`);
+  if (!startDate || !endDate || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return "Enter valid start and end dates.";
+  if (start < min) return "Past dates cannot be generated.";
+  if (end < start) return "End date must be after start date.";
+  const days = Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
+  if (days > 31) return "Bulk generation is limited to 31 days.";
+  return null;
 }
 
 function StaffManager({ staff }: { staff: StaffMember[] }) {

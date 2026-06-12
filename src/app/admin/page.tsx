@@ -7,6 +7,8 @@ import {
   CheckCircle2,
   CreditCard,
   Download,
+  Eye,
+  EyeOff,
   KeyRound,
   LayoutDashboard,
   LifeBuoy,
@@ -42,9 +44,12 @@ import {
   PlatformRiskRow,
   PlatformSubscriptionPlan,
   PlatformSubscriptionPlanInput,
+  PlatformSupportRequest,
   PlatformUser,
   Readiness,
   PlatformSupportAccess,
+  PlatformSupportFaq,
+  PlatformSupportFaqInput,
   PlatformSupportNote,
   PlatformTenant,
   PlatformTenantCreateInput,
@@ -57,12 +62,14 @@ import {
 import { cn, money, shortDate } from "@/lib/utils";
 import { useAuth } from "@/store/auth";
 
-type AdminSection = "overview" | "tenants" | "plans" | "risk" | "search" | "users" | "actions" | "failures" | "audit";
+type AdminSection = "overview" | "tenants" | "plans" | "support" | "faqs" | "risk" | "search" | "users" | "actions" | "failures" | "audit";
 
 const adminNav: Array<{ id: AdminSection; label: string; icon: typeof ShieldCheck }> = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "tenants", label: "Tenants", icon: Building2 },
   { id: "plans", label: "Plans", icon: SlidersHorizontal },
+  { id: "support", label: "Support", icon: LifeBuoy },
+  { id: "faqs", label: "FAQs", icon: LifeBuoy },
   { id: "risk", label: "Risk", icon: AlertTriangle },
   { id: "search", label: "Search", icon: Search },
   { id: "users", label: "Users", icon: UsersRound },
@@ -130,6 +137,7 @@ function AdminLogin() {
   const setSession = useAuth((state) => state.setSession);
   const [email, setEmail] = useState("admin@crewflow.test");
   const [password, setPassword] = useState("Password123!");
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [error, setError] = useState("");
   const login = useMutation({
     mutationFn: () => api.login(email, password),
@@ -167,7 +175,22 @@ function AdminLogin() {
         </label>
         <label className="block">
           <span className="mb-2 block text-sm font-medium text-ink">Password</span>
-          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine" />
+          <div className="relative">
+            <input
+              type={passwordVisible ? "text" : "password"}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 pr-11 outline-none focus:border-pine"
+            />
+            <button
+              type="button"
+              aria-label={passwordVisible ? "Hide password" : "Show password"}
+              onClick={() => setPasswordVisible((visible) => !visible)}
+              className="absolute right-1.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-[8px] text-steel transition hover:bg-white hover:text-ink"
+            >
+              {passwordVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
         </label>
         {error ? <p className="mt-4 rounded-[8px] bg-coral/10 px-3 py-2 text-sm font-medium text-coral">{error}</p> : null}
         <button disabled={login.isPending} className="mt-6 flex h-11 w-full items-center justify-center gap-2 rounded-[8px] bg-pine px-4 font-semibold text-white disabled:opacity-50">
@@ -277,9 +300,11 @@ function AdminConsole() {
   const metrics = useQuery({ queryKey: ["platform-metrics"], queryFn: api.platformMetrics });
   const risk = useQuery({ queryKey: ["platform-risk"], queryFn: api.platformRisk });
   const supportSessions = useQuery({ queryKey: ["platform-support-sessions"], queryFn: api.platformSupportSessions });
+  const supportRequests = useQuery({ queryKey: ["platform-support-requests"], queryFn: api.platformSupportRequests });
   const exportHistory = useQuery({ queryKey: ["platform-exports"], queryFn: api.platformExports });
   const tenants = useQuery({ queryKey: ["platform-tenants"], queryFn: api.platformTenants });
   const plans = useQuery({ queryKey: ["platform-plans"], queryFn: api.platformPlans });
+  const faqs = useQuery({ queryKey: ["platform-faqs"], queryFn: api.platformFaqs });
   const users = useQuery({ queryKey: ["platform-users"], queryFn: api.platformUsers });
   const platformActions = useQuery({ queryKey: ["platform-actions"], queryFn: api.platformActions });
   const automationFailures = useQuery({ queryKey: ["platform-automation-failures"], queryFn: api.platformAutomationFailures });
@@ -438,6 +463,14 @@ function AdminConsole() {
 
           {section === "plans" ? (
             <PlanCatalog plans={plans.data} canManage={canManagePlatform} />
+          ) : null}
+
+          {section === "support" ? (
+            <SupportDesk requests={supportRequests.data} tenants={tenants.data} />
+          ) : null}
+
+          {section === "faqs" ? (
+            <FaqCatalog faqs={faqs.data} canManage={canManagePlatform} />
           ) : null}
 
           {section === "users" ? (
@@ -1414,6 +1447,289 @@ function PlanCatalog({
             Assign plans from a tenant detail page. The tenant inherits pricing, feature flags, and limits unless you keep overrides.
           </p>
         </div>
+      </Panel>
+    </div>
+  );
+}
+
+function FaqCatalog({ faqs, canManage }: { faqs?: PlatformSupportFaq[]; canManage: boolean }) {
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState<PlatformSupportFaq | null>(null);
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState("Technical");
+  const [question, setQuestion] = useState("How do I fix a mobile network error?");
+  const [answer, setAnswer] = useState("Make sure the backend is running, reachable from the phone, and using your computer IP instead of localhost.");
+  const [slug, setSlug] = useState("");
+  const [tags, setTags] = useState("mobile, network, expo");
+  const [sortOrder, setSortOrder] = useState("100");
+  const [published, setPublished] = useState(true);
+  const categories = Array.from(new Set((faqs ?? []).map((faq) => faq.category))).sort();
+  const filtered = (faqs ?? []).filter((faq) =>
+    [faq.category, faq.question, faq.answer, faq.slug, ...faq.tags]
+      .join(" ")
+      .toLowerCase()
+      .includes(query.trim().toLowerCase())
+  );
+
+  function reset(faq?: PlatformSupportFaq | null) {
+    setEditing(faq ?? null);
+    setCategory(faq?.category ?? "Technical");
+    setQuestion(faq?.question ?? "How do I fix a mobile network error?");
+    setAnswer(faq?.answer ?? "Make sure the backend is running, reachable from the phone, and using your computer IP instead of localhost.");
+    setSlug(faq?.slug ?? "");
+    setTags((faq?.tags ?? ["mobile", "network", "expo"]).join(", "));
+    setSortOrder(String(faq?.sortOrder ?? 100));
+    setPublished(faq?.published ?? true);
+  }
+
+  const saveFaq = useMutation({
+    mutationFn: () => {
+      const input: PlatformSupportFaqInput = {
+        slug: slug.trim() || undefined,
+        category: category.trim(),
+        question: question.trim(),
+        answer: answer.trim(),
+        tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean),
+        published,
+        sortOrder: Number(sortOrder) || 0
+      };
+      return editing ? api.updatePlatformFaq(editing.id, input) : api.createPlatformFaq(input);
+    },
+    onSuccess: (faq) => {
+      reset(faq);
+      void queryClient.invalidateQueries({ queryKey: ["platform-faqs"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-audit"] });
+    }
+  });
+
+  const publishedCount = faqs?.filter((faq) => faq.published).length ?? 0;
+
+  return (
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_440px]">
+      <Panel title="Support FAQ catalog" icon={LifeBuoy}>
+        <div className="mb-4 grid gap-3 md:grid-cols-3">
+          <CommandStat label="FAQs" value={faqs?.length ?? 0} />
+          <CommandStat label="Published" value={publishedCount} />
+          <CommandStat label="Categories" value={categories.length} />
+        </div>
+        <div className="mb-4 flex h-11 items-center gap-2 rounded-[8px] bg-mist px-3">
+          <Search className="h-4 w-4 text-steel" />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search questions, tags, categories..."
+            className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none"
+          />
+        </div>
+        <div className="grid gap-3">
+          {filtered.map((faq) => (
+            <button
+              key={faq.id}
+              onClick={() => reset(faq)}
+              className={cn(
+                "rounded-[8px] border p-4 text-left transition",
+                editing?.id === faq.id ? "border-pine bg-pine text-white shadow-soft" : "border-ink/5 bg-mist hover:bg-white"
+              )}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className={cn("font-semibold", editing?.id === faq.id ? "text-white" : "text-ink")}>{faq.question}</p>
+                  <p className={cn("mt-1 text-sm", editing?.id === faq.id ? "text-white/75" : "text-steel")}>{faq.category} · {faq.slug}</p>
+                </div>
+                <Status label={faq.published ? "PUBLISHED" : "DRAFT"} />
+              </div>
+              <p className={cn("mt-3 line-clamp-2 text-sm", editing?.id === faq.id ? "text-white/80" : "text-steel")}>{faq.answer}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {faq.tags.map((tag) => (
+                  <span key={tag} className={cn("rounded-full px-2 py-1 text-xs font-semibold", editing?.id === faq.id ? "bg-white/15 text-white" : "bg-white text-steel")}>{tag}</span>
+                ))}
+              </div>
+            </button>
+          ))}
+          {!filtered.length ? <Empty label="No matching FAQs" /> : null}
+        </div>
+      </Panel>
+
+      <Panel title={editing ? "Edit FAQ" : "Create FAQ"} icon={SlidersHorizontal}>
+        <div className="grid gap-3">
+          <div className="grid grid-cols-[1fr_120px] gap-3">
+            <AdminInput label="Category" value={category} onChange={setCategory} />
+            <AdminInput label="Sort" value={sortOrder} onChange={setSortOrder} inputMode="numeric" />
+          </div>
+          <AdminInput label="Slug" value={slug} onChange={setSlug} />
+          <AdminInput label="Question" value={question} onChange={setQuestion} />
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-steel">Answer</span>
+            <textarea
+              value={answer}
+              onChange={(event) => setAnswer(event.target.value)}
+              rows={7}
+              className="w-full rounded-[8px] border border-ink/10 bg-mist px-3 py-3 text-sm outline-none focus:border-pine"
+            />
+          </label>
+          <AdminInput label="Tags, comma separated" value={tags} onChange={setTags} />
+          <label className="flex items-center justify-between rounded-[8px] bg-mist px-3 py-3 text-sm font-semibold text-ink">
+            Published in mobile help center
+            <input type="checkbox" checked={published} onChange={(event) => setPublished(event.target.checked)} />
+          </label>
+          <div className="flex gap-2">
+            <button
+              onClick={() => saveFaq.mutate()}
+              disabled={!canManage || saveFaq.isPending || !question.trim() || !answer.trim() || !category.trim()}
+              className="h-10 flex-1 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {saveFaq.isPending ? "Saving..." : editing ? "Save FAQ" : "Create FAQ"}
+            </button>
+            <button onClick={() => reset(null)} className="h-10 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink">
+              New
+            </button>
+          </div>
+          {!canManage ? <p className="text-sm text-steel">Only platform admins can mutate FAQ content.</p> : null}
+          {saveFaq.error ? <p className="text-sm font-medium text-coral">{saveFaq.error instanceof Error ? saveFaq.error.message : "Unable to save FAQ"}</p> : null}
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function SupportDesk({ requests, tenants }: { requests?: PlatformSupportRequest[]; tenants?: PlatformTenant[] }) {
+  const queryClient = useQueryClient();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [status, setStatus] = useState("open");
+  const [tenantId, setTenantId] = useState("");
+  const [query, setQuery] = useState("");
+  const [reply, setReply] = useState("");
+  const selected = (requests ?? []).find((item) => item.id === selectedId) ?? (requests ?? [])[0] ?? null;
+  const visible = (requests ?? []).filter((item) => {
+    const closed = item.status === "RESOLVED" || item.status === "CLOSED";
+    const statusMatch = status === "all" || (status === "open" ? !closed : closed);
+    const tenantMatch = !tenantId || item.tenant?.id === tenantId;
+    const haystack = [
+      item.subject,
+      item.category,
+      item.priority,
+      item.status,
+      item.tenant?.businessName ?? "",
+      item.requester?.email ?? "",
+      item.messages[item.messages.length - 1]?.content ?? ""
+    ].join(" ").toLowerCase();
+    return statusMatch && tenantMatch && haystack.includes(query.trim().toLowerCase());
+  });
+  const replyMutation = useMutation({
+    mutationFn: () => selected ? api.replyPlatformSupportRequest(selected.id, reply.trim()) : Promise.reject(new Error("No support request selected")),
+    onSuccess: (updated) => {
+      setSelectedId(updated.id);
+      setReply("");
+      void queryClient.invalidateQueries({ queryKey: ["platform-support-requests"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-audit"] });
+    }
+  });
+  const updateStatus = useMutation({
+    mutationFn: ({ id, nextStatus }: { id: string; nextStatus: PlatformSupportRequest["status"] }) => api.updatePlatformSupportRequest(id, nextStatus),
+    onSuccess: (updated) => {
+      setSelectedId(updated.id);
+      void queryClient.invalidateQueries({ queryKey: ["platform-support-requests"] });
+      void queryClient.invalidateQueries({ queryKey: ["platform-audit"] });
+    }
+  });
+  const openCount = (requests ?? []).filter((item) => item.status !== "RESOLVED" && item.status !== "CLOSED").length;
+  const waitingCount = (requests ?? []).filter((item) => item.status === "WAITING_ON_SUPPORT").length;
+
+  return (
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+      <Panel title="Support queue" icon={LifeBuoy}>
+        <div className="mb-4 grid gap-3 md:grid-cols-3">
+          <CommandStat label="Open" value={openCount} />
+          <CommandStat label="Waiting" value={waitingCount} />
+          <CommandStat label="Total" value={requests?.length ?? 0} />
+        </div>
+        <div className="mb-4 grid gap-2 md:grid-cols-[1fr_150px_180px]">
+          <div className="flex h-10 items-center gap-2 rounded-[8px] bg-mist px-3">
+            <Search className="h-4 w-4 text-steel" />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search subject, tenant, requester..." className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none" />
+          </div>
+          <select value={status} onChange={(event) => setStatus(event.target.value)} className="h-10 rounded-[8px] border border-ink/10 bg-mist px-2 text-sm outline-none focus:border-pine">
+            <option value="open">Open</option>
+            <option value="closed">Resolved</option>
+            <option value="all">All</option>
+          </select>
+          <select value={tenantId} onChange={(event) => setTenantId(event.target.value)} className="h-10 rounded-[8px] border border-ink/10 bg-mist px-2 text-sm outline-none focus:border-pine">
+            <option value="">All tenants</option>
+            {(tenants ?? []).map((tenant) => <option key={tenant.id} value={tenant.id}>{tenant.businessName}</option>)}
+          </select>
+        </div>
+        <div className="grid gap-3">
+          {visible.map((item) => {
+            const active = selected?.id === item.id;
+            const latest = item.messages[item.messages.length - 1];
+            return (
+              <button
+                key={item.id}
+                onClick={() => setSelectedId(item.id)}
+                className={cn("rounded-[8px] border p-4 text-left transition", active ? "border-pine bg-pine text-white shadow-soft" : "border-ink/5 bg-mist hover:bg-white")}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className={cn("font-semibold", active ? "text-white" : "text-ink")}>{item.subject}</p>
+                    <p className={cn("mt-1 text-sm", active ? "text-white/75" : "text-steel")}>{item.tenant?.businessName ?? "Unknown tenant"} · {item.requester?.email ?? "No requester"}</p>
+                  </div>
+                  <Status label={item.status} />
+                </div>
+                <p className={cn("mt-3 line-clamp-2 text-sm", active ? "text-white/80" : "text-steel")}>{latest?.content ?? "No messages yet"}</p>
+              </button>
+            );
+          })}
+          {!visible.length ? <Empty label="No support requests match" /> : null}
+        </div>
+      </Panel>
+
+      <Panel title={selected ? selected.subject : "Request detail"} icon={LifeBuoy}>
+        {selected ? (
+          <div className="grid gap-4">
+            <div className="rounded-[8px] bg-mist p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold uppercase tracking-[0.14em] text-pine">{selected.category} · {selected.priority}</p>
+                  <h3 className="mt-1 text-xl font-semibold text-ink">{selected.subject}</h3>
+                  <p className="mt-1 text-sm text-steel">{selected.tenant?.businessName ?? "Unknown tenant"} · {selected.requester?.name ?? "Requester"} · {shortDate(selected.lastMessageAt)}</p>
+                </div>
+                <Status label={selected.status} />
+              </div>
+            </div>
+            <div className="grid max-h-[420px] gap-3 overflow-auto pr-1">
+              {selected.messages.map((message) => {
+                const support = message.role !== "USER";
+                return (
+                  <div key={message.id} className={cn("rounded-[8px] border p-3", support ? "ml-8 border-pine/20 bg-pine/10" : "mr-8 border-ink/5 bg-mist")}>
+                    <p className="text-sm leading-6 text-ink">{message.content}</p>
+                    <p className="mt-2 text-xs font-semibold uppercase tracking-[0.12em] text-steel">{message.author?.email ?? message.role} · {shortDate(message.createdAt)}</p>
+                  </div>
+                );
+              })}
+            </div>
+            <textarea
+              value={reply}
+              onChange={(event) => setReply(event.target.value)}
+              rows={5}
+              placeholder="Write a clear support reply..."
+              className="w-full rounded-[8px] border border-ink/10 bg-mist px-3 py-3 text-sm outline-none focus:border-pine"
+            />
+            <div className="grid gap-2 sm:grid-cols-3">
+              <button onClick={() => replyMutation.mutate()} disabled={!reply.trim() || replyMutation.isPending} className="h-10 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50">
+                {replyMutation.isPending ? "Sending..." : "Send reply"}
+              </button>
+              <button onClick={() => updateStatus.mutate({ id: selected.id, nextStatus: "RESOLVED" })} disabled={updateStatus.isPending} className="h-10 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink disabled:opacity-50">
+                Mark resolved
+              </button>
+              <button onClick={() => updateStatus.mutate({ id: selected.id, nextStatus: "OPEN" })} disabled={updateStatus.isPending} className="h-10 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink disabled:opacity-50">
+                Reopen
+              </button>
+            </div>
+            {(replyMutation.error || updateStatus.error) ? <ErrorText error={replyMutation.error ?? updateStatus.error} /> : null}
+          </div>
+        ) : (
+          <Empty label="Select a support request" />
+        )}
       </Panel>
     </div>
   );
@@ -2516,6 +2832,14 @@ function AuditList({ items, compact }: { items?: PlatformAuditLog[]; compact?: b
       ))}
       {!items?.length ? <Empty label="No audit events" /> : null}
     </div>
+  );
+}
+
+function ErrorText({ error }: { error: unknown }) {
+  return (
+    <p className="text-sm font-medium text-coral">
+      {error instanceof Error ? error.message : "Something went wrong"}
+    </p>
   );
 }
 

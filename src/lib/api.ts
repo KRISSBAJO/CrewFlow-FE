@@ -269,8 +269,12 @@ export const api = {
   onboarding: () => request<OnboardingProfile>("/tenant/onboarding"),
   activation: () => request<TenantActivationSummary>("/tenant/activation"),
   tenantBilling: () => request<TenantBillingSummary>("/tenant/billing"),
-  createTenantBillingCheckout: () =>
-    request<TenantBillingSession>("/tenant/billing/checkout", { method: "POST" }),
+  tenantPlans: () => request<PlatformSubscriptionPlan[]>("/tenant/plans"),
+  createTenantBillingCheckout: (planId?: string) =>
+    request<TenantBillingSession>("/tenant/billing/checkout", {
+      method: "POST",
+      body: JSON.stringify({ planId })
+    }),
   createTenantBillingPortal: () =>
     request<TenantBillingSession>("/tenant/billing/portal", { method: "POST" }),
   updateTenant: (input: UpdateTenantInput) =>
@@ -294,6 +298,11 @@ export const api = {
     request<FieldDispatchBoard>(date ? `/field/dispatch?date=${encodeURIComponent(date)}` : "/field/dispatch"),
   schedulingConflicts: (date?: string) =>
     request<SchedulingConflicts>(date ? `/scheduling/conflicts?date=${encodeURIComponent(date)}` : "/scheduling/conflicts"),
+  generateTimeslots: (input: GenerateTimeslotsInput) =>
+    request<TimeslotGenerationResult>("/scheduling/timeslots/generate", {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
   staffSuggestions: (serviceId: string, startTime: string) =>
     request<StaffSuggestion[]>(
       `/scheduling/staff-suggestions?serviceId=${encodeURIComponent(serviceId)}&startTime=${encodeURIComponent(startTime)}`
@@ -379,8 +388,30 @@ export const api = {
     }),
   platformRisk: () => request<PlatformRiskRow[]>("/platform/risk"),
   platformSupportSessions: () => request<PlatformSupportAccess[]>("/platform/support-sessions"),
+  platformSupportRequests: () => request<PlatformSupportRequest[]>("/platform/support-requests"),
+  replyPlatformSupportRequest: (id: string, message: string) =>
+    request<PlatformSupportRequest>(`/platform/support-requests/${id}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ message })
+    }),
+  updatePlatformSupportRequest: (id: string, status: PlatformSupportRequest["status"]) =>
+    request<PlatformSupportRequest>(`/platform/support-requests/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status })
+    }),
   platformTenants: () => request<PlatformTenant[]>("/platform/tenants"),
   platformPlans: () => request<PlatformSubscriptionPlan[]>("/platform/plans"),
+  platformFaqs: () => request<PlatformSupportFaq[]>("/platform/faqs"),
+  createPlatformFaq: (input: PlatformSupportFaqInput) =>
+    request<PlatformSupportFaq>("/platform/faqs", {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
+  updatePlatformFaq: (id: string, input: PlatformSupportFaqInput) =>
+    request<PlatformSupportFaq>(`/platform/faqs/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(input)
+    }),
   createPlatformPlan: (input: PlatformSubscriptionPlanInput) =>
     request<PlatformSubscriptionPlan>("/platform/plans", {
       method: "POST",
@@ -642,7 +673,9 @@ export type TenantProfile = {
 
 export type TenantBillingSummary = {
   tenantId: string;
+  subscriptionPlanId?: string | null;
   subscriptionPlan: string;
+  plan?: PlatformSubscriptionPlan | null;
   subscriptionStatus: "TRIALING" | "ACTIVE" | "PAST_DUE" | "CANCELED" | "UNPAID";
   monthlyPriceCents?: number | null;
   setupFeeCents?: number | null;
@@ -724,6 +757,16 @@ export type ServiceInput = {
   imageUrl?: string;
   durationMinutes: number;
   price: number;
+};
+
+export type GenerateTimeslotsInput = {
+  serviceId: string;
+  startDate: string;
+  endDate: string;
+  slotMinutes?: number;
+  bufferMinutes?: number;
+  staffId?: string;
+  includeUnavailable?: boolean;
 };
 
 export type StaffInput = {
@@ -900,6 +943,30 @@ export type AvailabilityResponse = {
   };
   slots: AvailabilitySlot[];
   recommended?: AvailabilitySlot | null;
+};
+
+export type TimeslotGenerationResult = {
+  startDate: string;
+  endDate: string;
+  summary: {
+    days: number;
+    totalSlots: number;
+    availableSlots: number;
+    unavailableSlots: number;
+  };
+  days: Array<{
+    date: string;
+    service: Pick<Service, "id" | "title" | "durationMinutes" | "priceCents">;
+    rules: {
+      slotMinutes: number;
+      bookingBufferMinutes: number;
+      maxAdvanceDays: number;
+      staffId?: string;
+      includeUnavailable?: boolean;
+    };
+    slots: AvailabilitySlot[];
+    recommended?: AvailabilitySlot | null;
+  }>;
 };
 
 export type SchedulingConflicts = {
@@ -1380,6 +1447,24 @@ export type PlatformSupportNote = {
   author?: { id: string; email: string; role: string } | null;
 };
 
+export type PlatformSupportFaq = {
+  id: string;
+  slug: string;
+  category: string;
+  question: string;
+  answer: string;
+  tags: string[];
+  published: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+  author?: { id: string; email: string; role: string } | null;
+};
+
+export type PlatformSupportFaqInput = Partial<
+  Pick<PlatformSupportFaq, "slug" | "category" | "question" | "answer" | "tags" | "published" | "sortOrder">
+>;
+
 export type PlatformSupportAccess = {
   id: string;
   reason: string;
@@ -1390,6 +1475,27 @@ export type PlatformSupportAccess = {
   createdAt: string;
   tenant?: PlatformTenant | null;
   admin?: { id: string; email: string; role: string } | null;
+};
+
+export type PlatformSupportRequest = {
+  id: string;
+  subject: string;
+  category: string;
+  priority: "LOW" | "NORMAL" | "HIGH" | "URGENT" | string;
+  status: "OPEN" | "WAITING_ON_SUPPORT" | "WAITING_ON_CUSTOMER" | "RESOLVED" | "CLOSED" | string;
+  createdAt: string;
+  updatedAt: string;
+  lastMessageAt: string;
+  resolvedAt?: string | null;
+  tenant?: Pick<PlatformTenant, "id" | "businessName" | "slug" | "status" | "subscriptionStatus" | "subscriptionPlan"> | null;
+  requester?: { id: string; name: string; email: string; role: string } | null;
+  messages: Array<{
+    id: string;
+    role: string;
+    content: string;
+    createdAt: string;
+    author?: { id: string; name: string; email: string; role: string } | null;
+  }>;
 };
 
 export type PlatformBillingEventType =
