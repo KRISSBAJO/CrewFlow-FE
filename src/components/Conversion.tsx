@@ -3,7 +3,7 @@
 import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Building2, CheckCircle2, Clock3, MessageSquareText, Phone, Sparkles, UsersRound } from "lucide-react";
+import { ArrowRight, Building2, CheckCircle2, Clock3, MessageSquareText, Phone, Sparkles } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/store/auth";
 

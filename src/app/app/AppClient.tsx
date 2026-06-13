@@ -1,0 +1,6480 @@
+"use client";
+
+import Image from "next/image";
+import { useRouter } from "next/navigation";
+import * as XLSX from "xlsx";
+import {
+  AlertTriangle,
+  Banknote,
+  Bot,
+  Building2,
+  CalendarDays,
+  Camera,
+  CheckCircle2,
+  ClipboardCheck,
+  Clock3,
+  ContactRound,
+  Copy,
+  CreditCard,
+  DollarSign,
+  Eye,
+  EyeOff,
+  ExternalLink,
+  FileText,
+  Headphones,
+  HeartPulse,
+  Inbox,
+  Loader2,
+  LogOut,
+  MessageSquareText,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Play,
+  Plus,
+  Repeat2,
+  RefreshCw,
+  Route,
+  Save,
+  Send,
+  Settings2,
+  ShieldCheck,
+  Sparkles,
+  Target,
+  TrendingUp,
+  UserCheck,
+  UsersRound,
+  Wrench,
+  X
+} from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import {
+  api,
+  AutomationRun,
+  Booking,
+  BookingStatus,
+  BookingUpdateType,
+  CollectionActionInput,
+  Conversation,
+  Customer,
+  CustomerInput,
+  DashboardSummary,
+  FieldDispatchJob,
+  Invoice,
+  InvoiceStatus,
+  Lead,
+  LeadAnalytics,
+  LeadSource,
+  LeadStatus,
+  OnboardingProfile,
+  OperationalAction,
+  Payment,
+  PlatformSubscriptionPlan,
+  RetentionCustomer,
+  RetentionSummary,
+  Service,
+  StaffMember,
+  TenantActivationSummary,
+  TenantBillingSummary,
+  TenantProfile,
+  TimeslotGenerationResult,
+  WebhookEvent,
+  WhatsappOnboarding,
+  WhatsappStatus
+} from "@/lib/api";
+import { cn, initials, money, shortDate } from "@/lib/utils";
+import { useAuth } from "@/store/auth";
+import logoMark from "@/public/images/logo.png";
+
+const nav = [
+  { id: "overview", label: "Overview", icon: HeartPulse },
+  { id: "inbox", label: "Inbox", icon: Inbox },
+  { id: "leads", label: "Leads", icon: Target },
+  { id: "retention", label: "Retention", icon: Repeat2 },
+  { id: "customers", label: "Customers", icon: ContactRound },
+  { id: "bookings", label: "Bookings", icon: CalendarDays },
+  { id: "field", label: "Field", icon: Route },
+  { id: "money", label: "Money", icon: CreditCard },
+  { id: "actions", label: "Actions", icon: ClipboardCheck },
+  { id: "settings", label: "Settings", icon: Settings2 }
+] as const;
+
+type View = (typeof nav)[number]["id"];
+type SettingsSection = "overview" | "brand" | "services" | "team" | "billing" | "whatsapp";
+const leadStatuses: Array<{ value: LeadStatus; label: string }> = [
+  { value: "NEW", label: "New" },
+  { value: "CONTACTED", label: "Contacted" },
+  { value: "QUALIFIED", label: "Qualified" },
+  { value: "BOOKING_READY", label: "Booking ready" },
+  { value: "WON", label: "Won" },
+  { value: "LOST", label: "Lost" }
+];
+const leadSources: LeadSource[] = [
+  "AI_RECEPTIONIST",
+  "WEB_CHAT",
+  "WHATSAPP",
+  "SMS",
+  "EMAIL",
+  "PHONE",
+  "REFERRAL",
+  "MANUAL"
+];
+const bookingStatuses: Array<{ value: BookingStatus; label: string }> = [
+  { value: "REQUESTED", label: "Requested" },
+  { value: "CONFIRMED", label: "Confirmed" },
+  { value: "IN_PROGRESS", label: "On the way" },
+  { value: "COMPLETED", label: "Completed" },
+  { value: "NO_SHOW", label: "No-show" },
+  { value: "CANCELLED", label: "Cancelled" }
+];
+const invoiceStatuses: Array<{ value: InvoiceStatus; label: string }> = [
+  { value: "DRAFT", label: "Draft" },
+  { value: "SENT", label: "Sent" },
+  { value: "OVERDUE", label: "Overdue" },
+  { value: "PAID", label: "Paid" },
+  { value: "VOID", label: "Void" }
+];
+type DrawerState =
+  | { type: "booking"; item: Booking }
+  | { type: "field-job"; item: Booking }
+  | { type: "lead"; item: Lead }
+  | { type: "conversation"; item: Conversation }
+  | { type: "customer"; item: Customer }
+  | { type: "invoice"; item: Invoice }
+  | { type: "action"; item: OperationalAction }
+  | { type: "new-booking" }
+  | null;
+
+export default function Home() {
+  const user = useAuth((state) => state.user);
+  const checked = useAuth((state) => state.checked);
+  const hydrate = useAuth((state) => state.hydrate);
+  useEffect(() => {
+    void hydrate();
+  }, [hydrate]);
+  if (!checked) return <AuthLoading label="Checking session" />;
+  if (!user) return <Login />;
+  if (user?.role === "PLATFORM_ADMIN" || user?.role === "PLATFORM_SUPPORT") return <AdminRedirect />;
+  return <Console />;
+}
+
+function AuthLoading({ label }: { label: string }) {
+  return (
+    <main className="flex min-h-screen items-center justify-center px-5">
+      <div className="rounded-[8px] border border-white/80 bg-white/90 p-6 text-center shadow-soft">
+        <Loader2 className="mx-auto h-6 w-6 animate-spin text-pine" />
+        <p className="mt-3 font-semibold text-ink">{label}</p>
+      </div>
+    </main>
+  );
+}
+
+function AdminRedirect() {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace("/admin");
+  }, [router]);
+
+  return (
+    <main className="flex min-h-screen items-center justify-center px-5">
+      <div className="rounded-[8px] border border-white/80 bg-white/90 p-6 text-center shadow-soft">
+        <Loader2 className="mx-auto h-6 w-6 animate-spin text-pine" />
+        <p className="mt-3 font-semibold text-ink">Opening platform admin</p>
+        <p className="mt-1 text-sm text-steel">Admin accounts use the platform control center.</p>
+      </div>
+    </main>
+  );
+}
+
+function Login() {
+  const setSession = useAuth((state) => state.setSession);
+  const [email, setEmail] = useState("owner@sparkle.test");
+  const [password, setPassword] = useState("Password123!");
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const [error, setError] = useState("");
+
+  const login = useMutation({
+    mutationFn: () => api.login(email, password),
+    onSuccess: (data) => setSession(data.user),
+    onError: (err) => setError(err instanceof Error ? err.message : "Login failed")
+  });
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    login.mutate();
+  }
+
+  return (
+    <main className="min-h-screen px-5 py-6 md:px-8">
+      <section className="mx-auto grid min-h-[calc(100vh-48px)] max-w-6xl items-center gap-6 md:grid-cols-[1.1fr_0.9fr]">
+        <div className="space-y-8">
+          <div className="flex items-center gap-3">
+            <Logo />
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.22em] text-pine">
+                CrewFlow
+              </p>
+              <p className="text-sm text-steel">Operations command center</p>
+            </div>
+          </div>
+          <div className="max-w-2xl">
+            <h1 className="text-5xl font-semibold leading-[1.02] text-ink md:text-7xl">
+              Run today before it runs you.
+            </h1>
+            <p className="mt-5 max-w-xl text-lg leading-8 text-steel">
+              Bookings, inbox, field work, invoices, and revenue-risk actions in one focused console.
+            </p>
+          </div>
+          <div className="grid max-w-3xl gap-3 sm:grid-cols-3">
+            <Signal icon={Headphones} label="Missed leads" value="Inbox" />
+            <Signal icon={Route} label="Crew status" value="Live jobs" />
+            <Signal icon={Banknote} label="Cash leaks" value="Actions" />
+          </div>
+        </div>
+
+        <form
+          onSubmit={submit}
+          className="rounded-[8px] border border-white/80 bg-white/90 p-5 shadow-soft backdrop-blur md:p-6"
+        >
+          <div className="mb-6 flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-semibold text-ink">Sign in</h2>
+              <p className="mt-1 text-sm text-steel">Sparkle Home Services</p>
+            </div>
+            <ShieldCheck className="h-6 w-6 text-pine" />
+          </div>
+          <label className="mb-4 block">
+            <span className="mb-2 block text-sm font-medium text-ink">Email</span>
+            <input
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              className="h-12 w-full rounded-[8px] border border-ink/10 bg-mist px-4 outline-none transition focus:border-pine"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-ink">Password</span>
+            <div className="relative">
+              <input
+                type={passwordVisible ? "text" : "password"}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                className="h-12 w-full rounded-[8px] border border-ink/10 bg-mist px-4 pr-12 outline-none transition focus:border-pine"
+              />
+              <button
+                type="button"
+                aria-label={passwordVisible ? "Hide password" : "Show password"}
+                onClick={() => setPasswordVisible((visible) => !visible)}
+                className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-[8px] text-steel transition hover:bg-white hover:text-ink"
+              >
+                {passwordVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </label>
+          {error ? (
+            <p className="mt-4 rounded-[8px] bg-coral/10 px-3 py-2 text-sm text-coral">
+              {error}
+            </p>
+          ) : null}
+          <button
+            disabled={login.isPending}
+            className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-[8px] bg-pine px-4 font-semibold text-white shadow-soft transition hover:bg-ink disabled:opacity-60"
+          >
+            {login.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            Sign in
+          </button>
+        </form>
+      </section>
+    </main>
+  );
+}
+
+function Console() {
+  const [view, setView] = useState<View>("overview");
+  const [drawer, setDrawer] = useState<DrawerState>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const logout = useAuth((state) => state.logout);
+  const user = useAuth((state) => state.user);
+  const queryClient = useQueryClient();
+
+  const dashboard = useQuery({ queryKey: ["dashboard"], queryFn: api.dashboard });
+  const inbox = useQuery({ queryKey: ["inbox"], queryFn: api.inbox });
+  const leads = useQuery({ queryKey: ["leads"], queryFn: api.leads });
+  const leadAnalytics = useQuery({ queryKey: ["lead-analytics"], queryFn: api.leadAnalytics });
+  const retention = useQuery({ queryKey: ["retention"], queryFn: api.retention });
+  const actions = useQuery({ queryKey: ["actions"], queryFn: api.actions });
+  const bookings = useQuery({ queryKey: ["bookings"], queryFn: api.bookings });
+  const field = useQuery({ queryKey: ["field"], queryFn: api.fieldJobs });
+  const invoices = useQuery({ queryKey: ["invoices"], queryFn: api.invoices });
+  const payments = useQuery({ queryKey: ["payments"], queryFn: api.payments });
+  const health = useQuery({ queryKey: ["health"], queryFn: api.health });
+  const tenant = useQuery({ queryKey: ["tenant"], queryFn: api.tenant });
+  const activation = useQuery({ queryKey: ["activation"], queryFn: api.activation });
+  const tenantBilling = useQuery({ queryKey: ["tenant-billing"], queryFn: api.tenantBilling });
+  const onboarding = useQuery({ queryKey: ["onboarding"], queryFn: api.onboarding });
+  const customers = useQuery({ queryKey: ["customers"], queryFn: () => api.customers() });
+  const services = useQuery({ queryKey: ["services"], queryFn: api.services });
+  const staff = useQuery({ queryKey: ["staff"], queryFn: api.staff });
+
+  const refreshAll = () => {
+    void queryClient.invalidateQueries();
+  };
+
+  return (
+    <main className="min-h-screen overflow-x-hidden p-3 md:p-5">
+      <div className="mx-auto flex w-full max-w-[1500px] gap-4">
+        <aside
+          className={cn(
+            "hidden shrink-0 rounded-[8px] border border-white/80 bg-white/90 shadow-soft backdrop-blur transition-all duration-300 lg:block",
+            sidebarCollapsed ? "w-[76px] p-3" : "w-64 p-4"
+          )}
+        >
+          <div
+            className={cn(
+              "mb-8 flex items-center",
+              sidebarCollapsed ? "flex-col gap-3" : "justify-between gap-3"
+            )}
+          >
+            <div className={cn("flex min-w-0 items-center gap-3", sidebarCollapsed && "justify-center")}>
+              <Logo />
+              <div className={cn("min-w-0 transition-opacity", sidebarCollapsed && "sr-only")}>
+                <p className="truncate font-semibold text-ink">CrewFlow</p>
+                <p className="truncate text-xs text-steel">Operations OS</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setSidebarCollapsed((value) => !value)}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-mist text-ink transition hover:bg-pine hover:text-white"
+              title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+            </button>
+          </div>
+          <nav className="space-y-1">
+            {nav.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => setView(item.id)}
+                title={sidebarCollapsed ? item.label : undefined}
+                className={cn(
+                  "flex h-11 w-full items-center rounded-[8px] text-sm font-medium transition",
+                  sidebarCollapsed ? "justify-center px-0" : "gap-3 px-3 text-left",
+                  view === item.id
+                    ? "bg-pine text-white"
+                    : "text-steel hover:bg-mist hover:text-ink"
+                )}
+              >
+                <item.icon className="h-4 w-4 shrink-0" />
+                <span className={cn("truncate", sidebarCollapsed && "sr-only")}>{item.label}</span>
+              </button>
+            ))}
+          </nav>
+          <div
+            className={cn(
+              "mt-8 rounded-[8px] bg-mist",
+              sidebarCollapsed ? "flex h-12 items-center justify-center p-0" : "p-3"
+            )}
+            title={`API: ${health.data?.database ?? "checking"}`}
+          >
+            <p className={cn("text-xs uppercase tracking-[0.18em] text-steel", sidebarCollapsed && "sr-only")}>API</p>
+            <div className={cn("flex items-center gap-2", !sidebarCollapsed && "mt-2")}>
+              <span
+                className={cn(
+                  "h-2.5 w-2.5 rounded-full",
+                  health.data?.status === "ok" ? "bg-mint" : "bg-amber"
+                )}
+              />
+              <span className={cn("text-sm font-medium text-ink", sidebarCollapsed && "sr-only")}>
+                {health.data?.database ?? "checking"}
+              </span>
+            </div>
+          </div>
+        </aside>
+
+        <section className="min-w-0 flex-1 overflow-x-hidden">
+          <header className="mb-4 rounded-[8px] border border-white/80 bg-white/90 p-4 shadow-soft backdrop-blur">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-sm font-medium text-steel">
+                  {tenant.data?.businessName ?? "Sparkle Home Services"}
+                </p>
+                <h1 className="text-2xl font-semibold text-ink md:text-3xl">
+                  {titleFor(view)}
+                </h1>
+              </div>
+              <div className="flex items-center gap-2 overflow-x-auto">
+                <button
+                  onClick={refreshAll}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] bg-mist text-ink transition hover:bg-pine hover:text-white"
+                  title="Refresh"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </button>
+                <div className="flex shrink-0 items-center gap-2 rounded-[8px] bg-mist py-1 pl-1 pr-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-[8px] bg-pine text-xs font-bold text-white">
+                    {initials(user?.email)}
+                  </div>
+                  <span className="text-sm font-medium text-ink">{user?.role}</span>
+                </div>
+                <button
+                  onClick={logout}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] bg-ink text-white transition hover:bg-coral"
+                  title="Logout"
+                >
+                  <LogOut className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            <div className="mt-4 flex gap-2 overflow-x-auto lg:hidden">
+              {nav.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => setView(item.id)}
+                  className={cn(
+                    "flex h-10 shrink-0 items-center gap-2 rounded-[8px] px-3 text-sm font-medium",
+                    view === item.id ? "bg-pine text-white" : "bg-mist text-steel"
+                  )}
+                >
+                  <item.icon className="h-4 w-4" />
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </header>
+
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={view}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.18 }}
+            >
+              {view === "overview" ? (
+                <Overview
+                  data={dashboard.data}
+                  actions={actions.data}
+                  customers={customers.data}
+                  services={services.data}
+                  staff={staff.data}
+                  onboarding={onboarding.data}
+                  activation={activation.data}
+                  tenant={tenant.data}
+                  loading={dashboard.isLoading}
+                  onOpen={setDrawer}
+                  onView={setView}
+                />
+              ) : null}
+              {view === "inbox" ? <InboxView items={inbox.data} onOpen={setDrawer} /> : null}
+              {view === "leads" ? (
+                <LeadsView
+                  items={leads.data}
+                  analytics={leadAnalytics.data}
+                  customers={customers.data}
+                  staff={staff.data}
+                  onOpen={setDrawer}
+                />
+              ) : null}
+              {view === "retention" ? (
+                <RetentionView data={retention.data} onOpen={setDrawer} />
+              ) : null}
+              {view === "customers" ? <CustomersView items={customers.data} onOpen={setDrawer} /> : null}
+              {view === "bookings" ? <BookingsView items={bookings.data} onOpen={setDrawer} /> : null}
+              {view === "field" ? <FieldView items={field.data} onOpen={setDrawer} /> : null}
+              {view === "money" ? <MoneyView invoices={invoices.data} payments={payments.data} onOpen={setDrawer} /> : null}
+              {view === "actions" ? <ActionsView items={actions.data} onOpen={setDrawer} /> : null}
+              {view === "settings" ? (
+                <SettingsView
+                  tenant={tenant.data}
+                  billing={tenantBilling.data}
+                  onboarding={onboarding.data}
+                  services={services.data}
+                  staff={staff.data}
+                />
+              ) : null}
+            </motion.div>
+          </AnimatePresence>
+        </section>
+      </div>
+      <DetailDrawer state={drawer} onClose={() => setDrawer(null)} />
+    </main>
+  );
+}
+
+function Overview({
+  data,
+  actions,
+  customers,
+  services,
+  staff,
+  onboarding,
+  activation,
+  tenant,
+  loading,
+  onOpen,
+  onView
+}: {
+  data?: DashboardSummary;
+  actions?: OperationalAction[];
+  customers?: unknown[];
+  services?: unknown[];
+  staff?: unknown[];
+  onboarding?: OnboardingProfile;
+  activation?: TenantActivationSummary;
+  tenant?: TenantProfile;
+  loading: boolean;
+  onOpen: (state: DrawerState) => void;
+  onView: (view: View) => void;
+}) {
+  const queryClient = useQueryClient();
+  const weeklyDigest = useQuery({ queryKey: ["weekly-digest"], queryFn: api.weeklyDigest });
+  const sendDigest = useMutation({
+    mutationFn: api.sendWeeklyDigest,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["weekly-digest"] });
+      void queryClient.invalidateQueries({ queryKey: ["messages"] });
+    }
+  });
+
+  if (loading) return <LoadingPanel />;
+  return (
+    <div className="grid min-w-0 gap-4">
+      <SetupChecklist
+        customers={customers?.length ?? 0}
+        services={services?.length ?? 0}
+        staff={staff?.length ?? 0}
+        bookings={data?.today.appointments.length ?? 0}
+        onboarding={onboarding}
+        activation={activation}
+        tenant={tenant}
+        onOpen={onOpen}
+        onView={onView}
+      />
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Metric icon={CalendarDays} label="Today" value={data?.today.appointments.length ?? 0} tone="pine" />
+        <Metric icon={Banknote} label="Paid revenue" value={money(data?.revenue.paidTotalCents)} tone="mint" />
+        <Metric icon={AlertTriangle} label="At risk" value={money(data?.revenue.atRiskTotalCents)} tone="coral" />
+        <Metric icon={UsersRound} label="Active crew" value={data?.activeStaff ?? 0} tone="amber" />
+      </div>
+
+      <RevenuePipeline data={data} actions={actions} />
+
+      <Panel
+        title="Owner weekly digest"
+        icon={FileText}
+        action={
+          <button
+            onClick={() => sendDigest.mutate()}
+            disabled={sendDigest.isPending || weeklyDigest.isLoading}
+            className="flex h-9 items-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {sendDigest.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            Send digest
+          </button>
+        }
+      >
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,0.85fr)_minmax(360px,1.15fr)]">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-1">
+            <MiniStat label="Collected this week" value={money(weeklyDigest.data?.metrics.collectedCents)} />
+            <MiniStat label="Open invoices" value={money(weeklyDigest.data?.metrics.openInvoiceCents)} />
+            <MiniStat label="Booking-ready lead value" value={money(weeklyDigest.data?.metrics.bookingReadyLeadValueCents)} />
+            <MiniStat label="Owner actions" value={weeklyDigest.data?.recommendedActions.length ?? 0} />
+          </div>
+          <div className="rounded-[8px] bg-mist p-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="font-semibold text-ink">{weeklyDigest.data?.businessName ?? "Weekly digest"}</p>
+                <p className="text-sm text-steel">{weeklyDigest.data?.recipient ?? "Owner recipient"}</p>
+              </div>
+              {sendDigest.data ? <Status label="sent" /> : null}
+            </div>
+            <pre className="max-h-[300px] overflow-auto whitespace-pre-wrap rounded-[8px] bg-white p-4 text-sm leading-6 text-ink">
+              {weeklyDigest.data?.text ?? "Preparing owner digest..."}
+            </pre>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {(weeklyDigest.data?.topRisks ?? []).slice(0, 4).map((risk) => (
+            <div key={risk.title} className="flex items-center justify-between rounded-[8px] bg-mist p-3">
+              <div>
+                <p className="font-semibold text-ink">{risk.title}</p>
+                <p className="text-sm text-steel">
+                  {risk.amountCents ? money(risk.amountCents) : risk.count ? `${risk.count} items` : "Clear"}
+                </p>
+              </div>
+              <Severity severity={risk.severity} />
+            </div>
+          ))}
+        </div>
+        {weeklyDigest.error ? <ErrorText error={weeklyDigest.error} /> : null}
+        {sendDigest.error ? <ErrorText error={sendDigest.error} /> : null}
+      </Panel>
+
+      <div className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
+        <Panel title="Revenue-risk alerts" icon={AlertTriangle}>
+          <div className="grid gap-3">
+            {data?.operations.alerts.map((alert) => (
+              <div key={alert.key} className="flex items-center justify-between rounded-[8px] bg-mist p-3">
+                <div>
+                  <p className="font-medium text-ink">{alert.title}</p>
+                  <p className="text-sm text-steel">{alert.value ?? (alert.amountCents ? money(alert.amountCents) : "Clear")}</p>
+                </div>
+                <Severity severity={alert.severity} />
+              </div>
+            ))}
+          </div>
+        </Panel>
+        <Panel title="Manager queue" icon={ClipboardCheck}>
+          <ActionList items={actions?.slice(0, 5)} onOpen={onOpen} />
+        </Panel>
+      </div>
+
+      <Panel title="Today’s appointments" icon={Clock3}>
+        <BookingRows items={data?.today.appointments} onOpen={onOpen} />
+      </Panel>
+    </div>
+  );
+}
+
+function InboxView({ items, onOpen }: { items?: Conversation[]; onOpen: (state: DrawerState) => void }) {
+  const [filter, setFilter] = useState("active");
+  const [search, setSearch] = useState("");
+  const source = useMemo(() => items ?? [], [items]);
+  const [now] = useState(() => Date.now());
+  const activeConversations = source.filter((item) => !["RESOLVED", "CLOSED"].includes(item.status));
+  const revenueConversations = source.filter((item) =>
+    item.bookingIntents?.some((intent) => intent.status !== "BOOKED") || item.leads?.some((lead) => lead.status !== "WON" && lead.status !== "LOST")
+  );
+  const waitingConversations = source.filter((item) => item.status === "WAITING_ON_CUSTOMER");
+  const staleConversations = activeConversations.filter((item) => now - new Date(item.lastMessageAt).getTime() > 24 * 60 * 60_000);
+  const filtered = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (filter === "active") {
+      return source.filter((item) => !["RESOLVED", "CLOSED"].includes(item.status) && conversationMatches(item, query));
+    }
+    if (filter === "intent") {
+      return source.filter((item) => item.bookingIntents?.some((intent) => intent.status !== "BOOKED") && conversationMatches(item, query));
+    }
+    if (filter === "stale") {
+      return staleConversations.filter((item) => conversationMatches(item, query));
+    }
+    return source.filter((item) => item.status === filter && conversationMatches(item, query));
+  }, [filter, search, source, staleConversations]);
+
+  return (
+    <div className="grid min-w-0 gap-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Metric icon={Inbox} label="Active conversations" value={activeConversations.length} tone="pine" />
+        <Metric icon={Target} label="Revenue intent" value={revenueConversations.length} tone="mint" />
+        <Metric icon={Clock3} label="Waiting customer" value={waitingConversations.length} tone="amber" />
+        <Metric icon={AlertTriangle} label="Stale replies" value={staleConversations.length} tone="coral" />
+      </div>
+
+      <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <Panel
+          title="Customer inbox"
+          icon={MessageSquareText}
+          action={
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search customer, phone, message..."
+              className="h-10 w-full rounded-[8px] border border-ink/10 bg-mist px-3 text-sm outline-none focus:border-pine sm:w-80"
+            />
+          }
+        >
+          <div className="mb-4 grid gap-2 sm:grid-cols-3 xl:grid-cols-6">
+            {[
+              ["active", "Active"],
+              ["intent", "Revenue intent"],
+              ["BOOKING_READY", "Booking ready"],
+              ["WAITING_ON_CUSTOMER", "Waiting"],
+              ["stale", "Stale"],
+              ["RESOLVED", "Resolved"]
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                onClick={() => setFilter(value)}
+                className={cn(
+                  "h-10 shrink-0 rounded-[8px] px-3 text-sm font-semibold",
+                  filter === value ? "bg-pine text-white" : "bg-mist text-steel"
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="grid min-w-0 gap-3">
+            {filtered.map((item) => (
+              <ConversationRow
+                key={item.id}
+                item={item}
+                onClick={() => onOpen({ type: "conversation", item })}
+              />
+            ))}
+            <Empty show={!filtered.length} label="No conversations found" />
+          </div>
+        </Panel>
+
+        <aside className="grid content-start gap-4">
+          <ReceptionistSimulator onOpen={onOpen} />
+          <div className="rounded-[8px] bg-pine p-4 text-white">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-mint">Operator rhythm</p>
+            <div className="mt-4 grid gap-2">
+              <InboxSignal label="Reply stale messages" value={staleConversations.length} />
+              <InboxSignal label="Convert revenue chats" value={revenueConversations.length} />
+              <InboxSignal label="Resolve waiting threads" value={waitingConversations.length} />
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+function ConversationRow({ item, onClick }: { item: Conversation; onClick: () => void }) {
+  const [now] = useState(() => Date.now());
+  const isStale = !["RESOLVED", "CLOSED"].includes(item.status) && now - new Date(item.lastMessageAt).getTime() > 24 * 60 * 60_000;
+  const hasRevenueIntent = item.bookingIntents?.some((intent) => intent.status !== "BOOKED") || item.leads?.some((lead) => lead.status !== "WON" && lead.status !== "LOST");
+  return (
+    <button
+      onClick={onClick}
+      className="grid min-h-[72px] min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 rounded-[8px] border border-ink/5 bg-mist/80 p-3 text-left transition hover:border-pine/30 hover:bg-white lg:grid-cols-[auto_minmax(0,1fr)_auto]"
+    >
+      <Avatar name={item.customer?.name} />
+      <div className="min-w-0">
+        <div className="flex min-w-0 items-center gap-2">
+          <p className="truncate font-semibold text-ink">{item.customer?.name ?? "New inquiry"}</p>
+          <span className="hidden shrink-0 text-xs font-medium text-steel sm:inline">
+            {shortDate(item.lastMessageAt)}
+          </span>
+        </div>
+        <p className="mt-1 truncate text-sm text-steel">
+          {item.messages?.[0]?.content ?? item.channel}
+        </p>
+        <div className="mt-2 flex flex-wrap gap-2 lg:hidden">
+          {hasRevenueIntent ? <Status label="REVENUE" /> : null}
+          {isStale ? <Status label="STALE" /> : null}
+          <Status label={item.status} />
+        </div>
+      </div>
+      <div className="hidden shrink-0 flex-wrap justify-end gap-2 lg:flex">
+        {hasRevenueIntent ? <Status label="REVENUE" /> : null}
+        {isStale ? <Status label="STALE" /> : null}
+        {item.bookingIntents?.[0] ? <Status label={item.bookingIntents[0].status} /> : null}
+        <Status label={item.status} />
+      </div>
+    </button>
+  );
+}
+
+function conversationMatches(item: Conversation, query: string) {
+  if (!query) return true;
+  return [
+    item.customer?.name ?? "",
+    item.customer?.phone ?? "",
+    item.channel,
+    item.status,
+    item.messages?.[0]?.content ?? "",
+    item.bookingIntents?.map((intent) => `${intent.status} ${intent.service?.title ?? ""}`).join(" ") ?? "",
+    item.leads?.map((lead) => `${lead.title} ${lead.status}`).join(" ") ?? ""
+  ]
+    .join(" ")
+    .toLowerCase()
+    .includes(query);
+}
+
+function InboxSignal({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex items-center justify-between rounded-[8px] bg-white/10 px-3 py-2">
+      <p className="text-sm font-semibold text-white/85">{label}</p>
+      <span className="rounded-[8px] bg-mint px-2.5 py-1 text-sm font-bold text-ink">{value}</span>
+    </div>
+  );
+}
+
+function LeadsView({
+  items,
+  analytics,
+  customers,
+  staff,
+  onOpen
+}: {
+  items?: Lead[];
+  analytics?: LeadAnalytics;
+  customers?: Customer[];
+  staff?: StaffMember[];
+  onOpen: (state: DrawerState) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [query, setQuery] = useState("");
+  const [leadModalOpen, setLeadModalOpen] = useState(false);
+  const [leadTab, setLeadTab] = useState<"board" | "followups" | "analytics" | "guide">("board");
+  const [statusFilter, setStatusFilter] = useState<LeadStatus | "ALL">("ALL");
+  const [sourceFilter, setSourceFilter] = useState<LeadSource | "ALL">("ALL");
+  const [title, setTitle] = useState("");
+  const [customerId, setCustomerId] = useState("");
+  const [assignedToId, setAssignedToId] = useState("");
+  const [source, setSource] = useState<LeadSource>("MANUAL");
+  const [estimatedValue, setEstimatedValue] = useState("299");
+  const [followUpAt, setFollowUpAt] = useState("");
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return (items ?? []).filter((lead) => {
+      const matchesSearch =
+        !needle ||
+        [
+          lead.title,
+          lead.status,
+          lead.source,
+          lead.customer?.name ?? "",
+          lead.customer?.phone ?? "",
+          lead.assignedTo?.name ?? "",
+          lead.notes ?? ""
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(needle);
+      const matchesStatus = statusFilter === "ALL" || lead.status === statusFilter;
+      const matchesSource = sourceFilter === "ALL" || lead.source === sourceFilter;
+      return matchesSearch && matchesStatus && matchesSource;
+    });
+  }, [items, query, sourceFilter, statusFilter]);
+  const dueLeads = useMemo(
+    () =>
+      [...(items ?? [])]
+        .filter((lead) => lead.followUpAt && lead.status !== "WON" && lead.status !== "LOST")
+        .sort((a, b) => new Date(a.followUpAt!).getTime() - new Date(b.followUpAt!).getTime())
+        .slice(0, 12),
+    [items]
+  );
+  const leadTabs: Array<{
+    id: "board" | "followups" | "analytics" | "guide";
+    label: string;
+    count?: number;
+  }> = [
+    { id: "board", label: "Board", count: filtered.length },
+    { id: "followups", label: "Follow-ups", count: dueLeads.length },
+    { id: "analytics", label: "Analytics" },
+    { id: "guide", label: "Guide" }
+  ];
+  const visibleLeadStatuses =
+    statusFilter === "ALL"
+      ? leadStatuses
+      : leadStatuses.filter((stage) => stage.value === statusFilter);
+
+  function resetLeadForm() {
+    setTitle("");
+    setCustomerId("");
+    setAssignedToId("");
+    setSource("MANUAL");
+    setEstimatedValue("299");
+    setFollowUpAt("");
+  }
+
+  const create = useMutation({
+    mutationFn: () =>
+      api.createLead({
+        title,
+        source,
+        customerId: customerId || undefined,
+        assignedToId: assignedToId || undefined,
+        estimatedValueCents: Math.round(Number(estimatedValue || 0) * 100),
+        followUpAt: followUpAt ? new Date(followUpAt).toISOString() : undefined,
+        conversionProbability: 25
+      }),
+    onSuccess: () => {
+      resetLeadForm();
+      setLeadModalOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ["leads"] });
+      void queryClient.invalidateQueries({ queryKey: ["lead-analytics"] });
+    }
+  });
+
+  return (
+    <div className="grid gap-4">
+      <Panel
+        title="Lead pipeline CRM"
+        icon={Target}
+        action={
+          <button
+            onClick={() => setLeadModalOpen(true)}
+            className="flex h-10 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 text-sm font-semibold text-white"
+          >
+            <Plus className="h-4 w-4" />
+            New lead
+          </button>
+        }
+      >
+        <div className="grid gap-4">
+          <p className="max-w-3xl text-sm leading-6 text-steel">
+            Track every possible customer from first message to booked job without crowding the screen.
+          </p>
+          <div className="grid gap-2 sm:grid-cols-4">
+            {leadTabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setLeadTab(tab.id)}
+                className={cn(
+                  "flex h-11 items-center justify-center gap-2 rounded-[8px] border px-3 text-sm font-semibold transition",
+                  leadTab === tab.id
+                    ? "border-pine bg-pine text-white shadow-soft"
+                    : "border-ink/10 bg-mist text-steel hover:border-pine/30 hover:text-ink"
+                )}
+              >
+                <span>{tab.label}</span>
+                {typeof tab.count === "number" ? (
+                  <span
+                    className={cn(
+                      "rounded-[8px] px-2 py-0.5 text-xs font-bold",
+                      leadTab === tab.id ? "bg-white/15 text-white" : "bg-white text-steel"
+                    )}
+                  >
+                    {tab.count}
+                  </span>
+                ) : null}
+              </button>
+            ))}
+          </div>
+        </div>
+      </Panel>
+
+      {leadTab === "board" ? (
+        <Panel title="Pipeline board" icon={Target}>
+          <div className="mb-4 grid min-w-0 gap-2 lg:grid-cols-[minmax(220px,1fr)_160px_160px]">
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search name, source, staff..."
+              className="h-10 min-w-0 rounded-[8px] border border-ink/10 bg-mist px-3 text-sm outline-none focus:border-pine"
+            />
+            <select
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value as LeadStatus | "ALL")}
+              className="h-10 min-w-0 rounded-[8px] border border-ink/10 bg-mist px-3 text-sm outline-none focus:border-pine"
+            >
+              <option value="ALL">All stages</option>
+              {leadStatuses.map((stage) => (
+                <option key={stage.value} value={stage.value}>
+                  {stage.label}
+                </option>
+              ))}
+            </select>
+            <select
+              value={sourceFilter}
+              onChange={(event) => setSourceFilter(event.target.value as LeadSource | "ALL")}
+              className="h-10 min-w-0 rounded-[8px] border border-ink/10 bg-mist px-3 text-sm outline-none focus:border-pine"
+            >
+              <option value="ALL">All sources</option>
+              {leadSources.map((item) => (
+                <option key={item} value={item}>
+                  {item.replaceAll("_", " ")}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {visibleLeadStatuses.map((stage) => {
+                const stageLeads = filtered.filter((lead) => lead.status === stage.value);
+                const stageValue = stageLeads.reduce(
+                  (sum, lead) => sum + (lead.estimatedValueCents ?? 0),
+                  0
+                );
+                return (
+                  <section
+                    key={stage.value}
+                    className="flex min-h-[260px] min-w-0 flex-col rounded-[8px] border border-ink/10 bg-mist p-3"
+                  >
+                    <div className="mb-3 flex items-start justify-between gap-3 rounded-[8px] bg-white px-3 py-2">
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-ink">{stage.label}</p>
+                        <p className="mt-1 text-xs font-medium text-steel">
+                          {stageLeads.length} leads · {money(stageValue)}
+                        </p>
+                      </div>
+                      <Status label={stage.value} />
+                    </div>
+                    <div className="grid min-w-0 flex-1 content-start gap-3">
+                      {stageLeads.slice(0, 8).map((lead) => (
+                        <LeadCard
+                          key={lead.id}
+                          lead={lead}
+                          staff={staff ?? []}
+                          onOpen={onOpen}
+                        />
+                      ))}
+                      {stageLeads.length > 8 ? (
+                        <p className="rounded-[8px] bg-white p-2 text-center text-sm font-medium text-steel">
+                          {stageLeads.length - 8} more leads match this stage
+                        </p>
+                      ) : null}
+                      <Empty show={!stageLeads.length} label="No leads here" />
+                    </div>
+                  </section>
+                );
+              })}
+          </div>
+        </Panel>
+      ) : null}
+
+      {leadTab === "followups" ? (
+        <Panel title="Follow-up queue" icon={Clock3}>
+          <p className="mb-4 max-w-3xl text-sm leading-6 text-steel">
+            These are the opportunities most likely to leak revenue if nobody replies today.
+          </p>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {dueLeads.map((lead) => (
+              <div key={lead.id} className="rounded-[8px] bg-mist p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="line-clamp-2 text-lg font-semibold text-ink">{lead.title}</p>
+                    <p className="mt-1 text-sm text-steel">
+                      {lead.customer?.name ?? "Unlinked"} · {lead.source.replaceAll("_", " ")}
+                    </p>
+                  </div>
+                  <Status label={lead.status} />
+                </div>
+                <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                  <MiniStat label="Follow-up" value={shortDate(lead.followUpAt)} />
+                  <MiniStat label="Value" value={money(lead.estimatedValueCents)} />
+                  <MiniStat label="Owner" value={lead.assignedTo?.name ?? "Unassigned"} />
+                </div>
+              </div>
+            ))}
+            <Empty show={!dueLeads.length} label="No follow-ups queued" />
+          </div>
+        </Panel>
+      ) : null}
+
+      {leadTab === "analytics" ? (
+        <div className="grid gap-4">
+          <div className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <Metric icon={Target} label="Open pipeline" value={money(analytics?.openPipelineCents)} tone="pine" />
+            <Metric icon={TrendingUp} label="Weighted value" value={money(analytics?.weightedPipelineCents)} tone="mint" />
+            <Metric icon={Clock3} label="Follow-ups due" value={analytics?.followUpsDue ?? 0} tone="amber" />
+            <Metric icon={DollarSign} label="Lead conversion" value={`${analytics?.conversionRate ?? 0}%`} tone="coral" />
+          </div>
+          <Panel title="Lead-to-booking analytics" icon={TrendingUp}>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="rounded-[8px] bg-mist p-4">
+                <p className="font-semibold text-ink">Conversion summary</p>
+                <div className="mt-4 grid gap-3">
+                  <MiniStat label="Won leads" value={analytics?.wonCount ?? 0} />
+                  <MiniStat label="Lost leads" value={analytics?.lostCount ?? 0} danger={(analytics?.lostCount ?? 0) > 0} />
+                  <MiniStat label="Booked value" value={money(analytics?.leadToBooking.bookingValueCents)} />
+                </div>
+              </div>
+              <div className="rounded-[8px] bg-mist p-4">
+                <p className="font-semibold text-ink">Best sources</p>
+                <div className="mt-4 grid gap-2">
+                  {Object.entries(analytics?.bySource ?? {})
+                    .filter(([, count]) => count > 0)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 8)
+                    .map(([sourceName, count]) => (
+                      <div key={sourceName} className="flex items-center justify-between rounded-[8px] bg-white px-3 py-2 text-sm">
+                        <span className="font-medium text-ink">{sourceName.replaceAll("_", " ")}</span>
+                        <span className="font-semibold text-steel">{count}</span>
+                      </div>
+                    ))}
+                  <Empty show={!Object.values(analytics?.bySource ?? {}).some((count) => count > 0)} label="No source data yet" />
+                </div>
+              </div>
+            </div>
+          </Panel>
+        </div>
+      ) : null}
+
+      {leadTab === "guide" ? (
+        <Panel title="Lead guide" icon={Sparkles}>
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+            <div className="rounded-[8px] bg-mist p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-pine">Simple meaning</p>
+              <h3 className="mt-2 text-2xl font-semibold text-ink">A lead is a possible customer before they book.</h3>
+              <p className="mt-3 text-sm leading-6 text-steel">
+                Someone asks for pricing, availability, or service details. CrewFlow keeps that opportunity visible until your team books the work or marks it lost.
+              </p>
+              <div className="mt-4 grid gap-3">
+                <LeadEducationStep title="Capture" body="Add the inquiry from WhatsApp, phone, web chat, referral, or manual entry." />
+                <LeadEducationStep title="Follow up" body="Assign an owner, set the next touch, and protect the booking from being forgotten." />
+                <LeadEducationStep title="Convert" body="Move good leads to booking ready, then won when the job is scheduled." />
+              </div>
+            </div>
+            <div className="rounded-[8px] bg-mist p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-pine">Pipeline stages</p>
+              <div className="mt-4 grid gap-2">
+                {leadStatuses.map((stage, index) => (
+                  <div key={stage.value} className="flex items-center gap-3 rounded-[8px] bg-white px-3 py-2">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-pine text-xs font-bold text-white">
+                      {index + 1}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-ink">{stage.label}</p>
+                      <p className="text-xs text-steel">{leadStageDescriptions[stage.value]}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </Panel>
+      ) : null}
+
+      {typeof document !== "undefined"
+        ? createPortal(
+            <AnimatePresence>
+              {leadModalOpen ? (
+                <motion.div
+                  className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-ink/35 px-4 py-8 backdrop-blur-sm sm:py-12"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                >
+                  <motion.form
+                    onSubmit={(event: FormEvent<HTMLFormElement>) => {
+                      event.preventDefault();
+                      if (title.trim()) create.mutate();
+                    }}
+                    initial={{ opacity: 0, y: 16 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 16 }}
+                    className="w-full max-w-3xl rounded-[8px] bg-white p-6 shadow-2xl"
+                  >
+                    <div className="mb-5 flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pine">Sales opportunity</p>
+                        <h3 className="mt-2 text-2xl font-semibold text-ink">Create lead</h3>
+                        <p className="mt-2 text-sm leading-6 text-steel">
+                          Add a possible job, assign the next owner, and set the follow-up date before it becomes a missed booking.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLeadModalOpen(false);
+                          resetLeadForm();
+                        }}
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[8px] bg-mist text-ink"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <InputField label="Lead title" value={title} onChange={setTitle} />
+                      <SelectField label="Customer" value={customerId} onChange={setCustomerId}>
+                        <option value="">Unlinked lead</option>
+                        {(customers ?? []).map((customer) => (
+                          <option key={customer.id} value={customer.id}>
+                            {customer.name} · {customer.phone}
+                          </option>
+                        ))}
+                      </SelectField>
+                      <SelectField label="Assigned to" value={assignedToId} onChange={setAssignedToId}>
+                        <option value="">Unassigned</option>
+                        {(staff ?? []).map((member) => (
+                          <option key={member.id} value={member.id}>
+                            {member.name} · {member.role}
+                          </option>
+                        ))}
+                      </SelectField>
+                      <SelectField label="Source" value={source} onChange={(value) => setSource(value as LeadSource)}>
+                        {leadSources.map((item) => (
+                          <option key={item} value={item}>
+                            {item.replaceAll("_", " ")}
+                          </option>
+                        ))}
+                      </SelectField>
+                      <InputField label="Estimated value" value={estimatedValue} onChange={setEstimatedValue} />
+                      <label className="block">
+                        <span className="mb-2 block text-sm font-medium text-ink">Follow-up</span>
+                        <input
+                          type="datetime-local"
+                          value={followUpAt}
+                          onChange={(event) => setFollowUpAt(event.target.value)}
+                          className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
+                        />
+                      </label>
+                    </div>
+                    {create.error ? <ErrorText error={create.error} /> : null}
+                    <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLeadModalOpen(false);
+                          resetLeadForm();
+                        }}
+                        className="flex h-11 items-center justify-center rounded-[8px] bg-mist px-4 font-semibold text-ink"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={!title.trim() || create.isPending}
+                        className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 font-semibold text-white disabled:opacity-50"
+                      >
+                        {create.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                        Add lead
+                      </button>
+                    </div>
+                  </motion.form>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>,
+            document.body
+          )
+        : null}
+    </div>
+  );
+}
+
+const leadStageDescriptions: Record<LeadStatus, string> = {
+  NEW: "Fresh inquiry, not worked yet.",
+  CONTACTED: "Your team replied or called.",
+  QUALIFIED: "Need, budget, and details look real.",
+  BOOKING_READY: "Ready to schedule as a job.",
+  WON: "Converted into revenue.",
+  LOST: "Not moving forward."
+};
+
+function LeadEducationStep({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="rounded-[8px] bg-white p-3">
+      <p className="font-semibold text-ink">{title}</p>
+      <p className="mt-1 text-sm leading-6 text-steel">{body}</p>
+    </div>
+  );
+}
+
+function RetentionView({
+  data,
+  onOpen
+}: {
+  data?: RetentionSummary;
+  onOpen: (state: DrawerState) => void;
+}) {
+  const queryClient = useQueryClient();
+  const revenue = useQuery({ queryKey: ["revenue-engine"], queryFn: api.revenueEngine });
+  const [campaignNote, setCampaignNote] = useState("");
+  const scan = useMutation({
+    mutationFn: api.scanRetention,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["retention"] });
+      void queryClient.invalidateQueries({ queryKey: ["actions"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      void queryClient.invalidateQueries({ queryKey: ["revenue-engine"] });
+    }
+  });
+  const campaign = useMutation({
+    mutationFn: (input: { type: "REBOOKING" | "WIN_BACK" | "VIP_CHECK_IN" | "PAYMENT_RECOVERY"; customerIds: string[] }) =>
+      api.sendRevenueCampaign({ ...input, provider: "WHATSAPP", note: campaignNote || undefined }),
+    onSuccess: () => {
+      setCampaignNote("");
+      void queryClient.invalidateQueries({ queryKey: ["messages"] });
+    }
+  });
+  const engine = revenue.data;
+
+  return (
+    <div className="grid gap-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Metric icon={Banknote} label="Customer LTV" value={money(engine?.summary.lifetimeValueCents ?? data?.retainedRevenueCents)} tone="pine" />
+        <Metric icon={Repeat2} label="Repeat opportunity" value={money(engine?.summary.repeatReadyCents ?? data?.repeatOpportunityCents)} tone="mint" />
+        <Metric icon={HeartPulse} label="Win-back value" value={money(engine?.summary.winBackCents ?? data?.winBackOpportunityCents)} tone="amber" />
+        <Metric icon={AlertTriangle} label="At-risk customers" value={engine?.summary.atRiskCount ?? ((data?.repeatCandidates.length ?? 0) + (data?.winBackCandidates.length ?? 0))} tone="coral" />
+      </div>
+
+      <Panel title="Customer revenue engine" icon={Target}>
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
+          <div className="grid gap-3">
+            <div className="grid gap-3 md:grid-cols-3">
+              <RevenueSegment label="High value" items={engine?.segments.highValue} />
+              <RevenueSegment label="Repeat ready" items={engine?.segments.repeatReady} />
+              <RevenueSegment label="Overdue payer" items={engine?.segments.overduePayers} />
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              {(engine?.nextBestActions ?? []).slice(0, 8).map((item) => (
+                <RevenueActionCard key={item.customer.id} item={item} onOpen={onOpen} />
+              ))}
+              <Empty show={!engine?.nextBestActions.length && !revenue.isLoading} label="No customer revenue actions right now" />
+            </div>
+          </div>
+          <div className="rounded-[8px] bg-mist p-4">
+            <p className="font-semibold text-ink">One-click WhatsApp campaigns</p>
+            <p className="mt-1 text-sm leading-6 text-steel">Send targeted messages to customers already segmented by revenue behavior.</p>
+            <textarea
+              value={campaignNote}
+              onChange={(event) => setCampaignNote(event.target.value)}
+              rows={3}
+              placeholder="Optional campaign note"
+              className="mt-4 min-h-[90px] w-full rounded-[8px] border border-black/10 bg-white p-3 text-sm outline-none focus:border-pine"
+            />
+            <div className="mt-3 grid gap-2">
+              <CampaignButton
+                label="Rebook repeat-ready"
+                type="REBOOKING"
+                items={engine?.segments.repeatReady}
+                pending={campaign.isPending}
+                onSend={(type, customerIds) => campaign.mutate({ type, customerIds })}
+              />
+              <CampaignButton
+                label="Win back inactive"
+                type="WIN_BACK"
+                items={engine?.segments.inactive}
+                pending={campaign.isPending}
+                onSend={(type, customerIds) => campaign.mutate({ type, customerIds })}
+              />
+              <CampaignButton
+                label="VIP check-in"
+                type="VIP_CHECK_IN"
+                items={engine?.segments.highValue}
+                pending={campaign.isPending}
+                onSend={(type, customerIds) => campaign.mutate({ type, customerIds })}
+              />
+              <CampaignButton
+                label="Payment recovery"
+                type="PAYMENT_RECOVERY"
+                items={engine?.segments.overduePayers}
+                pending={campaign.isPending}
+                onSend={(type, customerIds) => campaign.mutate({ type, customerIds })}
+              />
+            </div>
+            {campaign.data ? (
+              <p className="mt-3 rounded-[8px] bg-mint/30 px-3 py-2 text-sm font-semibold text-ink">
+                Sent {campaign.data.sent} {campaign.data.type.replaceAll("_", " ").toLowerCase()} messages.
+              </p>
+            ) : null}
+            {campaign.error ? <ErrorText error={campaign.error} /> : null}
+          </div>
+        </div>
+      </Panel>
+
+      <Panel
+        title="Retention engine"
+        icon={Repeat2}
+        action={
+          <button
+            onClick={() => scan.mutate()}
+            disabled={scan.isPending}
+            className="flex h-9 items-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {scan.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            Scan retention
+          </button>
+        }
+      >
+        {scan.isSuccess ? (
+          <p className="mb-3 rounded-[8px] bg-mint/30 px-3 py-2 text-sm font-semibold text-ink">
+            Retention scan found {scan.data.repeatCandidates} repeat and {scan.data.winBackCandidates} win-back opportunities.
+          </p>
+        ) : null}
+        {scan.error ? <ErrorText error={scan.error} /> : null}
+        <div className="grid gap-4 xl:grid-cols-2">
+          <RetentionList
+            title="Ready to rebook"
+            icon={Repeat2}
+            items={data?.repeatCandidates}
+            empty="No repeat opportunities right now"
+            onOpen={onOpen}
+          />
+          <RetentionList
+            title="Win-back customers"
+            icon={HeartPulse}
+            items={data?.winBackCandidates}
+            empty="No inactive customers to win back"
+            onOpen={onOpen}
+          />
+        </div>
+      </Panel>
+
+      <Panel title="Top customers" icon={UsersRound}>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {(data?.topCustomers ?? []).map((item) => (
+            <RetentionCustomerCard key={item.customer.id} item={item} onOpen={onOpen} />
+          ))}
+          <Empty show={!data?.topCustomers.length} label="No paid customer history yet" />
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function RevenueSegment({ label, items }: { label: string; items?: RetentionCustomer[] }) {
+  return (
+    <div className="rounded-[8px] bg-mist p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-steel">{label}</p>
+      <p className="mt-2 text-3xl font-semibold text-ink">{items?.length ?? 0}</p>
+      <p className="mt-1 text-sm text-steel">{money((items ?? []).reduce((sum, item) => sum + item.estimatedNextValueCents, 0))}</p>
+    </div>
+  );
+}
+
+function RevenueActionCard({
+  item,
+  onOpen
+}: {
+  item: RetentionCustomer;
+  onOpen: (state: DrawerState) => void;
+}) {
+  return (
+    <button
+      onClick={() =>
+        onOpen({
+          type: "customer",
+          item: {
+            id: item.customer.id,
+            name: item.customer.name,
+            phone: item.customer.phone,
+            email: item.customer.email
+          }
+        })
+      }
+      className="rounded-[8px] bg-white p-4 text-left shadow-soft transition hover:-translate-y-0.5"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-semibold text-ink">{item.customer.name}</p>
+          <p className="mt-1 text-sm text-steel">{item.nextBestAction?.label ?? item.recommendation}</p>
+        </div>
+        <span className="rounded-full bg-coral/10 px-2 py-1 text-xs font-semibold text-coral">risk {item.riskScore ?? 0}</span>
+      </div>
+      <p className="mt-3 line-clamp-2 text-sm leading-6 text-steel">{item.nextBestAction?.message}</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {(item.segmentTags ?? []).map((tag) => (
+          <span key={tag} className="rounded-full bg-mist px-2 py-1 text-xs font-semibold text-steel">
+            {tag.replaceAll("_", " ")}
+          </span>
+        ))}
+      </div>
+    </button>
+  );
+}
+
+function CampaignButton({
+  label,
+  type,
+  items,
+  pending,
+  onSend
+}: {
+  label: string;
+  type: "REBOOKING" | "WIN_BACK" | "VIP_CHECK_IN" | "PAYMENT_RECOVERY";
+  items?: RetentionCustomer[];
+  pending: boolean;
+  onSend: (type: "REBOOKING" | "WIN_BACK" | "VIP_CHECK_IN" | "PAYMENT_RECOVERY", customerIds: string[]) => void;
+}) {
+  const customerIds = (items ?? []).map((item) => item.customer.id);
+  return (
+    <button
+      onClick={() => onSend(type, customerIds)}
+      disabled={pending || !customerIds.length}
+      className="flex h-11 items-center justify-between gap-3 rounded-[8px] bg-white px-3 text-sm font-semibold text-ink shadow-soft disabled:opacity-50"
+    >
+      <span>{label}</span>
+      <span className="rounded-full bg-pine px-2 py-1 text-xs text-white">{customerIds.length}</span>
+    </button>
+  );
+}
+
+function RetentionList({
+  title,
+  icon: Icon,
+  items,
+  empty,
+  onOpen
+}: {
+  title: string;
+  icon: typeof Inbox;
+  items?: RetentionCustomer[];
+  empty: string;
+  onOpen: (state: DrawerState) => void;
+}) {
+  return (
+    <section className="rounded-[8px] bg-mist p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <div className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-white text-pine">
+          <Icon className="h-5 w-5" />
+        </div>
+        <h3 className="font-semibold text-ink">{title}</h3>
+      </div>
+      <div className="grid gap-3">
+        {(items ?? []).map((item) => (
+          <RetentionCustomerCard key={item.customer.id} item={item} onOpen={onOpen} />
+        ))}
+        <Empty show={!items?.length} label={empty} />
+      </div>
+    </section>
+  );
+}
+
+function RetentionCustomerCard({
+  item,
+  onOpen
+}: {
+  item: RetentionCustomer;
+  onOpen: (state: DrawerState) => void;
+}) {
+  return (
+    <article className="rounded-[8px] bg-white p-3 shadow-soft">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-semibold text-ink">{item.customer.name}</p>
+          <p className="mt-1 truncate text-sm text-steel">
+            {item.serviceTitle} · {item.daysSinceLastBooking} days ago
+          </p>
+        </div>
+        <Status label={item.recommendation} />
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <MiniStat label="Lifetime" value={money(item.lifetimeValueCents)} />
+        <MiniStat label="Next value" value={money(item.estimatedNextValueCents)} />
+      </div>
+      <div className="mt-3 flex gap-2">
+        <button
+          onClick={() =>
+            onOpen({
+              type: "customer",
+              item: {
+                id: item.customer.id,
+                name: item.customer.name,
+                phone: item.customer.phone,
+                email: item.customer.email
+              }
+            })
+          }
+          className="flex h-9 flex-1 items-center justify-center gap-2 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink"
+        >
+          <ContactRound className="h-4 w-4" />
+          Customer
+        </button>
+        <a
+          href={`tel:${item.customer.phone}`}
+          className="flex h-9 items-center justify-center rounded-[8px] bg-pine px-3 text-sm font-semibold text-white"
+        >
+          Call
+        </a>
+      </div>
+    </article>
+  );
+}
+
+function LeadCard({
+  lead,
+  staff,
+  onOpen
+}: {
+  lead: Lead;
+  staff: StaffMember[];
+  onOpen: (state: DrawerState) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [status, setStatus] = useState<LeadStatus>(lead.status);
+  const [assignedToId, setAssignedToId] = useState(lead.assignedTo?.id ?? "");
+  const [probability, setProbability] = useState(String(lead.conversionProbability));
+  const [followUpAt, setFollowUpAt] = useState(
+    lead.followUpAt ? toDateTimeLocal(lead.followUpAt) : ""
+  );
+  const [now] = useState(() => Date.now());
+  const update = useMutation({
+    mutationFn: () =>
+      api.updateLead(lead.id, {
+        status,
+        assignedToId: assignedToId || undefined,
+        conversionProbability: Number(probability),
+        followUpAt: followUpAt ? new Date(followUpAt).toISOString() : undefined
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["leads"] });
+      void queryClient.invalidateQueries({ queryKey: ["lead-analytics"] });
+    }
+  });
+  const isDue = lead.followUpAt ? new Date(lead.followUpAt).getTime() <= now : false;
+
+  return (
+    <article className="min-w-0 rounded-[8px] border border-ink/5 bg-white p-3 shadow-soft">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="line-clamp-2 font-semibold leading-5 text-ink">{lead.title}</p>
+          <p className="mt-1 truncate text-sm text-steel">
+            {lead.customer?.name ?? "Unlinked"} · {lead.source.replaceAll("_", " ")}
+          </p>
+        </div>
+        <Status label={`${lead.conversionProbability}%`} />
+      </div>
+      <div className="mt-3 grid min-w-0 gap-2 text-sm sm:grid-cols-2">
+        <div className="rounded-[8px] bg-mist p-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-steel">Value</p>
+          <p className="mt-1 font-semibold text-ink">{money(lead.estimatedValueCents)}</p>
+        </div>
+        <div className={cn("rounded-[8px] p-2", isDue ? "bg-coral/10" : "bg-mist")}>
+          <p className={cn("text-xs font-semibold uppercase tracking-[0.14em]", isDue ? "text-coral" : "text-steel")}>
+            Follow-up
+          </p>
+          <p className="mt-1 truncate font-semibold text-ink">{shortDate(lead.followUpAt)}</p>
+        </div>
+      </div>
+      <div className="mt-3 grid min-w-0 gap-2 2xl:grid-cols-2">
+        <select
+          value={status}
+          onChange={(event) => setStatus(event.target.value as LeadStatus)}
+          className="h-9 min-w-0 rounded-[8px] border border-ink/10 bg-mist px-2 text-sm outline-none focus:border-pine"
+        >
+          {leadStatuses.map((stage) => (
+            <option key={stage.value} value={stage.value}>
+              {stage.label}
+            </option>
+          ))}
+        </select>
+        <select
+          value={assignedToId}
+          onChange={(event) => setAssignedToId(event.target.value)}
+          className="h-9 min-w-0 rounded-[8px] border border-ink/10 bg-mist px-2 text-sm outline-none focus:border-pine"
+        >
+          <option value="">Unassigned</option>
+          {staff.map((member) => (
+            <option key={member.id} value={member.id}>
+              {member.name}
+            </option>
+          ))}
+        </select>
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_76px] gap-2 2xl:col-span-2">
+          <input
+            type="datetime-local"
+            value={followUpAt}
+            onChange={(event) => setFollowUpAt(event.target.value)}
+            className="h-9 min-w-0 rounded-[8px] border border-ink/10 bg-mist px-2 text-sm outline-none focus:border-pine"
+          />
+          <input
+            type="number"
+            min={0}
+            max={100}
+            value={probability}
+            onChange={(event) => setProbability(event.target.value)}
+            className="h-9 min-w-0 rounded-[8px] border border-ink/10 bg-mist px-2 text-sm outline-none focus:border-pine"
+          />
+        </div>
+      </div>
+      {lead.wonLostReason ? (
+        <p className="mt-3 rounded-[8px] bg-mist p-2 text-sm text-steel">{lead.wonLostReason}</p>
+      ) : null}
+      {update.error ? <ErrorText error={update.error} /> : null}
+      <div className="mt-3 grid min-w-0 gap-2 2xl:grid-cols-2">
+        <button
+          onClick={() => update.mutate()}
+          disabled={update.isPending}
+          className="flex h-9 items-center justify-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+        >
+          {update.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          Save
+        </button>
+        {!lead.booking && lead.customer ? (
+          <button
+            onClick={() => onOpen({ type: "lead", item: lead })}
+            className="flex h-9 items-center justify-center gap-2 rounded-[8px] bg-mint px-3 text-sm font-semibold text-ink"
+          >
+            <CalendarDays className="h-4 w-4" />
+            Convert
+          </button>
+        ) : null}
+      </div>
+      <div className="mt-2 grid min-w-0 gap-2 2xl:grid-cols-2">
+        {lead.conversation ? (
+          <button
+            onClick={() => onOpen({ type: "conversation", item: lead.conversation! })}
+            className="flex h-9 items-center justify-center gap-2 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink"
+          >
+            <Inbox className="h-4 w-4" />
+            Inbox
+          </button>
+        ) : lead.booking ? (
+          <button
+            onClick={() => onOpen({ type: "booking", item: lead.booking! })}
+            className="flex h-9 items-center justify-center gap-2 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink"
+          >
+            <CalendarDays className="h-4 w-4" />
+            Job
+          </button>
+        ) : (
+          <button
+            onClick={() => onOpen({ type: "lead", item: lead })}
+            className="flex h-9 items-center justify-center rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink"
+          >
+            Details
+          </button>
+        )}
+        {lead.customer ? (
+          <button
+            onClick={() => onOpen({ type: "customer", item: lead.customer! })}
+            className="flex h-9 items-center justify-center gap-2 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink"
+          >
+            <ContactRound className="h-4 w-4" />
+            Customer
+          </button>
+        ) : (
+          <span className="flex h-9 items-center justify-center rounded-[8px] bg-mist px-3 text-sm font-semibold text-steel">
+            Unlinked
+          </span>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function RevenuePipeline({
+  data,
+  actions
+}: {
+  data?: DashboardSummary;
+  actions?: OperationalAction[];
+}) {
+  const hotLeadActions = (actions ?? []).filter((action) =>
+    ["FOLLOW_UP_STALE_INQUIRY", "CONFIRM_BOOKING"].includes(action.type)
+  ).length;
+  const dispatchActions = (actions ?? []).filter((action) => action.type === "DISPATCH_STAFF").length;
+  const collectActions = (actions ?? []).filter((action) => action.type === "COLLECT_PAYMENT").length;
+  const reviewActions = (actions ?? []).filter((action) => action.type === "REQUEST_REVIEW").length;
+  const stages = [
+    { label: "Leads", value: hotLeadActions, icon: Inbox, tone: "bg-coral/10 text-coral" },
+    { label: "Booked", value: data?.today.confirmed ?? 0, icon: CalendarDays, tone: "bg-pine/10 text-pine" },
+    { label: "Dispatch", value: dispatchActions, icon: Route, tone: "bg-amber/20 text-ink" },
+    { label: "Collect", value: collectActions || data?.pendingInvoices || 0, icon: CreditCard, tone: "bg-mint/40 text-ink" },
+    { label: "Review", value: reviewActions, icon: Sparkles, tone: "bg-mist text-pine" }
+  ];
+
+  return (
+    <section className="rounded-[8px] border border-white/80 bg-white/90 p-4 shadow-soft backdrop-blur">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pine">Revenue pipeline</p>
+          <h2 className="mt-1 text-lg font-semibold text-ink">Lead to paid job</h2>
+        </div>
+        <p className="text-sm font-semibold text-steel">{money(data?.revenue.atRiskTotalCents)} at risk</p>
+      </div>
+      <div className="grid gap-2 md:grid-cols-5">
+        {stages.map((stage) => (
+          <div key={stage.label} className="min-h-24 rounded-[8px] bg-mist p-3">
+            <div className={cn("flex h-9 w-9 items-center justify-center rounded-[8px]", stage.tone)}>
+              <stage.icon className="h-4 w-4" />
+            </div>
+            <p className="mt-3 text-2xl font-semibold text-ink">{stage.value}</p>
+            <p className="text-sm font-medium text-steel">{stage.label}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ReceptionistSimulator({ onOpen }: { onOpen: (state: DrawerState) => void }) {
+  const queryClient = useQueryClient();
+  const [customerName, setCustomerName] = useState("Test Lead");
+  const [phone, setPhone] = useState("+15550102020");
+  const [message, setMessage] = useState(
+    "Hi, I need a deep clean next Friday afternoon at 123 Main St. What is the price and can you book me?"
+  );
+  const [conversationId, setConversationId] = useState("");
+  const [lastResult, setLastResult] = useState<{
+    reply: string;
+    conversationId: string;
+    bookingIntent?: { status: string; missingFields?: string[]; service?: Service | null; quotedPriceCents?: number | null } | null;
+    missingFields: string[];
+    handoff: boolean;
+  } | null>(null);
+
+  const simulate = useMutation({
+    mutationFn: () =>
+      api.receptionistInquiry({
+        customerName: customerName || undefined,
+        phone: phone || undefined,
+        message,
+        conversationId: conversationId || undefined,
+        channel: "WEB_CHAT"
+      }),
+    onSuccess: (result) => {
+      setConversationId(result.conversationId);
+      setLastResult(result);
+      void queryClient.invalidateQueries({ queryKey: ["inbox"] });
+      void queryClient.invalidateQueries({ queryKey: ["leads"] });
+      void queryClient.invalidateQueries({ queryKey: ["lead-analytics"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    }
+  });
+  const openConversation = useMutation({
+    mutationFn: () => api.conversation(lastResult!.conversationId),
+    onSuccess: (conversation) => onOpen({ type: "conversation", item: conversation })
+  });
+  const canSend = Boolean(message.trim());
+
+  return (
+    <Panel title="Receptionist simulator" icon={Bot}>
+      <div className="grid gap-3">
+        <div className="grid gap-3 md:grid-cols-2">
+          <InputField label="Customer name" value={customerName} onChange={setCustomerName} />
+          <InputField label="Phone" value={phone} onChange={setPhone} />
+        </div>
+        <label className="block">
+          <span className="mb-2 block text-sm font-medium text-ink">Inquiry</span>
+          <textarea
+            value={message}
+            onChange={(event) => setMessage(event.target.value)}
+            className="min-h-32 w-full rounded-[8px] border border-ink/10 bg-mist p-3 outline-none focus:border-pine"
+          />
+        </label>
+        <button
+          onClick={() => simulate.mutate()}
+          disabled={!canSend || simulate.isPending}
+          className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 font-semibold text-white disabled:opacity-50"
+        >
+          {simulate.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+          Run intake
+        </button>
+        {simulate.error ? <ErrorText error={simulate.error} /> : null}
+        {lastResult ? (
+          <div className="rounded-[8px] bg-ink p-4 text-white">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-mint">Assistant reply</p>
+                <p className="mt-2 text-sm leading-6 text-white/78">{lastResult.reply}</p>
+              </div>
+              <Status label={lastResult.handoff ? "HANDOFF" : lastResult.bookingIntent?.status ?? "OPEN"} />
+            </div>
+            <div className="mt-4 grid gap-2 rounded-[8px] bg-white/8 p-3 text-sm text-white/75">
+              <p>
+                Service:{" "}
+                <span className="font-semibold text-white">
+                  {lastResult.bookingIntent?.service?.title ?? "Not detected"}
+                </span>
+              </p>
+              <p>
+                Quote:{" "}
+                <span className="font-semibold text-white">
+                  {lastResult.bookingIntent?.quotedPriceCents
+                    ? money(lastResult.bookingIntent.quotedPriceCents)
+                    : "Pending"}
+                </span>
+              </p>
+              <p>
+                Missing:{" "}
+                <span className="font-semibold text-white">
+                  {(lastResult.missingFields.length ? lastResult.missingFields : ["none"]).join(", ")}
+                </span>
+              </p>
+            </div>
+            <button
+              onClick={() => openConversation.mutate()}
+              disabled={openConversation.isPending}
+              className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-[8px] bg-mint px-3 text-sm font-semibold text-ink"
+            >
+              {openConversation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+              Open intake
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </Panel>
+  );
+}
+
+function CustomersView({ items, onOpen }: { items?: Customer[]; onOpen: (state: DrawerState) => void }) {
+  const queryClient = useQueryClient();
+  const [search, setSearch] = useState("");
+  const [editing, setEditing] = useState<Customer | null>(null);
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("");
+  const [notes, setNotes] = useState("");
+  const [csv, setCsv] = useState("name,phone,email,notes\nAva Carter,+15550102020,ava@example.com,Prefers WhatsApp");
+  const [whatsappText, setWhatsappText] = useState(
+    "5/24/26, 9:15 AM - +15550102020: Hi, I need a deep clean next Friday afternoon."
+  );
+  const [importResult, setImportResult] = useState<string>("");
+  const [whatsappResult, setWhatsappResult] = useState<string>("");
+  const [fileError, setFileError] = useState("");
+
+  const filtered = useMemo(() => {
+    const value = search.trim().toLowerCase();
+    if (!value) return items ?? [];
+    return (items ?? []).filter((customer) =>
+      [customer.name, customer.phone, customer.email ?? "", customer.notes ?? ""]
+        .join(" ")
+        .toLowerCase()
+        .includes(value)
+    );
+  }, [items, search]);
+
+  function reset(customer?: Customer | null) {
+    setEditing(customer ?? null);
+    setName(customer?.name ?? "");
+    setPhone(customer?.phone ?? "");
+    setEmail(customer?.email ?? "");
+    setAvatarUrl(customer?.avatarUrl ?? "");
+    setNotes(customer?.notes ?? "");
+  }
+
+  const save = useMutation({
+    mutationFn: () =>
+      editing
+        ? api.updateCustomer(editing.id, { name, phone, email, avatarUrl, notes })
+        : api.createCustomer({ name, phone, email, avatarUrl, notes }),
+    onSuccess: () => {
+      reset();
+      void queryClient.invalidateQueries({ queryKey: ["customers"] });
+    }
+  });
+
+  const importCustomers = useMutation({
+    mutationFn: () => api.importCustomers(parseCustomerCsv(csv)),
+    onSuccess: (result) => {
+      setImportResult(`${result.created} created, ${result.updated} updated, ${result.skipped} skipped`);
+      void queryClient.invalidateQueries({ queryKey: ["customers"] });
+    }
+  });
+
+  const importWhatsApp = useMutation({
+    mutationFn: () => api.importWhatsAppCustomers({ text: whatsappText, createLeads: true }),
+    onSuccess: (result) => {
+      setWhatsappResult(
+        `${result.created} created, ${result.updated} updated, ${result.messagesCreated} messages, ${result.leadsCreated} leads`
+      );
+      void queryClient.invalidateQueries({ queryKey: ["customers"] });
+      void queryClient.invalidateQueries({ queryKey: ["leads"] });
+      void queryClient.invalidateQueries({ queryKey: ["inbox"] });
+    }
+  });
+
+  const canSave = name.trim() && phone.trim();
+  const preview = parseCustomerCsv(csv).slice(0, 5);
+
+  async function handleCustomerFile(file?: File) {
+    setFileError("");
+    if (!file) return;
+    try {
+      const rows = await readCustomerImportFile(file);
+      setCsv(toCustomerCsv(rows));
+      setImportResult(`Loaded ${rows.length} rows from ${file.name}. Review preview, then import.`);
+    } catch (error) {
+      setFileError(error instanceof Error ? error.message : "Unable to read customer file");
+    }
+  }
+
+  async function handleWhatsAppFile(file?: File) {
+    setFileError("");
+    if (!file) return;
+    try {
+      setWhatsappText(await file.text());
+      setWhatsappResult(`Loaded WhatsApp export from ${file.name}. Review sample, then import.`);
+    } catch (error) {
+      setFileError(error instanceof Error ? error.message : "Unable to read WhatsApp export");
+    }
+  }
+
+  return (
+    <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+      <Panel title="Customer manager" icon={ContactRound}>
+        <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search customers..."
+            className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine md:max-w-sm"
+          />
+          <button
+            onClick={() => reset()}
+            className="flex h-11 items-center gap-2 rounded-[8px] bg-pine px-4 font-semibold text-white"
+          >
+            <Plus className="h-4 w-4" />
+            New customer
+          </button>
+        </div>
+
+        <div className="grid gap-3">
+          {filtered.map((customer) => (
+            <Row key={customer.id} onClick={() => onOpen({ type: "customer", item: customer })}>
+              <Avatar name={customer.name} imageUrl={customer.avatarUrl} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-semibold text-ink">{customer.name}</p>
+                <p className="truncate text-sm text-steel">
+                  {customer.phone} · {customer.email ?? "No email"}
+                </p>
+              </div>
+              <button
+                onClick={(event) => {
+                  event.stopPropagation();
+                  reset(customer);
+                }}
+                className="h-9 rounded-[8px] bg-white px-3 text-sm font-semibold text-ink"
+              >
+                Edit
+              </button>
+            </Row>
+          ))}
+          <Empty show={!filtered.length} label="No customers found" />
+        </div>
+      </Panel>
+
+      <div className="grid gap-4">
+        <Panel title={editing ? "Edit customer" : "Add customer"} icon={UserCheck}>
+          <div className="grid gap-3 md:grid-cols-2">
+            <InputField label="Name" value={name} onChange={setName} />
+            <InputField label="Phone" value={phone} onChange={setPhone} />
+            <InputField label="Email" value={email} onChange={setEmail} />
+            <MediaUploadField label="Customer photo" value={avatarUrl} onChange={setAvatarUrl} folder="customers" />
+          </div>
+          <label className="mt-3 block">
+            <span className="mb-2 block text-sm font-medium text-ink">Notes</span>
+            <textarea
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              className="min-h-24 w-full rounded-[8px] border border-ink/10 bg-mist p-3 outline-none focus:border-pine"
+            />
+          </label>
+          {save.error ? <ErrorText error={save.error} /> : null}
+          <div className="mt-3 flex gap-2">
+            <button
+              onClick={() => save.mutate()}
+              disabled={!canSave || save.isPending}
+              className="flex h-10 items-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              {editing ? "Save customer" : "Add customer"}
+            </button>
+            {editing ? (
+              <button onClick={() => reset()} className="h-10 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink">
+                Cancel
+              </button>
+            ) : null}
+          </div>
+        </Panel>
+
+        <Panel title="Customer import" icon={FileText}>
+          <div className="mb-3 rounded-[8px] bg-mist p-3 text-sm leading-6 text-steel">
+            Upload Excel or CSV from an existing customer list, or paste rows with
+            name, phone, email, and notes.
+          </div>
+          <label className="mb-3 flex cursor-pointer flex-col gap-2 rounded-[8px] border border-dashed border-ink/20 bg-white p-3 text-sm font-semibold text-ink">
+            <span>Upload Excel or CSV</span>
+            <input
+              type="file"
+              accept=".csv,.xlsx,.xls"
+              onChange={(event) => void handleCustomerFile(event.target.files?.[0])}
+              className="text-sm font-medium text-steel file:mr-3 file:rounded-[8px] file:border-0 file:bg-pine file:px-3 file:py-2 file:font-semibold file:text-white"
+            />
+          </label>
+          <textarea
+            value={csv}
+            onChange={(event) => setCsv(event.target.value)}
+            className="min-h-36 w-full rounded-[8px] border border-ink/10 bg-mist p-3 text-sm outline-none focus:border-pine"
+          />
+          <div className="mt-3 rounded-[8px] bg-mist p-3">
+            <p className="text-sm font-semibold text-ink">Preview</p>
+            <div className="mt-2 grid gap-2">
+              {preview.map((row, index) => (
+                <p key={`${row.phone}-${index}`} className="truncate text-sm text-steel">
+                  {row.name} · {row.phone} · {row.email || "No email"}
+                </p>
+              ))}
+              <Empty show={!preview.length} label="Paste CSV with name and phone" />
+            </div>
+          </div>
+          {importCustomers.error ? <ErrorText error={importCustomers.error} /> : null}
+          {importResult ? (
+            <p className="mt-3 rounded-[8px] bg-mint/30 px-3 py-2 text-sm font-semibold text-ink">{importResult}</p>
+          ) : null}
+          <button
+            onClick={() => importCustomers.mutate()}
+            disabled={!preview.length || importCustomers.isPending}
+            className="mt-3 flex h-10 items-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {importCustomers.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            Import customers
+          </button>
+        </Panel>
+
+        <Panel title="WhatsApp export import" icon={MessageSquareText}>
+          <div className="mb-3 rounded-[8px] bg-mist p-3 text-sm leading-6 text-steel">
+            Paste or upload a WhatsApp chat export. CrewFlow detects phone numbers, creates customer
+            records, stores recent messages, and opens lead records for booking-like inquiries.
+          </div>
+          <label className="mb-3 flex cursor-pointer flex-col gap-2 rounded-[8px] border border-dashed border-ink/20 bg-white p-3 text-sm font-semibold text-ink">
+            <span>Upload WhatsApp .txt export</span>
+            <input
+              type="file"
+              accept=".txt,text/plain"
+              onChange={(event) => void handleWhatsAppFile(event.target.files?.[0])}
+              className="text-sm font-medium text-steel file:mr-3 file:rounded-[8px] file:border-0 file:bg-pine file:px-3 file:py-2 file:font-semibold file:text-white"
+            />
+          </label>
+          <textarea
+            value={whatsappText}
+            onChange={(event) => setWhatsappText(event.target.value)}
+            className="min-h-36 w-full rounded-[8px] border border-ink/10 bg-mist p-3 text-sm outline-none focus:border-pine"
+          />
+          {fileError ? <p className="mt-3 rounded-[8px] bg-coral/10 px-3 py-2 text-sm font-semibold text-coral">{fileError}</p> : null}
+          {importWhatsApp.error ? <ErrorText error={importWhatsApp.error} /> : null}
+          {whatsappResult ? (
+            <p className="mt-3 rounded-[8px] bg-mint/30 px-3 py-2 text-sm font-semibold text-ink">{whatsappResult}</p>
+          ) : null}
+          <button
+            onClick={() => importWhatsApp.mutate()}
+            disabled={!whatsappText.trim() || importWhatsApp.isPending}
+            className="mt-3 flex h-10 items-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {importWhatsApp.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            Import WhatsApp customers
+          </button>
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
+function BookingsView({ items, onOpen }: { items?: Booking[]; onOpen: (state: DrawerState) => void }) {
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("all");
+  const [dateFilter, setDateFilter] = useState<"all" | "today" | "upcoming" | "attention">("all");
+  const now = useMemo(() => new Date(), []);
+  const todayStart = useMemo(() => {
+    const value = new Date(now);
+    value.setHours(0, 0, 0, 0);
+    return value;
+  }, [now]);
+  const todayEnd = useMemo(() => {
+    const value = new Date(todayStart);
+    value.setDate(value.getDate() + 1);
+    return value;
+  }, [todayStart]);
+  const bookings = items ?? [];
+  const todayBookings = bookings.filter((booking) => {
+    const start = new Date(booking.startTime);
+    return start >= todayStart && start < todayEnd;
+  });
+  const attentionBookings = bookings
+    .filter((booking) => {
+      const start = new Date(booking.startTime);
+      const isActive = !["COMPLETED", "CANCELLED"].includes(booking.status);
+      return (
+        booking.status === "REQUESTED" ||
+        booking.status === "NO_SHOW" ||
+        (!booking.assignedStaff && isActive) ||
+        (start < now && ["REQUESTED", "CONFIRMED"].includes(booking.status))
+      );
+    })
+    .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+  const activeRevenueCents = bookings
+    .filter((booking) => !["CANCELLED", "NO_SHOW"].includes(booking.status))
+    .reduce((sum, booking) => sum + (booking.service.priceCents ?? 0), 0);
+
+  const filtered = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return (items ?? []).filter((booking) => {
+      const matchesStatus = status === "all" || booking.status === status;
+      const start = new Date(booking.startTime);
+      const matchesDate =
+        dateFilter === "all" ||
+        (dateFilter === "today" && start >= todayStart && start < todayEnd) ||
+        (dateFilter === "upcoming" && start >= now) ||
+        (dateFilter === "attention" && attentionBookings.some((item) => item.id === booking.id));
+      const haystack = [
+        booking.customer.name,
+        booking.customer.phone,
+        booking.service.title,
+        booking.assignedStaff?.name ?? "",
+        booking.status
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return matchesStatus && matchesDate && (!query || haystack.includes(query));
+    });
+  }, [attentionBookings, dateFilter, items, now, search, status, todayEnd, todayStart]);
+
+  return (
+    <div className="grid gap-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Metric icon={CalendarDays} label="Today" value={todayBookings.length} tone="pine" />
+        <Metric icon={AlertTriangle} label="Needs attention" value={attentionBookings.length} tone="amber" />
+        <Metric icon={UsersRound} label="Unassigned" value={bookings.filter((booking) => !booking.assignedStaff && !["COMPLETED", "CANCELLED"].includes(booking.status)).length} tone="coral" />
+        <Metric icon={Banknote} label="Active value" value={money(activeRevenueCents)} tone="mint" />
+      </div>
+
+      <Panel
+        title="Booking command center"
+        icon={CalendarDays}
+        action={
+          <button onClick={() => onOpen({ type: "new-booking" })} className="flex h-9 items-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white">
+            <Plus className="h-4 w-4" />
+            New booking
+          </button>
+        }
+      >
+        <div className="mb-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_180px_180px]">
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search customer, service, staff..."
+            className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
+          />
+          <select
+            value={dateFilter}
+            onChange={(event) => setDateFilter(event.target.value as typeof dateFilter)}
+            className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
+          >
+            <option value="all">All dates</option>
+            <option value="today">Today</option>
+            <option value="upcoming">Upcoming</option>
+            <option value="attention">Attention</option>
+          </select>
+          <select
+            value={status}
+            onChange={(event) => setStatus(event.target.value)}
+            className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
+          >
+            <option value="all">All statuses</option>
+            {bookingStatuses.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="mb-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
+          {bookingStatuses.map((item) => {
+            const count = bookings.filter((booking) => booking.status === item.value).length;
+            return (
+              <button
+                key={item.value}
+                onClick={() => setStatus(status === item.value ? "all" : item.value)}
+                className={cn(
+                  "rounded-[8px] border border-ink/5 bg-mist p-3 text-left transition hover:border-pine/30 hover:bg-white",
+                  status === item.value && "border-pine/40 bg-pine text-white"
+                )}
+              >
+                <p className={cn("text-xs font-semibold uppercase tracking-[0.14em] text-steel", status === item.value && "text-white/70")}>
+                  {item.label}
+                </p>
+                <p className="mt-1 text-2xl font-semibold">{count}</p>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+          <BookingRows items={filtered} onOpen={onOpen} />
+          <aside className="grid content-start gap-4">
+            <div className="rounded-[8px] bg-mist p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-semibold text-ink">Operations watchlist</p>
+                  <p className="mt-1 text-sm leading-6 text-steel">Jobs that can create confusion, missed work, or lost revenue.</p>
+                </div>
+                <Status label={`${attentionBookings.length}`} />
+              </div>
+              <div className="mt-4 grid gap-2">
+                {attentionBookings.slice(0, 6).map((booking) => (
+                  <button
+                    key={booking.id}
+                    onClick={() => onOpen({ type: "booking", item: booking })}
+                    className="rounded-[8px] bg-white p-3 text-left transition hover:bg-mint/20"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="line-clamp-2 font-semibold text-ink">{booking.service.title}</p>
+                      <Status label={booking.status} />
+                    </div>
+                    <p className="mt-1 text-sm text-steel">
+                      {booking.customer.name} · {booking.assignedStaff?.name ?? "Unassigned"}
+                    </p>
+                    <p className="mt-1 text-sm font-medium text-ink">{shortDate(booking.startTime)}</p>
+                  </button>
+                ))}
+                <Empty show={!attentionBookings.length} label="No booking risks right now" />
+              </div>
+            </div>
+            <div className="rounded-[8px] bg-pine p-4 text-white">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-mint">Manager rhythm</p>
+              <div className="mt-4 grid gap-3">
+                <BookingSignal label="Confirm requested jobs" value={bookings.filter((booking) => booking.status === "REQUESTED").length} />
+                <BookingSignal label="Assign every active job" value={bookings.filter((booking) => !booking.assignedStaff && !["COMPLETED", "CANCELLED"].includes(booking.status)).length} />
+                <BookingSignal label="Invoice completed jobs" value={bookings.filter((booking) => booking.status === "COMPLETED" && !booking.invoice).length} />
+              </div>
+            </div>
+          </aside>
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function SetupChecklist({
+  customers,
+  services,
+  staff,
+  bookings,
+  onboarding,
+  activation,
+  tenant,
+  onOpen,
+  onView
+}: {
+  customers: number;
+  services: number;
+  staff: number;
+  bookings: number;
+  onboarding?: OnboardingProfile;
+  activation?: TenantActivationSummary;
+  tenant?: TenantProfile;
+  onOpen: (state: DrawerState) => void;
+  onView: (view: View) => void;
+}) {
+  const completedSteps = new Set(tenant?.onboardingProfile?.completedSteps ?? []);
+  const whatsappReady =
+    Boolean(onboarding?.whatsappNumber) ||
+    completedSteps.has("whatsappPlanned") ||
+    tenant?.onboardingProfile?.setupStatus === "READY";
+  const localItems = [
+    {
+      label: "Business profile ready",
+      detail: tenant ? `${tenant.businessName} · ${tenant.industry}` : "Tenant profile is active.",
+      done: Boolean(tenant),
+      icon: Building2,
+      action: "Review",
+      onClick: () => onView("settings")
+    },
+    {
+      label: "Services loaded",
+      detail: services ? `${services} services available` : "Add your first service catalog",
+      done: services > 0,
+      icon: Settings2,
+      action: "Services",
+      onClick: () => onView("settings")
+    },
+    {
+      label: "Staff added",
+      detail: staff ? `${staff} team members ready` : "Invite managers and field staff",
+      done: staff > 0,
+      icon: UsersRound,
+      action: "Staff",
+      onClick: () => onView("settings")
+    },
+    {
+      label: "First booking created",
+      detail: bookings ? `${bookings} appointments today` : "Create a booking to prove the flow",
+      done: bookings > 0,
+      icon: CalendarDays,
+      action: "Create",
+      onClick: () => onOpen({ type: "new-booking" })
+    },
+    {
+      label: "Customer list started",
+      detail: customers ? `${customers} customers in the system` : "Import or add customer records",
+      done: customers > 0,
+      icon: UsersRound,
+      action: "Customers",
+      onClick: () => onView("customers")
+    },
+    {
+      label: "WhatsApp automation planned",
+      detail: onboarding?.whatsappNumber
+        ? `Automation number: ${onboarding.whatsappNumber}`
+        : "Connect reminders, on-the-way texts, invoice nudges, and review requests.",
+      done: whatsappReady,
+      icon: MessageSquareText,
+      action: "Settings",
+      onClick: () => onView("settings")
+    }
+  ];
+  const items = activation?.steps.length
+    ? activation.steps.map((step) => ({
+        label: step.label,
+        detail: step.detail,
+        done: step.done,
+        icon: iconForActivationStep(step.id),
+        action: actionForActivationTarget(step.target),
+        onClick: () => handleActivationTarget(step.target, onView, onOpen)
+      }))
+    : localItems;
+  const completed = items.filter((item) => item.done).length;
+  const total = activation?.total ?? items.length;
+  const score = activation?.score ?? Math.round((completed / items.length) * 100);
+
+  return (
+    <section className="overflow-hidden rounded-[8px] border border-white/80 bg-ink text-white shadow-soft">
+      <div className="grid gap-5 p-5 xl:grid-cols-[0.8fr_1.2fr]">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-mint">Activation playbook</p>
+          <h2 className="mt-3 text-2xl font-semibold">
+            {activation?.launchReady ? "Tenant is launch-ready." : "Get the tenant revenue-ready."}
+          </h2>
+          <p className="mt-3 leading-7 text-white/68">
+            This checklist keeps onboarding focused on the operating pieces that make a business pay:
+            services, staff, bookings, customers, and automation.
+          </p>
+          {activation?.nextStep ? (
+            <p className="mt-3 rounded-[8px] bg-white/8 p-3 text-sm leading-6 text-white/72">
+              Next: {activation.nextStep.label}. {activation.nextStep.detail}
+            </p>
+          ) : onboarding?.biggestProblem ? (
+            <p className="mt-3 rounded-[8px] bg-white/8 p-3 text-sm leading-6 text-white/72">
+              Priority: {onboarding.biggestProblem}
+            </p>
+          ) : null}
+          <div className="mt-5">
+            <div className="mb-2 flex items-center justify-between text-sm font-semibold">
+              <span>{activation?.completed ?? completed} of {total} complete</span>
+              <span>{score}%</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-white/12">
+              <div className="h-full rounded-full bg-mint" style={{ width: `${score}%` }} />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-2 md:grid-cols-2">
+          {items.map((item) => (
+            <button
+              key={item.label}
+              onClick={item.onClick}
+              className="flex min-h-[104px] gap-3 rounded-[8px] bg-white p-3 text-left text-ink transition hover:bg-mint"
+            >
+              <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px]", item.done ? "bg-pine text-white" : "bg-mist text-pine")}>
+                {item.done ? <CheckCircle2 className="h-5 w-5" /> : <item.icon className="h-5 w-5" />}
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-semibold">{item.label}</p>
+                  <span className="rounded-[8px] bg-mist px-2 py-1 text-xs font-bold text-steel">{item.action}</span>
+                </div>
+                <p className="mt-1 text-sm leading-6 text-steel">{item.detail}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function iconForActivationStep(id: string) {
+  const icons: Record<string, typeof Building2> = {
+    business_profile: Building2,
+    service_catalog: Settings2,
+    staff_ready: UsersRound,
+    customer_base: ContactRound,
+    first_booking: CalendarDays,
+    automation_ready: MessageSquareText,
+    billing_active: CreditCard
+  };
+  return icons[id] ?? ClipboardCheck;
+}
+
+function actionForActivationTarget(target: string) {
+  const labels: Record<string, string> = {
+    settings: "Settings",
+    customers: "Customers",
+    bookings: "Create"
+  };
+  return labels[target] ?? "Open";
+}
+
+function handleActivationTarget(
+  target: string,
+  onView: (view: View) => void,
+  onOpen: (state: DrawerState) => void
+) {
+  if (target === "bookings") {
+    onOpen({ type: "new-booking" });
+    return;
+  }
+  if (target === "customers" || target === "settings") {
+    onView(target);
+  }
+}
+
+function FieldView({ items, onOpen }: { items?: Booking[]; onOpen: (state: DrawerState) => void }) {
+  const queryClient = useQueryClient();
+  const today = new Date().toISOString().slice(0, 10);
+  const [date, setDate] = useState(today);
+  const [assigning, setAssigning] = useState<FieldDispatchJob | null>(null);
+  const [staffId, setStaffId] = useState("");
+  const [dispatchNote, setDispatchNote] = useState("");
+  const dispatch = useQuery({
+    queryKey: ["field-dispatch", date],
+    queryFn: () => api.fieldDispatch(date)
+  });
+  const communicationHealth = useQuery({
+    queryKey: ["communication-health"],
+    queryFn: api.communicationHealth
+  });
+  const schedulingConflicts = useQuery({
+    queryKey: ["scheduling-conflicts", date],
+    queryFn: () => api.schedulingConflicts(date)
+  });
+  const jobs = dispatch.data?.jobs ?? items ?? [];
+  const complete = useMutation({
+    mutationFn: (bookingId: string) =>
+      api.completeFieldJob(bookingId, {
+        checklist: [
+          { label: "Arrived on site", done: true },
+          { label: "Service completed", done: true },
+          { label: "Customer notified", done: true },
+          { label: "Invoice ready", done: true }
+        ],
+        staffNotes: "Completed from field board quick action.",
+        autoInvoice: true
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries();
+    }
+  });
+  const assign = useMutation({
+    mutationFn: () => {
+      if (!assigning || !staffId) throw new Error("Choose a crew member");
+      return api.assignFieldJob(assigning.id, { staffId, dispatchNote: dispatchNote || undefined });
+    },
+    onSuccess: () => {
+      setAssigning(null);
+      setStaffId("");
+      setDispatchNote("");
+      void queryClient.invalidateQueries();
+    }
+  });
+
+  return (
+    <div className="grid gap-4">
+      <Panel title="Dispatch readiness" icon={Route}>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            <MiniStat label="Jobs" value={dispatch.data?.summary.totalJobs ?? jobs.length} />
+            <MiniStat label="Ready" value={dispatch.data?.summary.ready ?? 0} />
+            <MiniStat label="Unassigned" value={dispatch.data?.summary.unassigned ?? 0} danger={(dispatch.data?.summary.unassigned ?? 0) > 0} />
+            <MiniStat label="Confirm" value={dispatch.data?.summary.needsConfirmation ?? 0} danger={(dispatch.data?.summary.needsConfirmation ?? 0) > 0} />
+            <MiniStat label="Active" value={dispatch.data?.summary.inProgress ?? 0} />
+            <MiniStat label="Done" value={dispatch.data?.summary.completed ?? 0} />
+          </div>
+          <input
+            type="date"
+            value={date}
+            onChange={(event) => setDate(event.target.value)}
+            className="h-11 rounded-[8px] border border-ink/10 bg-mist px-3 text-sm font-semibold outline-none focus:border-pine"
+          />
+        </div>
+
+        <div className="mt-4 grid gap-3 lg:grid-cols-3">
+          {(dispatch.data?.staffLoad ?? []).map((member) => (
+            <div key={member.id} className="rounded-[8px] bg-mist p-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="truncate font-semibold text-ink">{member.name}</p>
+                <Status label={`${member.jobs} jobs`} />
+              </div>
+              <p className="mt-1 text-sm text-steel">{Math.round(member.minutes / 60)}h scheduled</p>
+              <p className="mt-2 truncate text-sm font-medium text-steel">
+                {member.nextJob ? `Next: ${member.nextJob.service.title}` : "No active job"}
+              </p>
+            </div>
+          ))}
+        </div>
+      </Panel>
+
+      <Panel title="Communication health" icon={MessageSquareText}>
+        <div className="grid gap-3 sm:grid-cols-4">
+          <MiniStat label="Risks" value={communicationHealth.data?.summary.risks ?? 0} danger={(communicationHealth.data?.summary.risks ?? 0) > 0} />
+          <MiniStat label="Confirm" value={communicationHealth.data?.summary.missingConfirmation ?? 0} />
+          <MiniStat label="On-way" value={communicationHealth.data?.summary.missingOnTheWay ?? 0} danger={(communicationHealth.data?.summary.missingOnTheWay ?? 0) > 0} />
+          <MiniStat label="Review" value={communicationHealth.data?.summary.missingReview ?? 0} />
+        </div>
+        <div className="mt-4 grid gap-2">
+          {(communicationHealth.data?.risks ?? []).slice(0, 5).map((risk) => (
+            <button
+              key={`${risk.bookingId}-${risk.type}`}
+              onClick={() => {
+                const match = jobs.find((job) => job.id === risk.bookingId);
+                if (match) onOpen({ type: "booking", item: match });
+              }}
+              className="flex items-center justify-between gap-3 rounded-[8px] bg-mist p-3 text-left"
+            >
+              <span className="min-w-0">
+                <span className="block truncate font-semibold text-ink">{risk.title}</span>
+                <span className="block truncate text-sm text-steel">
+                  {risk.customerName} · {risk.serviceTitle} · {shortDate(risk.startTime)}
+                </span>
+              </span>
+              <Status label={risk.severity} />
+            </button>
+          ))}
+          <Empty show={!communicationHealth.isLoading && !(communicationHealth.data?.risks.length)} label="No communication gaps" />
+        </div>
+      </Panel>
+
+      <Panel title="Scheduling intelligence" icon={AlertTriangle}>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <MiniStat label="Bookings" value={schedulingConflicts.data?.summary.bookings ?? 0} />
+          <MiniStat label="Risks" value={schedulingConflicts.data?.summary.risks ?? 0} danger={(schedulingConflicts.data?.summary.risks ?? 0) > 0} />
+          <MiniStat label="Critical" value={schedulingConflicts.data?.summary.critical ?? 0} danger={(schedulingConflicts.data?.summary.critical ?? 0) > 0} />
+        </div>
+        <div className="mt-4 grid gap-2">
+          {(schedulingConflicts.data?.risks ?? []).slice(0, 6).map((risk) => (
+            <button
+              key={`${risk.bookingId}-${risk.type}`}
+              onClick={() => {
+                const match = jobs.find((job) => job.id === risk.bookingId);
+                if (match) onOpen({ type: "booking", item: match });
+              }}
+              className="flex items-center justify-between gap-3 rounded-[8px] bg-mist p-3 text-left"
+            >
+              <span className="min-w-0">
+                <span className="block truncate font-semibold text-ink">{risk.title}</span>
+                <span className="block truncate text-sm text-steel">
+                  {risk.customerName} · {risk.serviceTitle} · {risk.assignedStaffName ?? "Unassigned"}
+                </span>
+              </span>
+              <Status label={`${risk.score}% risk`} />
+            </button>
+          ))}
+          <Empty show={!schedulingConflicts.isLoading && !(schedulingConflicts.data?.risks.length)} label="No scheduling risks" />
+        </div>
+      </Panel>
+
+      <Panel title="Route and job readiness" icon={Wrench}>
+        <div className="grid gap-3">
+        {jobs.map((item) => {
+          const dispatchJob = asDispatchJob(item);
+          return (
+          <Row key={item.id} onClick={() => onOpen({ type: "field-job", item })}>
+            <div className={cn("flex h-10 w-10 items-center justify-center rounded-[8px]", dispatchJob?.readiness.ready ? "bg-mint/20 text-pine" : "bg-amber/20 text-ink")}>
+              <Wrench className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-semibold text-ink">{item.service.title}</p>
+              <p className="truncate text-sm text-steel">
+                {item.customer.name} · {shortDate(item.startTime)} · {item.assignedStaff?.name ?? "Unassigned"}
+              </p>
+              {dispatchJob?.readiness.blockers.length ? (
+                <p className="mt-1 truncate text-xs font-semibold text-coral">
+                  {dispatchJob.readiness.blockers.join(" · ")}
+                </p>
+              ) : null}
+            </div>
+            {dispatchJob ? <Status label={`${dispatchJob.readiness.score}% ready`} /> : null}
+            <Status label={item.status} />
+            {item.fieldJobReport?.status ? <Status label={item.fieldJobReport.status} /> : null}
+            {!item.assignedStaff ? (
+              <button
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setAssigning(dispatchJob ?? null);
+                }}
+                className="flex h-9 items-center gap-2 rounded-[8px] bg-ink px-3 text-sm font-semibold text-white"
+              >
+                <UserCheck className="h-4 w-4" />
+                Assign
+              </button>
+            ) : null}
+            {item.status !== "COMPLETED" ? (
+              <button
+                onClick={(event) => {
+                  event.stopPropagation();
+                  complete.mutate(item.id);
+                }}
+                className="flex h-9 items-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white"
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                Complete
+              </button>
+            ) : null}
+          </Row>
+          );
+        })}
+        <Empty show={!jobs.length && !dispatch.isLoading} label="No field jobs today" />
+        {dispatch.isLoading ? <p className="text-sm font-semibold text-steel">Loading dispatch board...</p> : null}
+      </div>
+      </Panel>
+
+      {assigning ? (
+        <Panel title="Assign crew" icon={UserCheck}>
+          <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
+            <SelectField label="Crew" value={staffId} onChange={setStaffId}>
+              <option value="">Choose crew</option>
+              {(dispatch.data?.staffLoad ?? []).map((member) => (
+                <option key={member.id} value={member.id}>
+                  {member.name} · {member.jobs} jobs
+                </option>
+              ))}
+            </SelectField>
+            <InputField label="Dispatch note" value={dispatchNote} onChange={setDispatchNote} />
+            <button
+              onClick={() => assign.mutate()}
+              disabled={assign.isPending || !staffId}
+              className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {assign.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserCheck className="h-4 w-4" />}
+              Assign
+            </button>
+          </div>
+          <p className="mt-3 text-sm text-steel">
+            {assigning.customer.name} · {assigning.service.title} · {shortDate(assigning.startTime)}
+          </p>
+          {assign.error ? <ErrorText error={assign.error} /> : null}
+        </Panel>
+      ) : null}
+    </div>
+  );
+}
+
+function asDispatchJob(item: Booking | FieldDispatchJob): FieldDispatchJob | null {
+  return "readiness" in item ? item : null;
+}
+
+function MoneyView({
+  invoices,
+  payments,
+  onOpen
+}: {
+  invoices?: Invoice[];
+  payments?: Payment[];
+  onOpen: (state: DrawerState) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [invoiceQuery, setInvoiceQuery] = useState("");
+  const [invoiceStatus, setInvoiceStatus] = useState<InvoiceStatus | "all">("all");
+  const [riskFilter, setRiskFilter] = useState<"all" | "high" | "no-link" | "overdue">("all");
+  const collections = useQuery({ queryKey: ["collections"], queryFn: api.collectionSummary });
+  const scanCollections = useMutation({
+    mutationFn: api.scanCollections,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["collections"] });
+      void queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      void queryClient.invalidateQueries({ queryKey: ["actions"] });
+    }
+  });
+  const runAutomation = useMutation({
+    mutationFn: api.runCollectionsAutomation,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["collections"] });
+      void queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      void queryClient.invalidateQueries({ queryKey: ["payments"] });
+      void queryClient.invalidateQueries({ queryKey: ["actions"] });
+    }
+  });
+  const openInvoices = useMemo(
+    () => collections.data?.invoices ?? (invoices ?? []).filter((invoice) => !["PAID", "VOID"].includes(invoice.status)),
+    [collections.data?.invoices, invoices]
+  );
+  const openTotal = useMemo(
+    () => collections.data?.summary.openCents ?? openInvoices.reduce((sum, invoice) => sum + invoice.totalCents, 0),
+    [collections.data?.summary.openCents, openInvoices]
+  );
+  const paidTotal = useMemo(
+    () =>
+      (invoices ?? [])
+        .filter((invoice) => invoice.status === "PAID")
+        .reduce((sum, invoice) => sum + invoice.totalCents, 0),
+    [invoices]
+  );
+  const agingBuckets = collections.data?.agingBuckets ?? [];
+  const overdueTotal = collections.data?.summary.overdueCents ?? 0;
+  const noLinkCount = collections.data?.summary.noPaymentLinkCount ?? openInvoices.filter((invoice) => !invoice.paymentUrl).length;
+  const invoicePool = useMemo(
+    () => collections.data?.invoices ?? invoices ?? [],
+    [collections.data?.invoices, invoices]
+  );
+  const filteredInvoices = useMemo(() => {
+    const query = invoiceQuery.trim().toLowerCase();
+    return invoicePool
+      .filter((invoice) => {
+        const matchesStatus = invoiceStatus === "all" || invoice.status === invoiceStatus;
+        const matchesRisk =
+          riskFilter === "all" ||
+          (riskFilter === "high" && (invoice.collectionRisk ?? 0) >= 70) ||
+          (riskFilter === "no-link" && !invoice.paymentUrl && !invoice.hasPaymentLink) ||
+          (riskFilter === "overdue" && invoice.status === "OVERDUE");
+        const haystack = [
+          invoice.invoiceNo,
+          invoice.customer.name,
+          invoice.customer.phone,
+          invoice.booking?.service?.title ?? "",
+          invoice.status
+        ]
+          .join(" ")
+          .toLowerCase();
+        return matchesStatus && matchesRisk && (!query || haystack.includes(query));
+      })
+      .sort((a, b) => {
+        const riskDiff = (b.collectionRisk ?? 0) - (a.collectionRisk ?? 0);
+        if (riskDiff) return riskDiff;
+        return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+      });
+  }, [invoicePool, invoiceQuery, invoiceStatus, riskFilter]);
+  const collectionSignals = [
+    {
+      label: "Send payment links",
+      value: noLinkCount,
+      detail: "Invoices cannot be paid fast without a link."
+    },
+    {
+      label: "Chase overdue",
+      value: collections.data?.summary.overdueCount ?? openInvoices.filter((invoice) => invoice.status === "OVERDUE").length,
+      detail: "These should get a reminder or manager action."
+    },
+    {
+      label: "High risk",
+      value: collections.data?.summary.highRiskCount ?? openInvoices.filter((invoice) => (invoice.collectionRisk ?? 0) >= 70).length,
+      detail: "Prioritize before cash goes cold."
+    }
+  ];
+
+  return (
+    <div className="grid gap-4">
+      <div className="grid gap-4 md:grid-cols-4">
+        <Metric icon={CreditCard} label="Open to collect" value={money(openTotal)} tone="amber" />
+        <Metric icon={AlertTriangle} label="Past due" value={money(overdueTotal)} tone="coral" />
+        <Metric icon={Send} label="Need payment link" value={String(noLinkCount)} tone="pine" />
+        <Metric icon={Banknote} label="Paid total" value={money(collections.data?.summary.paidLast30Cents ?? paidTotal)} tone="mint" />
+      </div>
+
+      <Panel title="Collections command center" icon={DollarSign}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-ink">Cash recovery queue</p>
+            <p className="text-sm text-steel">
+              Prioritized by overdue age, missing payment links, invoice value, and payment attempts.
+            </p>
+          </div>
+          <button
+            onClick={() => scanCollections.mutate()}
+            disabled={scanCollections.isPending}
+            className="flex h-10 items-center justify-center gap-2 rounded-[8px] bg-mist px-4 text-sm font-semibold text-ink disabled:opacity-50"
+          >
+            {scanCollections.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            Scan overdue
+          </button>
+          <button
+            onClick={() => runAutomation.mutate()}
+            disabled={runAutomation.isPending}
+            className="flex h-10 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {runAutomation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            Run automation
+          </button>
+        </div>
+        {runAutomation.data ? (
+          <div className="mt-4 grid gap-3 rounded-[8px] bg-ink p-4 text-white md:grid-cols-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/50">Reminders</p>
+              <p className="mt-1 text-2xl font-semibold">{runAutomation.data.messagesSent}</p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/50">Pay links</p>
+              <p className="mt-1 text-2xl font-semibold">{runAutomation.data.paymentLinksCreated}</p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/50">Receipts</p>
+              <p className="mt-1 text-2xl font-semibold">{runAutomation.data.receiptsSent}</p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/50">Manager actions</p>
+              <p className="mt-1 text-2xl font-semibold">
+                {runAutomation.data.actionsCreatedOrUpdated + runAutomation.data.promiseFollowUpsCreatedOrUpdated}
+              </p>
+            </div>
+          </div>
+        ) : null}
+        <div className="mt-4 grid gap-3 md:grid-cols-4">
+          {agingBuckets.map((bucket) => (
+            <div key={bucket.key} className="rounded-[8px] bg-mist p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-steel">{bucket.label}</p>
+              <p className="mt-2 text-2xl font-semibold text-ink">{money(bucket.totalCents)}</p>
+              <p className="mt-1 text-sm text-steel">{bucket.count} invoices</p>
+            </div>
+          ))}
+          <Empty show={!agingBuckets.length && !collections.isLoading} label="No aging data yet" />
+        </div>
+      </Panel>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(340px,0.75fr)]">
+        <Panel title="Invoice workbench" icon={CreditCard}>
+          <div className="mb-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_160px_160px]">
+            <input
+              value={invoiceQuery}
+              onChange={(event) => setInvoiceQuery(event.target.value)}
+              placeholder="Search invoice, customer, service..."
+              className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
+            />
+            <select
+              value={riskFilter}
+              onChange={(event) => setRiskFilter(event.target.value as typeof riskFilter)}
+              className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
+            >
+              <option value="all">All risk</option>
+              <option value="high">High risk</option>
+              <option value="no-link">No link</option>
+              <option value="overdue">Overdue</option>
+            </select>
+            <select
+              value={invoiceStatus}
+              onChange={(event) => setInvoiceStatus(event.target.value as InvoiceStatus | "all")}
+              className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
+            >
+              <option value="all">All statuses</option>
+              {invoiceStatuses.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="mb-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+            {invoiceStatuses.map((item) => {
+              const count = invoicePool.filter((invoice) => invoice.status === item.value).length;
+              return (
+                <button
+                  key={item.value}
+                  onClick={() => setInvoiceStatus(invoiceStatus === item.value ? "all" : item.value)}
+                  className={cn(
+                    "rounded-[8px] border border-ink/5 bg-mist p-3 text-left transition hover:border-pine/30 hover:bg-white",
+                    invoiceStatus === item.value && "border-pine/40 bg-pine text-white"
+                  )}
+                >
+                  <p className={cn("text-xs font-semibold uppercase tracking-[0.14em] text-steel", invoiceStatus === item.value && "text-white/70")}>
+                    {item.label}
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold">{count}</p>
+                </button>
+              );
+            })}
+          </div>
+          <div className="grid gap-3">
+            {filteredInvoices.map((invoice) => (
+              <Row key={invoice.id} onClick={() => onOpen({ type: "invoice", item: invoice })}>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold text-ink">{invoice.invoiceNo}</p>
+                    <Status label={invoice.status} />
+                    {invoice.hasPaymentLink || invoice.paymentUrl ? (
+                      <span className="rounded-full bg-mint/20 px-2 py-1 text-xs font-semibold text-pine">link ready</span>
+                    ) : (
+                      <span className="rounded-full bg-amber/20 px-2 py-1 text-xs font-semibold text-ink">no link</span>
+                    )}
+                  </div>
+                  <p className="truncate text-sm text-steel">
+                    {invoice.customer.name} · due {shortDate(invoice.dueDate)} · risk {invoice.collectionRisk ?? 0}
+                  </p>
+                </div>
+                <p className="font-semibold text-ink">{money(invoice.totalCents)}</p>
+              </Row>
+            ))}
+            <Empty show={!filteredInvoices.length} label="No invoices match these filters" />
+          </div>
+        </Panel>
+        <Panel title="Payment timeline" icon={Banknote}>
+          <div className="mb-4 grid gap-3">
+            {collectionSignals.map((signal) => (
+              <button
+                key={signal.label}
+                onClick={() =>
+                  setRiskFilter(
+                    signal.label === "Send payment links"
+                      ? "no-link"
+                      : signal.label === "Chase overdue"
+                        ? "overdue"
+                        : "high"
+                  )
+                }
+                className="rounded-[8px] bg-mist p-3 text-left transition hover:bg-white"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-semibold text-ink">{signal.label}</p>
+                  <span className="rounded-[8px] bg-white px-2.5 py-1 text-sm font-bold text-pine">{signal.value}</span>
+                </div>
+                <p className="mt-1 text-sm leading-6 text-steel">{signal.detail}</p>
+              </button>
+            ))}
+          </div>
+          <div className="grid gap-3">
+            {(payments ?? []).slice(0, 8).map((payment) => (
+              <Row key={payment.id}>
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-ink">{payment.invoice.invoiceNo}</p>
+                  <p className="text-sm text-steel">{payment.provider}</p>
+                </div>
+                <p className="font-semibold text-ink">{money(payment.amountCents)}</p>
+                <Status label={payment.status} />
+              </Row>
+            ))}
+            <Empty show={!payments?.length} label="No payments yet" />
+          </div>
+        </Panel>
+      </div>
+      {collections.error ? <ErrorText error={collections.error} /> : null}
+      {scanCollections.error ? <ErrorText error={scanCollections.error} /> : null}
+      {runAutomation.error ? <ErrorText error={runAutomation.error} /> : null}
+    </div>
+  );
+}
+
+function SettingsView({
+  tenant,
+  billing,
+  onboarding,
+  services,
+  staff
+}: {
+  tenant?: TenantProfile;
+  billing?: TenantBillingSummary;
+  onboarding?: OnboardingProfile;
+  services?: Service[];
+  staff?: StaffMember[];
+}) {
+  if (!tenant) return <LoadingPanel />;
+
+  return (
+    <SettingsForm
+      key={`${tenant.id}-${onboarding?.updatedAt ?? "new"}`}
+      tenant={tenant}
+      billing={billing}
+      onboarding={onboarding}
+      services={services ?? []}
+      staff={staff ?? []}
+    />
+  );
+}
+
+function SettingsForm({
+  tenant,
+  billing,
+  onboarding,
+  services,
+  staff
+}: {
+  tenant: TenantProfile;
+  billing?: TenantBillingSummary;
+  onboarding?: OnboardingProfile;
+  services: Service[];
+  staff: StaffMember[];
+}) {
+  const queryClient = useQueryClient();
+  const [businessName, setBusinessName] = useState(tenant.businessName);
+  const [industry, setIndustry] = useState(tenant.industry);
+  const [logoUrl, setLogoUrl] = useState(tenant.logoUrl ?? "");
+  const [coverImageUrl, setCoverImageUrl] = useState(tenant.coverImageUrl ?? "");
+  const [brandColor, setBrandColor] = useState(tenant.brandColor ?? "#0f766e");
+  const [serviceArea, setServiceArea] = useState(tenant.receptionistConfig?.serviceArea ?? "");
+  const [whatsappNumber, setWhatsappNumber] = useState(onboarding?.whatsappNumber ?? "");
+  const [staffCount, setStaffCount] = useState(onboarding?.staffCount ?? "");
+  const [biggestProblem, setBiggestProblem] = useState(onboarding?.biggestProblem ?? "");
+  const [weekdayHours, setWeekdayHours] = useState(
+    tenant.receptionistConfig?.businessHours?.monday ?? "8:00 AM - 5:00 PM"
+  );
+  const [saturdayHours, setSaturdayHours] = useState(
+    tenant.receptionistConfig?.businessHours?.saturday ?? "Closed"
+  );
+  const [whatsappPlanned, setWhatsappPlanned] = useState(Boolean(onboarding?.whatsappNumber));
+  const [section, setSection] = useState<SettingsSection>("overview");
+  const whatsappStatus = useQuery({ queryKey: ["whatsapp-status"], queryFn: api.whatsappStatus });
+  const whatsappOnboarding = useQuery({ queryKey: ["whatsapp-onboarding"], queryFn: api.whatsappOnboarding });
+  const tenantPlans = useQuery({ queryKey: ["tenant-plans"], queryFn: api.tenantPlans });
+  const automationRuns = useQuery({ queryKey: ["automation-runs"], queryFn: api.automationRuns });
+  const webhookEvents = useQuery({ queryKey: ["whatsapp-events"], queryFn: api.whatsappEvents });
+  const createCheckout = useMutation({
+    mutationFn: api.createTenantBillingCheckout,
+    onSuccess: (data) => {
+      void queryClient.invalidateQueries({ queryKey: ["tenant-billing"] });
+      void queryClient.invalidateQueries({ queryKey: ["activation"] });
+      if (data.url) window.open(data.url, "_blank", "noopener,noreferrer");
+    }
+  });
+  const createPortal = useMutation({
+    mutationFn: api.createTenantBillingPortal,
+    onSuccess: (data) => {
+      if (data.url) window.open(data.url, "_blank", "noopener,noreferrer");
+    }
+  });
+  const scanBilling = useMutation({
+    mutationFn: api.scanBillingRecovery,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["actions"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      void queryClient.invalidateQueries({ queryKey: ["tenant-billing"] });
+      void queryClient.invalidateQueries({ queryKey: ["activation"] });
+    }
+  });
+
+  const save = useMutation({
+    mutationFn: () =>
+      api.updateTenant({
+        businessName,
+        industry,
+        logoUrl,
+        coverImageUrl,
+        brandColor,
+        serviceArea,
+        whatsappNumber,
+        staffCount,
+        biggestProblem,
+        whatsappPlanned,
+        completedSteps: [
+          "businessProfile",
+          "operatingDetails",
+          ...(whatsappPlanned || whatsappNumber ? ["whatsappPlanned"] : []),
+          ...(staffCount ? ["staffPlan"] : [])
+        ],
+        businessHours: {
+          monday: weekdayHours,
+          tuesday: weekdayHours,
+          wednesday: weekdayHours,
+          thursday: weekdayHours,
+          friday: weekdayHours,
+          saturday: saturdayHours,
+          sunday: "Closed"
+        }
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["tenant"] });
+      void queryClient.invalidateQueries({ queryKey: ["onboarding"] });
+      void queryClient.invalidateQueries({ queryKey: ["activation"] });
+    }
+  });
+
+  const settingsSections: Array<{
+    id: SettingsSection;
+    label: string;
+    description: string;
+    icon: typeof Settings2;
+    count?: string | number;
+  }> = [
+    { id: "overview", label: "Overview", description: "Setup health and quick links", icon: ClipboardCheck },
+    { id: "brand", label: "Brand & storefront", description: "Logo, cover, color, booking link", icon: Building2 },
+    { id: "services", label: "Services", description: "Pricing, duration, service photos", icon: Wrench, count: services.length },
+    { id: "team", label: "Team", description: "Staff users, roles, profile photos", icon: UsersRound, count: staff.length },
+    {
+      id: "billing",
+      label: "Billing",
+      description: "Plan, usage, payment status",
+      icon: CreditCard,
+      count: billing?.subscriptionStatus?.replaceAll("_", " ") ?? "Trial"
+    },
+    {
+      id: "whatsapp",
+      label: "WhatsApp",
+      description: "Templates, delivery, production readiness",
+      icon: MessageSquareText,
+      count: whatsappStatus.data?.provider.ready ? "Ready" : "Setup"
+    }
+  ];
+
+  return (
+    <div className="grid gap-5">
+      <div className="rounded-[8px] border border-white/80 bg-white/90 p-4 shadow-soft backdrop-blur">
+        <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pine">Workspace settings</p>
+            <h2 className="mt-1 text-2xl font-semibold text-ink">Control center</h2>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-steel">
+              Configure the business in focused sections. Start with brand and services, then connect payments and WhatsApp.
+            </p>
+          </div>
+          <button
+            onClick={() => save.mutate()}
+            disabled={save.isPending || !businessName || !industry}
+            className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 font-semibold text-white disabled:opacity-50"
+          >
+            {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Save changes
+          </button>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {settingsSections.map((item) => (
+            <SettingsSectionButton key={item.id} item={item} active={section === item.id} onClick={() => setSection(item.id)} />
+          ))}
+        </div>
+        {save.error ? <ErrorText error={save.error} /> : null}
+        {save.isSuccess ? (
+          <p className="mt-4 rounded-[8px] bg-mint/30 px-3 py-2 text-sm font-semibold text-ink">
+            Settings saved. Your storefront and operations profile are updated.
+          </p>
+        ) : null}
+      </div>
+
+      {section === "overview" ? (
+        <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+          <Panel title="Setup readiness" icon={ClipboardCheck}>
+            <div className="grid gap-3">
+              <ReadinessRow label="Business profile" done={Boolean(tenant?.businessName && tenant?.industry)} />
+              <ReadinessRow label="Operating area" done={Boolean(serviceArea)} />
+              <ReadinessRow label="Business hours" done={Boolean(weekdayHours)} />
+              <ReadinessRow label="WhatsApp plan" done={Boolean(whatsappNumber || whatsappPlanned)} />
+              <ReadinessRow label="Staff plan" done={Boolean(staffCount)} />
+            </div>
+            <div className="mt-4 rounded-[8px] bg-mist p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-steel">Status</p>
+              <p className="mt-1 text-2xl font-semibold text-ink">
+                {tenant?.onboardingProfile?.setupStatus ?? onboarding?.setupStatus ?? "IN_PROGRESS"}
+              </p>
+              <p className="mt-2 text-sm leading-6 text-steel">
+                These basics power the receptionist, booking page, staff flows, and customer reminders.
+              </p>
+            </div>
+          </Panel>
+          <div className="grid gap-4">
+            <SettingsQuickPreview
+              tenant={tenant}
+              businessName={businessName}
+              industry={industry}
+              logoUrl={logoUrl}
+              coverImageUrl={coverImageUrl}
+              brandColor={brandColor}
+              services={services}
+              staff={staff}
+              onOpenBrand={() => setSection("brand")}
+              onOpenServices={() => setSection("services")}
+              onOpenTeam={() => setSection("team")}
+            />
+            <PortalLinkPanel tenant={tenant} />
+          </div>
+        </div>
+      ) : null}
+
+      {section === "brand" ? (
+        <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+          <Panel title="Brand and booking storefront" icon={Building2}>
+            <div className="grid gap-4 md:grid-cols-2">
+              <InputField label="Business name" value={businessName} onChange={setBusinessName} />
+              <InputField label="Industry" value={industry} onChange={setIndustry} />
+              <MediaUploadField label="Business logo" value={logoUrl} onChange={setLogoUrl} folder="tenants/logos" />
+              <MediaUploadField label="Cover image" value={coverImageUrl} onChange={setCoverImageUrl} folder="tenants/covers" />
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-ink">Brand color</span>
+                <div className="flex h-11 overflow-hidden rounded-[8px] border border-ink/10 bg-mist">
+                  <input
+                    type="color"
+                    value={brandColor}
+                    onChange={(event) => setBrandColor(event.target.value)}
+                    className="h-full w-14 cursor-pointer border-0 bg-transparent"
+                  />
+                  <input
+                    value={brandColor}
+                    onChange={(event) => setBrandColor(event.target.value)}
+                    className="min-w-0 flex-1 bg-transparent px-3 text-sm font-semibold outline-none"
+                  />
+                </div>
+              </label>
+              <InputField label="Service area" value={serviceArea} onChange={setServiceArea} />
+              <InputField label="WhatsApp number" value={whatsappNumber} onChange={setWhatsappNumber} />
+              <InputField label="Staff plan" value={staffCount} onChange={setStaffCount} />
+              <InputField label="Weekday hours" value={weekdayHours} onChange={setWeekdayHours} />
+              <InputField label="Saturday hours" value={saturdayHours} onChange={setSaturdayHours} />
+              <label className="flex min-h-11 items-center gap-3 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink">
+                <input
+                  type="checkbox"
+                  checked={whatsappPlanned}
+                  onChange={(event) => setWhatsappPlanned(event.target.checked)}
+                  className="h-5 w-5 accent-pine"
+                />
+                WhatsApp automation planned
+              </label>
+            </div>
+            <label className="mt-4 block">
+              <span className="mb-2 block text-sm font-medium text-ink">Biggest operational problem</span>
+              <textarea
+                value={biggestProblem}
+                onChange={(event) => setBiggestProblem(event.target.value)}
+                className="min-h-28 w-full rounded-[8px] border border-ink/10 bg-mist p-3 outline-none focus:border-pine"
+              />
+            </label>
+          </Panel>
+          <div className="grid content-start gap-4">
+            <StorefrontPreview
+              businessName={businessName}
+              industry={industry}
+              logoUrl={logoUrl}
+              coverImageUrl={coverImageUrl}
+              brandColor={brandColor}
+            />
+            <PortalLinkPanel tenant={tenant} />
+          </div>
+        </div>
+      ) : null}
+
+      {section === "services" ? (
+        <div className="grid gap-4">
+          <ServiceManager services={services} />
+          <TimeslotGenerator services={services} staff={staff} />
+        </div>
+      ) : null}
+      {section === "team" ? <StaffManager staff={staff} /> : null}
+
+      {section === "billing" ? (
+        <BillingSelfServePanel
+          billing={billing}
+          plans={tenantPlans.data ?? []}
+          checkoutPending={createCheckout.isPending}
+          portalPending={createPortal.isPending}
+          scanPending={scanBilling.isPending}
+          error={createCheckout.error ?? createPortal.error ?? scanBilling.error}
+          onCheckout={(planId) => createCheckout.mutate(planId)}
+          onPortal={() => createPortal.mutate()}
+          onScan={() => scanBilling.mutate()}
+        />
+      ) : null}
+
+      {section === "whatsapp" ? (
+        <WhatsAppOpsPanel
+          status={whatsappStatus.data}
+          onboarding={whatsappOnboarding.data}
+          runs={automationRuns.data}
+          events={webhookEvents.data}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function SettingsSectionButton({
+  item,
+  active,
+  onClick
+}: {
+  item: {
+    id: SettingsSection;
+    label: string;
+    description: string;
+    icon: typeof Settings2;
+    count?: string | number;
+  };
+  active: boolean;
+  onClick: () => void;
+}) {
+  const Icon = item.icon;
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "flex min-h-[88px] items-start gap-3 rounded-[8px] border p-3 text-left transition",
+        active ? "border-pine bg-pine text-white shadow-soft" : "border-ink/5 bg-mist/70 text-ink hover:border-pine/30 hover:bg-white"
+      )}
+    >
+      <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px]", active ? "bg-white/16" : "bg-white text-pine")}>
+        <Icon className="h-5 w-5" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center justify-between gap-2">
+          <span className="font-semibold">{item.label}</span>
+          {item.count !== undefined ? (
+            <span className={cn("rounded-[8px] px-2 py-1 text-xs font-semibold", active ? "bg-white/16 text-white" : "bg-white text-steel")}>
+              {item.count}
+            </span>
+          ) : null}
+        </span>
+        <span className={cn("mt-1 block text-sm leading-5", active ? "text-white/76" : "text-steel")}>{item.description}</span>
+      </span>
+    </button>
+  );
+}
+
+function SettingsQuickPreview({
+  tenant,
+  businessName,
+  industry,
+  logoUrl,
+  coverImageUrl,
+  brandColor,
+  services,
+  staff,
+  onOpenBrand,
+  onOpenServices,
+  onOpenTeam
+}: {
+  tenant: TenantProfile;
+  businessName: string;
+  industry: string;
+  logoUrl: string;
+  coverImageUrl: string;
+  brandColor: string;
+  services: Service[];
+  staff: StaffMember[];
+  onOpenBrand: () => void;
+  onOpenServices: () => void;
+  onOpenTeam: () => void;
+}) {
+  return (
+    <Panel title="Business snapshot" icon={Building2}>
+      <div className="grid gap-3 lg:grid-cols-[1fr_0.9fr]">
+        <StorefrontPreview
+          businessName={businessName}
+          industry={industry}
+          logoUrl={logoUrl}
+          coverImageUrl={coverImageUrl}
+          brandColor={brandColor}
+          compact
+        />
+        <div className="grid gap-3">
+          <button onClick={onOpenBrand} className="rounded-[8px] bg-mist p-4 text-left transition hover:bg-white">
+            <p className="font-semibold text-ink">Brand and booking page</p>
+            <p className="mt-1 text-sm text-steel">Public link: /book/{tenant.slug}</p>
+          </button>
+          <button onClick={onOpenServices} className="rounded-[8px] bg-mist p-4 text-left transition hover:bg-white">
+            <p className="font-semibold text-ink">{services.length} services configured</p>
+            <p className="mt-1 text-sm text-steel">Keep pricing and service photos customer-ready.</p>
+          </button>
+          <button onClick={onOpenTeam} className="rounded-[8px] bg-mist p-4 text-left transition hover:bg-white">
+            <p className="font-semibold text-ink">{staff.length} team members</p>
+            <p className="mt-1 text-sm text-steel">Owners, managers, and field staff access.</p>
+          </button>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function StorefrontPreview({
+  businessName,
+  industry,
+  logoUrl,
+  coverImageUrl,
+  brandColor,
+  compact
+}: {
+  businessName: string;
+  industry: string;
+  logoUrl: string;
+  coverImageUrl: string;
+  brandColor: string;
+  compact?: boolean;
+}) {
+  return (
+    <div className={cn("overflow-hidden rounded-[8px] border border-ink/5 bg-mist", compact ? "min-h-56" : "min-h-72")}>
+      <div className={cn("relative", compact ? "h-40" : "h-52")}>
+        {coverImageUrl ? (
+          <Image src={coverImageUrl} alt="" fill sizes="(min-width: 1024px) 440px, 100vw" className="object-cover" />
+        ) : (
+          <div className="h-full w-full bg-mist" />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-ink/72 via-ink/24 to-transparent" />
+        <div className="absolute bottom-4 left-4 right-4 flex items-end gap-3">
+          <Avatar name={businessName} imageUrl={logoUrl} size="lg" />
+          <div className="min-w-0 text-white">
+            <p className="truncate text-xl font-semibold">{businessName}</p>
+            <p className="truncate text-sm text-white/76">{industry}</p>
+          </div>
+        </div>
+      </div>
+      <div className="grid gap-3 p-4 sm:grid-cols-[1fr_auto] sm:items-center">
+        <div>
+          <p className="text-sm font-semibold text-ink">Customer booking storefront</p>
+          <p className="mt-1 text-sm text-steel">Logo, cover image, and brand color appear on the public booking page.</p>
+        </div>
+        <div className="flex items-center gap-2 rounded-[8px] bg-white px-3 py-2">
+          <span className="h-5 w-5 rounded-full" style={{ backgroundColor: brandColor || "#0f766e" }} />
+          <span className="text-sm font-semibold text-ink">{brandColor || "#0f766e"}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PortalLinkPanel({ tenant }: { tenant: TenantProfile }) {
+  const [copied, setCopied] = useState(false);
+  const portalPath = `/book/${tenant.slug}`;
+  const portalUrl =
+    typeof window === "undefined" ? portalPath : `${window.location.origin}${portalPath}`;
+
+  async function copyLink() {
+    await navigator.clipboard.writeText(portalUrl);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1800);
+  }
+
+  return (
+    <Panel title="Customer booking link" icon={CalendarDays}>
+      <div className="rounded-[8px] bg-mist p-4">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-steel">Public portal</p>
+        <p className="mt-2 break-all text-lg font-semibold text-ink">{portalUrl}</p>
+      </div>
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        <button
+          onClick={copyLink}
+          className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 text-sm font-semibold text-white"
+        >
+          {copied ? <CheckCircle2 className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+          {copied ? "Copied" : "Copy link"}
+        </button>
+        <a
+          href={portalPath}
+          target="_blank"
+          rel="noreferrer"
+          className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-ink px-4 text-sm font-semibold text-white"
+        >
+          <ExternalLink className="h-4 w-4" />
+          Open portal
+        </a>
+      </div>
+      <p className="mt-3 text-sm leading-6 text-steel">Bookings from this page enter the same operations queue.</p>
+    </Panel>
+  );
+}
+
+function BillingSelfServePanel({
+  billing,
+  plans,
+  checkoutPending,
+  portalPending,
+  scanPending,
+  error,
+  onCheckout,
+  onPortal,
+  onScan
+}: {
+  billing?: TenantBillingSummary;
+  plans: PlatformSubscriptionPlan[];
+  checkoutPending: boolean;
+  portalPending: boolean;
+  scanPending: boolean;
+  error: unknown;
+  onCheckout: (planId?: string) => void;
+  onPortal: () => void;
+  onScan: () => void;
+}) {
+  const [selectedPlanId, setSelectedPlanId] = useState("");
+  const limits = billing?.limits ?? {};
+  const usage = billing?.usage ?? {};
+  const currentPlanId = billing?.subscriptionPlanId ?? billing?.plan?.id ?? "";
+  const selectedPlan = plans.find((plan) => plan.id === selectedPlanId) ?? plans.find((plan) => plan.id === currentPlanId) ?? plans[0];
+  const blocked =
+    billing?.subscriptionStatus === "CANCELED" ||
+    billing?.subscriptionStatus === "UNPAID";
+  return (
+    <Panel title="Billing and plan" icon={CreditCard}>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <PlanStat label="Plan" value={billing?.subscriptionPlan ?? "pilot"} />
+        <PlanStat label="Status" value={billing?.subscriptionStatus ?? "TRIALING"} danger={blocked} />
+        <PlanStat label="Monthly" value={money(billing?.monthlyPriceCents)} />
+        <PlanStat label="Next bill" value={billing?.nextBillingAt ? shortDate(billing.nextBillingAt) : "Not set"} />
+      </div>
+
+      <div className="mt-4 grid gap-2">
+        {(["staff", "customers", "leads", "monthlyBookings"] as const).map((key) => (
+          <UsageBar key={key} label={key} used={usage[key] ?? 0} limit={limits[key]} />
+        ))}
+      </div>
+
+      <div className="mt-4 grid gap-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="font-semibold text-ink">Plan catalog</p>
+            <p className="text-sm text-steel">Choose the plan to use for checkout.</p>
+          </div>
+          <Status label={`${plans.length} PLANS`} />
+        </div>
+        <div className="grid gap-3 lg:grid-cols-3">
+          {plans.map((plan) => {
+            const current = plan.id === currentPlanId || plan.slug === billing?.subscriptionPlan;
+            const active = selectedPlan?.id === plan.id;
+            return (
+              <button
+                key={plan.id}
+                type="button"
+                onClick={() => setSelectedPlanId(plan.id)}
+                className={cn(
+                  "rounded-[8px] border p-4 text-left transition",
+                  active ? "border-pine bg-pine text-white shadow-soft" : "border-ink/5 bg-mist hover:bg-white"
+                )}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className={cn("font-semibold", active ? "text-white" : "text-ink")}>{plan.name}</p>
+                    <p className={cn("mt-1 text-sm", active ? "text-white/75" : "text-steel")}>{money(plan.monthlyPriceCents)} / mo</p>
+                  </div>
+                  {current ? <Status label="CURRENT" /> : null}
+                </div>
+                <p className={cn("mt-3 line-clamp-2 text-sm", active ? "text-white/80" : "text-steel")}>{plan.description ?? "CrewFlow plan"}</p>
+                <p className={cn("mt-3 text-xs font-semibold uppercase tracking-[0.12em]", active ? "text-white/70" : "text-steel")}>
+                  {(plan.planLimits?.staff ?? "Unlimited")} staff · {(plan.planLimits?.monthlyBookings ?? "Unlimited")} bookings
+                </p>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {billing?.pastDueAt ? (
+        <p className="mt-4 rounded-[8px] bg-coral/10 px-3 py-2 text-sm font-semibold text-coral">
+          Payment is past due since {shortDate(billing.pastDueAt)}.
+        </p>
+      ) : null}
+      {error ? <ErrorText error={error} /> : null}
+
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+        <button
+          onClick={() => onCheckout(selectedPlan?.id)}
+          disabled={checkoutPending}
+          className="flex h-10 flex-1 items-center justify-center gap-2 rounded-[8px] bg-ink px-3 text-sm font-semibold text-white disabled:opacity-50"
+        >
+          {checkoutPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+          {selectedPlan ? `Checkout ${selectedPlan.name}` : "Upgrade plan"}
+        </button>
+        <button
+          onClick={onPortal}
+          disabled={portalPending || !billing?.hasStripeCustomer || !billing?.stripeConfigured}
+          className="flex h-10 flex-1 items-center justify-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+        >
+          {portalPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+          Manage billing
+        </button>
+      </div>
+      {billing?.paystackConfigured ? (
+        <p className="mt-3 rounded-[8px] bg-mist px-3 py-2 text-sm font-medium text-steel">
+          Paystack checkout is enabled for Nigeria/Africa payments.
+        </p>
+      ) : null}
+      <button
+        onClick={onScan}
+        disabled={scanPending}
+        className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink disabled:opacity-50"
+      >
+        {scanPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+        Scan billing risk
+      </button>
+    </Panel>
+  );
+}
+
+function PlanStat({ label, value, danger }: { label: string; value: string | number; danger?: boolean }) {
+  return (
+    <div className={cn("rounded-[8px] bg-mist p-3", danger && "ring-1 ring-coral/30")}>
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-steel">{label}</p>
+      <p className={cn("mt-1 text-lg font-semibold", danger ? "text-coral" : "text-ink")}>
+        {String(value).replaceAll("_", " ")}
+      </p>
+    </div>
+  );
+}
+
+function UsageBar({ label, used, limit }: { label: string; used: number; limit?: number }) {
+  const pct = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+  return (
+    <div className="rounded-[8px] bg-mist p-3">
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <span className="font-semibold capitalize text-ink">{label.replace(/([A-Z])/g, " $1")}</span>
+        <span className="text-steel">{limit ? `${used}/${limit}` : `${used}`}</span>
+      </div>
+      <div className="mt-2 h-2 overflow-hidden rounded-full bg-white">
+        <div className={cn("h-full rounded-full", pct > 85 ? "bg-coral" : "bg-pine")} style={{ width: `${limit ? pct : 12}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function WhatsAppOpsPanel({
+  status,
+  onboarding,
+  runs,
+  events
+}: {
+  status?: WhatsappStatus;
+  onboarding?: WhatsappOnboarding;
+  runs?: AutomationRun[];
+  events?: WebhookEvent[];
+}) {
+  const queryClient = useQueryClient();
+  const seedTemplates = useMutation({
+    mutationFn: api.seedWhatsappTemplates,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["whatsapp-onboarding"] });
+      void queryClient.invalidateQueries({ queryKey: ["automation-runs"] });
+    }
+  });
+  const submitTemplate = useMutation({
+    mutationFn: api.submitWhatsappTemplate,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["whatsapp-onboarding"] });
+    }
+  });
+  const linkTemplate = useMutation({
+    mutationFn: (input: { id: string; trigger: NonNullable<WhatsappOnboarding["templates"][number]["trigger"]> }) =>
+      api.linkWhatsappTemplate(input.id, input.trigger),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["whatsapp-onboarding"] });
+    }
+  });
+  const retry = useMutation({
+    mutationFn: (id: string) => api.retryAutomationRun(id, "Manual retry from WhatsApp operations panel"),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["automation-runs"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    }
+  });
+  const recentRuns = (runs ?? []).slice(0, 8);
+  const recentEvents = (events ?? []).slice(0, 6);
+  const failedRuns = (runs ?? []).filter((run) => run.status === "FAILED").length;
+  const templates = onboarding?.templates ?? [];
+  const approvedTemplates = templates.filter((template) => template.status === "APPROVED").length;
+
+  return (
+    <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
+      <Panel title="WhatsApp readiness" icon={MessageSquareText}>
+        <div className="grid gap-3">
+          <div className="rounded-[8px] bg-ink p-4 text-white">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-mint">Meta Cloud API</p>
+                <p className="mt-1 text-2xl font-semibold">{status?.provider.mode ?? "checking"}</p>
+              </div>
+              <Status label={status?.provider.ready ? "READY" : "SETUP"} />
+            </div>
+            <p className="mt-3 text-sm leading-6 text-white/72">
+              Live sending requires access token, phone number ID, verify token, and ideally app secret for webhook signature checks.
+            </p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <ReadinessRow label="Access token" done={Boolean(status?.provider.checks.accessToken)} />
+            <ReadinessRow label="Phone number ID" done={Boolean(status?.provider.checks.phoneNumberId)} />
+            <ReadinessRow label="Verify token" done={Boolean(status?.provider.checks.verifyToken)} />
+            <ReadinessRow label="Signature secret" done={Boolean(status?.provider.checks.appSecret)} />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <MiniStat label="Inbound" value={status?.messages.inbound ?? 0} />
+            <MiniStat label="Outbound" value={status?.messages.outbound ?? 0} />
+            <MiniStat label="Webhook fails" value={status?.webhook.failedEvents ?? 0} danger />
+          </div>
+          <div className="rounded-[8px] bg-mist p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-ink">Production onboarding</p>
+                <p className="text-sm text-steel">{onboarding?.score ?? 0}% WhatsApp launch readiness</p>
+              </div>
+              <Status label={onboarding?.liveReady ? "LIVE" : "MOCK"} />
+            </div>
+            <div className="grid gap-2">
+              {(onboarding?.steps ?? []).map((step) => (
+                <ReadinessRow key={step.id} label={step.label} done={step.done} />
+              ))}
+            </div>
+            <div className="mt-3 rounded-[8px] bg-white p-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-steel">Webhook URL</p>
+              <p className="mt-1 break-all text-sm font-medium text-ink">{onboarding?.webhookUrl ?? "Loading..."}</p>
+            </div>
+          </div>
+        </div>
+      </Panel>
+
+      <Panel title="Delivery monitor" icon={Send}>
+        <div className="mb-4 grid gap-3 sm:grid-cols-3">
+          <MiniStat label="Recent runs" value={recentRuns.length} />
+          <MiniStat label="Failed runs" value={failedRuns} danger={failedRuns > 0} />
+          <MiniStat label="Webhook events" value={status?.webhook.events ?? 0} />
+        </div>
+        <div className="grid gap-3">
+          {recentRuns.map((run) => (
+            <div key={run.id} className="rounded-[8px] bg-mist p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-ink">{run.trigger.replaceAll("_", " ")}</p>
+                  <p className="truncate text-sm text-steel">
+                    {run.customer?.name ?? run.provider} · {shortDate(run.sentAt ?? run.scheduledFor)}
+                  </p>
+                </div>
+                <Status label={run.status} />
+              </div>
+              {run.error ? <p className="mt-2 text-sm font-medium text-coral">{run.error}</p> : null}
+              {run.status === "FAILED" ? (
+                <button
+                  onClick={() => retry.mutate(run.id)}
+                  disabled={retry.isPending}
+                  className="mt-3 flex h-9 items-center gap-2 rounded-[8px] bg-white px-3 text-sm font-semibold text-ink disabled:opacity-50"
+                >
+                  {retry.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  Retry
+                </button>
+              ) : null}
+            </div>
+          ))}
+          <Empty show={!recentRuns.length} label="No automation deliveries yet" />
+        </div>
+        <div className="mt-4 rounded-[8px] bg-white p-3">
+          <p className="mb-2 text-sm font-semibold text-ink">Recent webhook events</p>
+          <div className="grid gap-2">
+            {recentEvents.map((event) => (
+              <div key={event.id} className="flex items-center justify-between gap-3 rounded-[8px] bg-mist px-3 py-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-ink">{event.providerEventId ?? event.id}</p>
+                  <p className="text-xs text-steel">{shortDate(event.processedAt ?? event.createdAt)}</p>
+                </div>
+                <Status label={event.status} />
+              </div>
+            ))}
+            <Empty show={!recentEvents.length} label="No WhatsApp webhook events yet" />
+          </div>
+        </div>
+      </Panel>
+      <Panel title="WhatsApp production templates" icon={FileText}>
+        <div className="mb-4 grid gap-3 sm:grid-cols-3">
+          <MiniStat label="Templates" value={templates.length} />
+          <MiniStat label="Approved" value={approvedTemplates} />
+          <MiniStat label="Linked rules" value={(onboarding?.automationRules ?? []).filter((rule) => rule.whatsappTemplateId).length} />
+        </div>
+        <button
+          onClick={() => seedTemplates.mutate()}
+          disabled={seedTemplates.isPending}
+          className="mb-4 flex h-10 w-full items-center justify-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+        >
+          {seedTemplates.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+          Create default templates
+        </button>
+        <div className="grid gap-3">
+          {templates.map((template) => (
+            <div key={template.id} className="rounded-[8px] bg-mist p-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-ink">{template.name}</p>
+                  <p className="mt-1 text-sm text-steel">{template.trigger?.replaceAll("_", " ") ?? "Reusable"} · {template.language}</p>
+                </div>
+                <Status label={template.status} />
+              </div>
+              <p className="mt-3 line-clamp-3 text-sm leading-6 text-steel">{template.body}</p>
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                <button
+                  onClick={() => submitTemplate.mutate(template.id)}
+                  disabled={submitTemplate.isPending}
+                  className="flex h-9 flex-1 items-center justify-center gap-2 rounded-[8px] bg-white px-3 text-sm font-semibold text-ink disabled:opacity-50"
+                >
+                  {submitTemplate.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  Submit to Meta
+                </button>
+                {template.trigger ? (
+                  <button
+                    onClick={() =>
+                      linkTemplate.mutate({
+                        id: template.id,
+                        trigger: template.trigger as NonNullable<typeof template.trigger>
+                      })
+                    }
+                    disabled={linkTemplate.isPending}
+                    className="flex h-9 flex-1 items-center justify-center gap-2 rounded-[8px] bg-ink px-3 text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    <Wrench className="h-4 w-4" />
+                    Link automation
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ))}
+          <Empty show={!templates.length} label="No WhatsApp templates yet" />
+        </div>
+        {seedTemplates.error || submitTemplate.error || linkTemplate.error ? (
+          <ErrorText error={seedTemplates.error ?? submitTemplate.error ?? linkTemplate.error} />
+        ) : null}
+      </Panel>
+    </div>
+  );
+}
+
+function MiniStat({ label, value, danger }: { label: string; value: string | number; danger?: boolean }) {
+  return (
+    <div className={cn("rounded-[8px] p-3", danger ? "bg-coral/10" : "bg-mist")}>
+      <p className={cn("text-xs font-semibold uppercase tracking-[0.16em]", danger ? "text-coral" : "text-steel")}>{label}</p>
+      <p className="mt-2 text-2xl font-semibold text-ink">{value}</p>
+    </div>
+  );
+}
+
+function ServiceManager({ services }: { services: Service[] }) {
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState<Service | null>(null);
+  const [serviceModalOpen, setServiceModalOpen] = useState(false);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
+  const [durationMinutes, setDurationMinutes] = useState("120");
+  const [price, setPrice] = useState("199");
+
+  function reset(service?: Service | null) {
+    setEditing(service ?? null);
+    setTitle(service?.title ?? "");
+    setDescription(service?.description ?? "");
+    setImageUrl(service?.imageUrl ?? "");
+    setDurationMinutes(String(service?.durationMinutes ?? 120));
+    setPrice(service ? String(service.priceCents / 100) : "199");
+  }
+
+  function openCreate() {
+    reset();
+    setServiceModalOpen(true);
+  }
+
+  function openEdit(service: Service) {
+    reset(service);
+    setServiceModalOpen(true);
+  }
+
+  function closeModal() {
+    if (save.isPending) return;
+    setServiceModalOpen(false);
+    reset();
+  }
+
+  const save = useMutation({
+    mutationFn: () => {
+      const input = {
+        title,
+        description,
+        imageUrl,
+        durationMinutes: Number(durationMinutes),
+        price: Number(price)
+      };
+      return editing ? api.updateService(editing.id, input) : api.createService(input);
+    },
+    onSuccess: () => {
+      reset();
+      setServiceModalOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ["services"] });
+      void queryClient.invalidateQueries({ queryKey: ["tenant"] });
+    }
+  });
+
+  const toggle = useMutation({
+    mutationFn: (service: Service) => api.updateService(service.id, { active: !service.active }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["services"] });
+    }
+  });
+
+  const canSave = title.trim() && Number(durationMinutes) >= 5 && Number(price) >= 0;
+
+  return (
+    <Panel
+      title="Service catalog"
+      icon={Settings2}
+      action={
+        <button
+          onClick={openCreate}
+          className="flex h-10 items-center justify-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white"
+        >
+          <Plus className="h-4 w-4" />
+          New service
+        </button>
+      }
+    >
+      <div className="mb-4 grid gap-3 sm:grid-cols-3">
+        <MiniStat label="Services" value={services.length} />
+        <MiniStat label="Active" value={services.filter((service) => service.active !== false).length} />
+        <MiniStat label="With images" value={services.filter((service) => service.imageUrl).length} />
+      </div>
+
+      <div className="grid gap-3">
+        {services.map((service) => (
+          <Row key={service.id}>
+            <div className="relative h-12 w-14 shrink-0 overflow-hidden rounded-[8px] bg-white">
+              {service.imageUrl ? (
+                <Image src={service.imageUrl} alt="" fill sizes="56px" className="object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-pine">
+                  <Wrench className="h-5 w-5" />
+                </div>
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-semibold text-ink">{service.title}</p>
+              <p className="truncate text-sm text-steel">
+                {service.durationMinutes} min · {money(service.priceCents)}
+              </p>
+            </div>
+            <Status label={service.active === false ? "INACTIVE" : "ACTIVE"} />
+            <button
+              onClick={() => openEdit(service)}
+              className="h-9 rounded-[8px] bg-white px-3 text-sm font-semibold text-ink"
+            >
+              Edit
+            </button>
+            <button
+              onClick={() => toggle.mutate(service)}
+              className="h-9 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink"
+            >
+              {service.active === false ? "Activate" : "Pause"}
+            </button>
+          </Row>
+        ))}
+        <Empty show={!services.length} label="No services yet" />
+      </div>
+
+      {typeof document !== "undefined"
+        ? createPortal(
+            <AnimatePresence>
+              {serviceModalOpen ? (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-ink/35 px-4 py-6 backdrop-blur-sm sm:py-10"
+                >
+                  <motion.div
+                    initial={{ opacity: 0, y: -10, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -10, scale: 0.98 }}
+                    className="w-full max-w-2xl rounded-[8px] border border-white/80 bg-white p-5 shadow-soft"
+                  >
+                    <div className="mb-5 flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pine">Service setup</p>
+                        <h3 className="mt-1 text-2xl font-semibold text-ink">{editing ? "Edit service" : "Create service"}</h3>
+                        <p className="mt-1 text-sm leading-6 text-steel">
+                          This is what customers see on the booking page and what staff use during scheduling.
+                        </p>
+                      </div>
+                      <button
+                        onClick={closeModal}
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] bg-mist text-ink"
+                        aria-label="Close service editor"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <InputField label="Title" value={title} onChange={setTitle} />
+                      <InputField label="Price" value={price} onChange={setPrice} />
+                      <InputField label="Duration minutes" value={durationMinutes} onChange={setDurationMinutes} />
+                      <InputField label="Description" value={description} onChange={setDescription} />
+                      <div className="md:col-span-2">
+                        <MediaUploadField label="Service image" value={imageUrl} onChange={setImageUrl} folder="services" />
+                      </div>
+                    </div>
+
+                    {imageUrl ? (
+                      <div className="relative mt-4 h-44 overflow-hidden rounded-[8px] bg-mist">
+                        <Image src={imageUrl} alt="" fill sizes="640px" className="object-cover" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-ink/60 to-transparent" />
+                        <div className="absolute bottom-4 left-4 right-4 text-white">
+                          <p className="text-lg font-semibold">{title || "Service preview"}</p>
+                          <p className="text-sm text-white/76">
+                            {Number(durationMinutes) || 0} min · {money(Math.round((Number(price) || 0) * 100))}
+                          </p>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {save.error ? <ErrorText error={save.error} /> : null}
+                    <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                      <button
+                        onClick={closeModal}
+                        disabled={save.isPending}
+                        className="h-11 rounded-[8px] bg-mist px-4 text-sm font-semibold text-ink disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => save.mutate()}
+                        disabled={!canSave || save.isPending}
+                        className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 text-sm font-semibold text-white disabled:opacity-50"
+                      >
+                        {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                        {editing ? "Save service" : "Create service"}
+                      </button>
+                    </div>
+                  </motion.div>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>,
+            document.body
+          )
+        : null}
+    </Panel>
+  );
+}
+
+function TimeslotGenerator({ services, staff }: { services: Service[]; staff: StaffMember[] }) {
+  const activeServices = services.filter((service) => service.active !== false);
+  const today = new Date().toISOString().slice(0, 10);
+  const defaultEnd = new Date();
+  defaultEnd.setDate(defaultEnd.getDate() + 7);
+  const [serviceId, setServiceId] = useState(activeServices[0]?.id ?? "");
+  const [staffId, setStaffId] = useState("");
+  const [startDate, setStartDate] = useState(today);
+  const [endDate, setEndDate] = useState(defaultEnd.toISOString().slice(0, 10));
+  const [slotMinutes, setSlotMinutes] = useState(30);
+  const [bufferMinutes, setBufferMinutes] = useState("30");
+  const [includeUnavailable, setIncludeUnavailable] = useState(false);
+  const [result, setResult] = useState<TimeslotGenerationResult | null>(null);
+  const selectedServiceId = serviceId || activeServices[0]?.id || "";
+
+  const dateError = validateTimeslotRange(startDate, endDate, today);
+  const bufferNumber = Number(bufferMinutes);
+  const canGenerate = Boolean(selectedServiceId) && !dateError && Number.isFinite(bufferNumber) && bufferNumber >= 0 && bufferNumber <= 240;
+
+  const generate = useMutation({
+    mutationFn: () =>
+      api.generateTimeslots({
+        serviceId: selectedServiceId,
+        startDate,
+        endDate,
+        slotMinutes,
+        bufferMinutes: bufferNumber,
+        staffId: staffId || undefined,
+        includeUnavailable
+      }),
+    onSuccess: (data) => setResult(data)
+  });
+
+  return (
+    <Panel
+      title="Availability generator"
+      icon={Clock3}
+      action={
+        <button
+          onClick={() => generate.mutate()}
+          disabled={!canGenerate || generate.isPending}
+          className="flex h-10 items-center justify-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+        >
+          {generate.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+          Generate
+        </button>
+      }
+    >
+      <div className="mb-4 grid gap-3 sm:grid-cols-4">
+        <MiniStat label="Active services" value={activeServices.length} />
+        <MiniStat label="Crew" value={staff.length} />
+        <MiniStat label="Interval" value={`${slotMinutes}m`} />
+        <MiniStat label="Buffer" value={`${bufferMinutes || 0}m`} />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
+        <div className="rounded-[8px] border border-ink/5 bg-mist/80 p-4">
+          <div className="grid gap-3">
+            <SelectField label="Service" value={serviceId} onChange={setServiceId}>
+              <option value="">Choose service</option>
+              {activeServices.map((service) => (
+                <option key={service.id} value={service.id}>
+                  {service.title}
+                </option>
+              ))}
+            </SelectField>
+            <SelectField label="Crew restriction" value={staffId} onChange={setStaffId}>
+              <option value="">Any crew</option>
+              {staff.map((member) => (
+                <option key={member.id} value={member.id}>
+                  {member.name}
+                </option>
+              ))}
+            </SelectField>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <InputField label="Start date" value={startDate} onChange={setStartDate} />
+              <InputField label="End date" value={endDate} onChange={setEndDate} />
+            </div>
+            <div>
+              <p className="mb-2 text-sm font-medium text-ink">Slot interval</p>
+              <div className="grid grid-cols-4 gap-2 rounded-[8px] bg-ink p-1">
+                {[15, 30, 45, 60].map((minutes) => (
+                  <button
+                    key={minutes}
+                    onClick={() => setSlotMinutes(minutes)}
+                    className={cn(
+                      "h-10 rounded-[8px] text-sm font-bold transition",
+                      slotMinutes === minutes ? "bg-mint text-ink" : "text-white/75 hover:bg-white/10 hover:text-white"
+                    )}
+                  >
+                    {minutes}m
+                  </button>
+                ))}
+              </div>
+            </div>
+            <InputField label="Buffer minutes" value={bufferMinutes} onChange={setBufferMinutes} />
+            <button
+              onClick={() => setIncludeUnavailable((value) => !value)}
+              className={cn(
+                "flex min-h-11 items-center justify-between rounded-[8px] border px-3 text-left text-sm font-semibold",
+                includeUnavailable ? "border-pine/20 bg-mint/60 text-ink" : "border-ink/10 bg-white text-steel"
+              )}
+            >
+              Include unavailable slots with reasons
+              <span className={cn("h-5 w-9 rounded-full p-0.5 transition", includeUnavailable ? "bg-pine" : "bg-ink/15")}>
+                <span className={cn("block h-4 w-4 rounded-full bg-white transition", includeUnavailable && "translate-x-4")} />
+              </span>
+            </button>
+            {dateError ? <p className="rounded-[8px] bg-coral/10 px-3 py-2 text-sm font-semibold text-coral">{dateError}</p> : null}
+            {!dateError && (!Number.isFinite(bufferNumber) || bufferNumber < 0 || bufferNumber > 240) ? (
+              <p className="rounded-[8px] bg-amber/15 px-3 py-2 text-sm font-semibold text-ink">Buffer must be between 0 and 240 minutes.</p>
+            ) : null}
+            {generate.error ? <ErrorText error={generate.error} /> : null}
+          </div>
+        </div>
+
+        <div className="rounded-[8px] border border-ink/5 bg-white p-4">
+          {result ? (
+            <div className="grid gap-3">
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pine">Generated availability</p>
+                  <h3 className="mt-1 text-2xl font-semibold text-ink">
+                    {result.summary.availableSlots} open of {result.summary.totalSlots}
+                  </h3>
+                </div>
+                <Status label={`${result.summary.days} DAYS`} />
+              </div>
+              <div className="grid gap-2">
+                {result.days.slice(0, 5).map((day) => (
+                  <div key={day.date} className="rounded-[8px] bg-mist p-3">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <p className="font-semibold text-ink">{shortDate(day.date)}</p>
+                      <p className="text-sm font-semibold text-pine">{day.slots.filter((slot) => slot.available).length} open</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {day.slots.slice(0, 8).map((slot) => (
+                        <span
+                          key={`${day.date}-${slot.startTime}-${slot.staffId ?? "any"}`}
+                          className={cn(
+                            "rounded-[8px] border px-2.5 py-1 text-xs font-bold",
+                            slot.available ? "border-pine/15 bg-mint/55 text-pine" : "border-ink/10 bg-white text-steel"
+                          )}
+                        >
+                          {slot.startTime}
+                        </span>
+                      ))}
+                      {day.slots.length > 8 ? <span className="px-2.5 py-1 text-xs font-bold text-steel">+{day.slots.length - 8}</span> : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="flex min-h-[320px] flex-col justify-center rounded-[8px] border border-dashed border-ink/10 bg-mist/60 p-5">
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-[8px] bg-pine text-white">
+                <Clock3 className="h-6 w-6" />
+              </div>
+              <h3 className="text-2xl font-semibold text-ink">Generate clean booking windows</h3>
+              <p className="mt-2 max-w-lg text-sm leading-6 text-steel">
+                Uses service duration, crew restriction, business hours, buffer time, and existing bookings. Past dates are blocked and bulk generation is capped at 31 days.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function validateTimeslotRange(startDate: string, endDate: string, today: string) {
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T00:00:00`);
+  const min = new Date(`${today}T00:00:00`);
+  if (!startDate || !endDate || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return "Enter valid start and end dates.";
+  if (start < min) return "Past dates cannot be generated.";
+  if (end < start) return "End date must be after start date.";
+  const days = Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
+  if (days > 31) return "Bulk generation is limited to 31 days.";
+  return null;
+}
+
+function StaffManager({ staff }: { staff: StaffMember[] }) {
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState<StaffMember | null>(null);
+  const [staffModalOpen, setStaffModalOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("");
+  const [role, setRole] = useState<"OWNER" | "MANAGER" | "STAFF">("STAFF");
+  const [password, setPassword] = useState("Password123!");
+
+  function reset(member?: StaffMember | null) {
+    setEditing(member ?? null);
+    setName(member?.name ?? "");
+    setEmail(member?.email ?? "");
+    setPhone(member?.phone ?? "");
+    setAvatarUrl(member?.avatarUrl ?? "");
+    setRole(member?.role === "OWNER" || member?.role === "MANAGER" || member?.role === "STAFF" ? member.role : "STAFF");
+    setPassword("Password123!");
+  }
+
+  function openCreate() {
+    reset();
+    setStaffModalOpen(true);
+  }
+
+  function openEdit(member: StaffMember) {
+    reset(member);
+    setStaffModalOpen(true);
+  }
+
+  function closeModal() {
+    if (save.isPending) return;
+    setStaffModalOpen(false);
+    reset();
+  }
+
+  const save = useMutation({
+    mutationFn: () =>
+      editing
+        ? api.updateStaff(editing.id, { name, email, phone, avatarUrl, role })
+        : api.createStaff({ name, email, phone, avatarUrl, role, password }),
+    onSuccess: () => {
+      reset();
+      setStaffModalOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ["staff"] });
+      void queryClient.invalidateQueries({ queryKey: ["tenant"] });
+    }
+  });
+
+  const toggle = useMutation({
+    mutationFn: (member: StaffMember) => api.updateStaff(member.id, { active: !member.active }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["staff"] });
+    }
+  });
+
+  const canSave = name.trim() && /^\S+@\S+\.\S+$/.test(email) && (editing || password.length >= 8);
+
+  return (
+    <Panel
+      title="Team roster"
+      icon={UsersRound}
+      action={
+        <button
+          onClick={openCreate}
+          className="flex h-10 items-center justify-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white"
+        >
+          <Plus className="h-4 w-4" />
+          Add staff
+        </button>
+      }
+    >
+      <div className="mb-4 grid gap-3 sm:grid-cols-3">
+        <MiniStat label="Staff" value={staff.length} />
+        <MiniStat label="Active" value={staff.filter((member) => member.active !== false).length} />
+        <MiniStat label="Managers" value={staff.filter((member) => member.role === "OWNER" || member.role === "MANAGER").length} />
+      </div>
+
+      <div className="grid gap-3">
+        {staff.map((member) => (
+          <Row key={member.id}>
+            <Avatar name={member.name} imageUrl={member.avatarUrl} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-semibold text-ink">{member.name}</p>
+              <p className="truncate text-sm text-steel">{member.email}</p>
+            </div>
+            <Status label={member.role} />
+            <Status label={member.active === false ? "INACTIVE" : "ACTIVE"} />
+            <button
+              onClick={() => openEdit(member)}
+              className="h-9 rounded-[8px] bg-white px-3 text-sm font-semibold text-ink"
+            >
+              Edit
+            </button>
+            <button
+              onClick={() => toggle.mutate(member)}
+              className="h-9 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink"
+            >
+              {member.active === false ? "Activate" : "Deactivate"}
+            </button>
+          </Row>
+        ))}
+        <Empty show={!staff.length} label="No staff yet" />
+      </div>
+
+      {typeof document !== "undefined"
+        ? createPortal(
+            <AnimatePresence>
+              {staffModalOpen ? (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-ink/35 px-4 py-6 backdrop-blur-sm sm:py-10"
+                >
+                  <motion.div
+                    initial={{ opacity: 0, y: -10, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -10, scale: 0.98 }}
+                    className="w-full max-w-2xl rounded-[8px] border border-white/80 bg-white p-5 shadow-soft"
+                  >
+                    <div className="mb-5 flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pine">Team access</p>
+                        <h3 className="mt-1 text-2xl font-semibold text-ink">{editing ? "Edit staff member" : "Add staff member"}</h3>
+                        <p className="mt-1 text-sm leading-6 text-steel">
+                          Create team access for owners, managers, and field staff.
+                        </p>
+                      </div>
+                      <button
+                        onClick={closeModal}
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] bg-mist text-ink"
+                        aria-label="Close staff editor"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-[auto_1fr] md:items-start">
+                      <div className="flex flex-col items-center gap-3 rounded-[8px] bg-mist p-4">
+                        <Avatar name={name} imageUrl={avatarUrl} size="lg" />
+                        <Status label={role} />
+                      </div>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <InputField label="Name" value={name} onChange={setName} />
+                        <InputField label="Email" value={email} onChange={setEmail} />
+                        <InputField label="Phone" value={phone} onChange={setPhone} />
+                        <label className="block">
+                          <span className="mb-2 block text-sm font-medium text-ink">Role</span>
+                          <select
+                            value={role}
+                            onChange={(event) => setRole(event.target.value as "OWNER" | "MANAGER" | "STAFF")}
+                            className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
+                          >
+                            <option value="STAFF">Staff</option>
+                            <option value="MANAGER">Manager</option>
+                            <option value="OWNER">Owner</option>
+                          </select>
+                        </label>
+                        {!editing ? <InputField label="Temporary password" value={password} onChange={setPassword} /> : null}
+                        <div className="md:col-span-2">
+                          <MediaUploadField label="Staff photo" value={avatarUrl} onChange={setAvatarUrl} folder="staff" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {save.error ? <ErrorText error={save.error} /> : null}
+                    <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                      <button
+                        onClick={closeModal}
+                        disabled={save.isPending}
+                        className="h-11 rounded-[8px] bg-mist px-4 text-sm font-semibold text-ink disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => save.mutate()}
+                        disabled={!canSave || save.isPending}
+                        className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 text-sm font-semibold text-white disabled:opacity-50"
+                      >
+                        {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                        {editing ? "Save staff" : "Add staff"}
+                      </button>
+                    </div>
+                  </motion.div>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>,
+            document.body
+          )
+        : null}
+    </Panel>
+  );
+}
+
+function InputField({
+  label,
+  value,
+  onChange
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-sm font-medium text-ink">{label}</span>
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
+      />
+    </label>
+  );
+}
+
+function ReadinessRow({ label, done }: { label: string; done: boolean }) {
+  return (
+    <div className="flex items-center justify-between rounded-[8px] bg-mist p-3">
+      <p className="font-medium text-ink">{label}</p>
+      <span className={cn("rounded-[8px] px-2.5 py-1 text-xs font-bold", done ? "bg-mint text-ink" : "bg-white text-steel")}>
+        {done ? "Ready" : "Needed"}
+      </span>
+    </div>
+  );
+}
+
+function ActionsView({ items, onOpen }: { items?: OperationalAction[]; onOpen: (state: DrawerState) => void }) {
+  const queryClient = useQueryClient();
+  const scanLeads = useMutation({
+    mutationFn: api.scanLeadFollowUps,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["actions"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      void queryClient.invalidateQueries({ queryKey: ["leads"] });
+      void queryClient.invalidateQueries({ queryKey: ["lead-analytics"] });
+    }
+  });
+  const runAll = useMutation({
+    mutationFn: api.schedulerRun,
+    onSuccess: () => {
+      void queryClient.invalidateQueries();
+    }
+  });
+
+  return (
+    <Panel
+      title="Operational actions"
+      icon={ClipboardCheck}
+      action={
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => scanLeads.mutate()}
+            disabled={scanLeads.isPending}
+            className="flex h-9 items-center gap-2 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink disabled:opacity-50"
+          >
+            {scanLeads.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Target className="h-4 w-4" />}
+            Scan leads
+          </button>
+          <button
+            onClick={() => runAll.mutate()}
+            disabled={runAll.isPending}
+            className="flex h-9 items-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {runAll.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            Run scans
+          </button>
+        </div>
+      }
+    >
+      {scanLeads.isSuccess ? (
+        <p className="mb-3 rounded-[8px] bg-mint/30 px-3 py-2 text-sm font-semibold text-ink">
+          Lead follow-up scan found {scanLeads.data.count} due leads.
+        </p>
+      ) : null}
+      {scanLeads.error ? <ErrorText error={scanLeads.error} /> : null}
+      {runAll.error ? <ErrorText error={runAll.error} /> : null}
+      <ActionList items={items} onOpen={onOpen} />
+    </Panel>
+  );
+}
+
+function ActionList({ items, onOpen }: { items?: OperationalAction[]; onOpen: (state: DrawerState) => void }) {
+  return (
+    <div className="grid gap-3">
+      {(items ?? []).map((item) => (
+        <Row key={item.id} onClick={() => onOpen({ type: "action", item })}>
+          <Priority priority={item.priority} />
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-semibold text-ink">{item.title}</p>
+            <p className="truncate text-sm text-steel">{item.customer?.name ?? item.type}</p>
+          </div>
+          <Status label={item.status} />
+          <p className="hidden text-sm text-steel md:block">{shortDate(item.dueAt)}</p>
+        </Row>
+      ))}
+      <Empty show={!items?.length} label="No actions open" />
+    </div>
+  );
+}
+
+function BookingRows({ items, onOpen }: { items?: Booking[]; onOpen: (state: DrawerState) => void }) {
+  return (
+    <div className="grid gap-3">
+      {(items ?? []).map((item) => (
+        <Row key={item.id} onClick={() => onOpen({ type: "booking", item })}>
+          <Avatar name={item.customer.name} />
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <p className="truncate font-semibold text-ink">{item.service.title}</p>
+              {!item.assignedStaff && !["COMPLETED", "CANCELLED"].includes(item.status) ? (
+                <span className="rounded-[8px] bg-coral/10 px-2 py-1 text-xs font-bold text-coral">Needs staff</span>
+              ) : null}
+              {item.status === "COMPLETED" && !item.invoice ? (
+                <span className="rounded-[8px] bg-amber/20 px-2 py-1 text-xs font-bold text-ink">Invoice next</span>
+              ) : null}
+            </div>
+            <p className="truncate text-sm text-steel">
+              {item.customer.name} · {item.assignedStaff?.name ?? "Unassigned"}
+            </p>
+          </div>
+          <div className="hidden text-right md:block">
+            <p className="text-sm font-medium text-ink">{shortDate(item.startTime)}</p>
+            <p className="text-xs font-semibold text-steel">{money(item.service.priceCents)}</p>
+          </div>
+          <Status label={item.status} />
+        </Row>
+      ))}
+      <Empty show={!items?.length} label="No bookings found" />
+    </div>
+  );
+}
+
+function BookingSignal({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex items-center justify-between rounded-[8px] bg-white/10 px-3 py-2">
+      <p className="text-sm font-semibold text-white/85">{label}</p>
+      <span className="rounded-[8px] bg-mint px-2.5 py-1 text-sm font-bold text-ink">{value}</span>
+    </div>
+  );
+}
+
+function Panel({
+  title,
+  icon: Icon,
+  action,
+  children
+}: {
+  title: string;
+  icon: typeof Inbox;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-[8px] border border-white/80 bg-white/90 p-4 shadow-soft backdrop-blur">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <div className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-mist text-pine">
+            <Icon className="h-5 w-5" />
+          </div>
+          <h2 className="text-lg font-semibold text-ink">{title}</h2>
+        </div>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Metric({
+  icon: Icon,
+  label,
+  value,
+  tone
+}: {
+  icon: typeof Inbox;
+  label: string;
+  value: string | number;
+  tone: "pine" | "mint" | "coral" | "amber";
+}) {
+  const tones = {
+    pine: "bg-pine text-white",
+    mint: "bg-mint text-ink",
+    coral: "bg-coral text-white",
+    amber: "bg-amber text-ink"
+  };
+  return (
+    <section className="rounded-[8px] border border-white/80 bg-white/90 p-4 shadow-soft backdrop-blur">
+      <div className={cn("mb-5 flex h-10 w-10 items-center justify-center rounded-[8px]", tones[tone])}>
+        <Icon className="h-5 w-5" />
+      </div>
+      <p className="text-sm text-steel">{label}</p>
+      <p className="mt-1 text-3xl font-semibold text-ink">{value}</p>
+    </section>
+  );
+}
+
+function Signal({
+  icon: Icon,
+  label,
+  value
+}: {
+  icon: typeof Inbox;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-[8px] border border-white/80 bg-white/80 p-4 shadow-soft backdrop-blur">
+      <Icon className="mb-4 h-5 w-5 text-pine" />
+      <p className="text-xs uppercase tracking-[0.18em] text-steel">{label}</p>
+      <p className="mt-1 font-semibold text-ink">{value}</p>
+    </div>
+  );
+}
+
+function Row({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) {
+  return (
+    <div
+      onClick={onClick}
+      className={cn(
+        "flex min-h-[64px] items-center gap-3 rounded-[8px] border border-ink/5 bg-mist/80 p-3",
+        onClick && "cursor-pointer transition hover:border-pine/30 hover:bg-white"
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+function Avatar({
+  name,
+  imageUrl,
+  size = "md"
+}: {
+  name?: string | null;
+  imageUrl?: string | null;
+  size?: "md" | "lg";
+}) {
+  const className = size === "lg" ? "h-14 w-14 text-base" : "h-10 w-10 text-sm";
+  return (
+    <div className={cn("relative flex shrink-0 items-center justify-center overflow-hidden rounded-[8px] bg-ink font-bold text-white", className)}>
+      {imageUrl ? <Image src={imageUrl} alt="" fill sizes={size === "lg" ? "56px" : "40px"} className="object-cover" /> : initials(name)}
+    </div>
+  );
+}
+
+function MediaUploadField({
+  label,
+  value,
+  onChange,
+  folder
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  folder: string;
+}) {
+  const [isUploading, setIsUploading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function upload(file?: File) {
+    if (!file) return;
+    setError("");
+    setIsUploading(true);
+    try {
+      onChange(await uploadMedia(file, folder));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to upload image");
+    } finally {
+      setIsUploading(false);
+    }
+  }
+
+  return (
+    <label className="block">
+      <span className="mb-2 block text-sm font-medium text-ink">{label}</span>
+      <div className="grid gap-2 rounded-[8px] border border-ink/10 bg-white p-2">
+        {value ? (
+          <div className="relative h-24 overflow-hidden rounded-[8px] bg-mist">
+            <Image src={value} alt="" fill sizes="280px" className="object-cover" />
+          </div>
+        ) : null}
+        <input
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder="Paste image URL or upload"
+          className="h-10 w-full rounded-[8px] bg-mist px-3 text-sm outline-none focus:ring-2 focus:ring-pine/30"
+        />
+        <input
+          type="file"
+          accept="image/*"
+          onChange={(event) => void upload(event.target.files?.[0])}
+          className="text-sm text-steel file:mr-3 file:rounded-[8px] file:border-0 file:bg-pine file:px-3 file:py-2 file:font-semibold file:text-white"
+        />
+        {isUploading ? <p className="text-sm font-semibold text-pine">Uploading...</p> : null}
+        {error ? <p className="text-sm font-semibold text-coral">{error}</p> : null}
+      </div>
+    </label>
+  );
+}
+
+function Status({ label }: { label: string }) {
+  return (
+    <span className="shrink-0 rounded-[8px] bg-white px-2.5 py-1 text-xs font-semibold text-steel">
+      {label.replaceAll("_", " ")}
+    </span>
+  );
+}
+
+function Priority({ priority }: { priority: OperationalAction["priority"] }) {
+  const color =
+    priority === "URGENT"
+      ? "bg-coral text-white"
+      : priority === "HIGH"
+        ? "bg-amber text-ink"
+        : "bg-white text-steel";
+  return <span className={cn("rounded-[8px] px-2.5 py-1 text-xs font-bold", color)}>{priority}</span>;
+}
+
+function Severity({ severity }: { severity: "info" | "warning" | "critical" }) {
+  const color =
+    severity === "critical"
+      ? "bg-coral text-white"
+      : severity === "warning"
+        ? "bg-amber text-ink"
+        : "bg-mint text-ink";
+  return <span className={cn("rounded-[8px] px-2.5 py-1 text-xs font-bold", color)}>{severity}</span>;
+}
+
+function Empty({ show, label }: { show: boolean; label: string }) {
+  return show ? (
+    <div className="flex min-h-[120px] items-center justify-center rounded-[8px] border border-dashed border-ink/15 bg-white/50 text-sm font-medium text-steel">
+      {label}
+    </div>
+  ) : null;
+}
+
+function LoadingPanel() {
+  return (
+    <div className="flex min-h-[360px] items-center justify-center rounded-[8px] border border-white/80 bg-white/90 shadow-soft">
+      <Loader2 className="h-7 w-7 animate-spin text-pine" />
+    </div>
+  );
+}
+
+function DetailDrawer({
+  state,
+  onClose
+}: {
+  state: DrawerState;
+  onClose: () => void;
+}) {
+  return (
+    <AnimatePresence>
+      {state ? (
+        <>
+          <motion.div
+            className="fixed inset-0 z-40 bg-ink/30 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+          />
+          <motion.aside
+            className="fixed bottom-0 right-0 top-0 z-50 flex w-full max-w-xl flex-col border-l border-white/80 bg-white shadow-soft md:rounded-l-[8px]"
+            initial={{ x: "100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "100%" }}
+            transition={{ type: "spring", damping: 28, stiffness: 260 }}
+          >
+            <div className="flex items-center justify-between border-b border-ink/10 p-4">
+              <div className="flex items-center gap-3">
+                <Logo />
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pine">
+                    CrewFlow
+                  </p>
+                  <h2 className="text-xl font-semibold text-ink">{drawerTitle(state)}</h2>
+                </div>
+              </div>
+              <button
+                onClick={onClose}
+                className="flex h-10 w-10 items-center justify-center rounded-[8px] bg-mist text-ink transition hover:bg-ink hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              {state.type === "new-booking" ? <NewBookingForm onDone={onClose} /> : null}
+              {state.type === "booking" ? <BookingDetail item={state.item} /> : null}
+              {state.type === "field-job" ? <FieldJobDetail item={state.item} onDone={onClose} /> : null}
+              {state.type === "lead" ? <LeadDetail item={state.item} onDone={onClose} /> : null}
+              {state.type === "conversation" ? <ConversationDetail item={state.item} /> : null}
+              {state.type === "customer" ? <CustomerDetail item={state.item} /> : null}
+              {state.type === "invoice" ? <InvoiceDetail item={state.item} /> : null}
+              {state.type === "action" ? <ActionDetail item={state.item} onDone={onClose} /> : null}
+            </div>
+          </motion.aside>
+        </>
+      ) : null}
+    </AnimatePresence>
+  );
+}
+
+function toDateTimeLocal(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const offsetMs = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+}
+
+function NewBookingForm({ onDone }: { onDone: () => void }) {
+  const queryClient = useQueryClient();
+  const customers = useQuery({ queryKey: ["customers"], queryFn: () => api.customers() });
+  const services = useQuery({ queryKey: ["services"], queryFn: api.services });
+  const staff = useQuery({ queryKey: ["staff"], queryFn: api.staff });
+  const [customerMode, setCustomerMode] = useState<"existing" | "new">("existing");
+  const [customerId, setCustomerId] = useState("");
+  const [newCustomerName, setNewCustomerName] = useState("");
+  const [newCustomerPhone, setNewCustomerPhone] = useState("");
+  const [newCustomerEmail, setNewCustomerEmail] = useState("");
+  const [newCustomerNotes, setNewCustomerNotes] = useState("");
+  const [serviceId, setServiceId] = useState("");
+  const [assignedStaffId, setAssignedStaffId] = useState("");
+  const [startTime, setStartTime] = useState("");
+  const [repeatFrequency, setRepeatFrequency] = useState("none");
+  const [repeatCount, setRepeatCount] = useState("4");
+  const [notes, setNotes] = useState("");
+
+  const create = useMutation({
+    mutationFn: () =>
+      api.createBooking({
+        customerId: customerMode === "existing" ? customerId : undefined,
+        inlineCustomer:
+          customerMode === "new"
+            ? {
+                name: newCustomerName,
+                phone: newCustomerPhone,
+                email: newCustomerEmail || undefined,
+                notes: newCustomerNotes || undefined
+              }
+            : undefined,
+        serviceId,
+        assignedStaffId: assignedStaffId || undefined,
+        startTime: new Date(startTime).toISOString(),
+        notes: notes || undefined,
+        repeatFrequency: repeatFrequency as "none" | "weekly" | "biweekly" | "monthly",
+        repeatCount: repeatFrequency === "none" ? undefined : Number(repeatCount) || 1
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries();
+      onDone();
+    }
+  });
+
+  const hasCustomer =
+    customerMode === "existing"
+      ? Boolean(customerId)
+      : Boolean(newCustomerName.trim() && newCustomerPhone.trim());
+  const canSubmit = hasCustomer && serviceId && startTime;
+
+  return (
+    <form
+      className="grid gap-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (canSubmit) create.mutate();
+      }}
+    >
+      <div className="grid grid-cols-2 gap-2 rounded-[8px] bg-mist p-1">
+        {(["existing", "new"] as const).map((mode) => (
+          <button
+            key={mode}
+            type="button"
+            onClick={() => setCustomerMode(mode)}
+            className={cn(
+              "h-10 rounded-[8px] text-sm font-semibold transition",
+              customerMode === mode ? "bg-white text-ink shadow-soft" : "text-steel hover:text-ink"
+            )}
+          >
+            {mode === "existing" ? "Existing customer" : "New lead"}
+          </button>
+        ))}
+      </div>
+
+      {customerMode === "existing" ? (
+        <SelectField label="Customer" value={customerId} onChange={setCustomerId}>
+          <option value="">Choose customer</option>
+          {(customers.data ?? []).map((customer) => (
+            <option key={customer.id} value={customer.id}>
+              {customer.name} · {customer.phone}
+            </option>
+          ))}
+        </SelectField>
+      ) : (
+        <div className="rounded-[8px] bg-mist p-3">
+          <div className="grid gap-3 md:grid-cols-2">
+            <InputField label="Lead name" value={newCustomerName} onChange={setNewCustomerName} />
+            <InputField label="Phone" value={newCustomerPhone} onChange={setNewCustomerPhone} />
+            <InputField label="Email" value={newCustomerEmail} onChange={setNewCustomerEmail} />
+            <InputField label="Customer notes" value={newCustomerNotes} onChange={setNewCustomerNotes} />
+          </div>
+        </div>
+      )}
+
+      <SelectField label="Service" value={serviceId} onChange={setServiceId}>
+        <option value="">Choose service</option>
+        {(services.data ?? []).map((service) => (
+          <option key={service.id} value={service.id}>
+            {service.title} · {money(service.priceCents)}
+          </option>
+        ))}
+      </SelectField>
+      <SelectField label="Staff" value={assignedStaffId} onChange={setAssignedStaffId}>
+        <option value="">Unassigned</option>
+        {(staff.data ?? []).map((member: StaffMember) => (
+          <option key={member.id} value={member.id}>
+            {member.name} · {member.role}
+          </option>
+        ))}
+      </SelectField>
+      <label className="block">
+        <span className="mb-2 block text-sm font-medium text-ink">Start time</span>
+        <input
+          type="datetime-local"
+          value={startTime}
+          onChange={(event) => setStartTime(event.target.value)}
+          className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
+        />
+      </label>
+      <div className="grid gap-3 md:grid-cols-[1fr_140px]">
+        <SelectField label="Repeat" value={repeatFrequency} onChange={setRepeatFrequency}>
+          <option value="none">One-time</option>
+          <option value="weekly">Weekly</option>
+          <option value="biweekly">Every 2 weeks</option>
+          <option value="monthly">Monthly</option>
+        </SelectField>
+        <label className="block">
+          <span className="mb-2 block text-sm font-medium text-ink">Occurrences</span>
+          <input
+            type="number"
+            min={1}
+            max={12}
+            disabled={repeatFrequency === "none"}
+            value={repeatFrequency === "none" ? "1" : repeatCount}
+            onChange={(event) => setRepeatCount(event.target.value)}
+            className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine disabled:opacity-50"
+          />
+        </label>
+      </div>
+      <label className="block">
+        <span className="mb-2 block text-sm font-medium text-ink">Notes</span>
+        <textarea
+          value={notes}
+          onChange={(event) => setNotes(event.target.value)}
+          className="min-h-28 w-full rounded-[8px] border border-ink/10 bg-mist p-3 outline-none focus:border-pine"
+        />
+      </label>
+      {create.error ? <ErrorText error={create.error} /> : null}
+      <button
+        disabled={!canSubmit || create.isPending}
+        className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 font-semibold text-white disabled:opacity-50"
+      >
+        {create.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+        Create booking
+      </button>
+    </form>
+  );
+}
+
+function LeadDetail({ item, onDone }: { item: Lead; onDone: () => void }) {
+  const queryClient = useQueryClient();
+  const services = useQuery({ queryKey: ["services"], queryFn: api.services });
+  const staff = useQuery({ queryKey: ["staff"], queryFn: api.staff });
+  const [serviceId, setServiceId] = useState(item.bookingIntent?.service?.id ?? "");
+  const [assignedStaffId, setAssignedStaffId] = useState(item.assignedTo?.id ?? "");
+  const [startTime, setStartTime] = useState(item.bookingIntent?.requestedDate ? toDateTimeLocal(item.bookingIntent.requestedDate) : "");
+  const [notes, setNotes] = useState(
+    [item.notes, item.bookingIntent?.notes, item.bookingIntent?.address ? `Address: ${item.bookingIntent.address}` : undefined]
+      .filter(Boolean)
+      .join("\n")
+  );
+  const [lostReason, setLostReason] = useState(item.wonLostReason ?? "");
+
+  const convert = useMutation({
+    mutationFn: () =>
+      api.convertLeadToBooking(item.id, {
+        serviceId,
+        assignedStaffId: assignedStaffId || undefined,
+        startTime: new Date(startTime).toISOString(),
+        status: "CONFIRMED",
+        notes: notes || undefined
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries();
+      onDone();
+    }
+  });
+  const markLost = useMutation({
+    mutationFn: () =>
+      api.updateLead(item.id, {
+        title: item.title,
+        status: "LOST",
+        conversionProbability: 0,
+        wonLostReason: lostReason || "Marked lost from lead detail"
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["leads"] });
+      void queryClient.invalidateQueries({ queryKey: ["lead-analytics"] });
+      onDone();
+    }
+  });
+  const canConvert = Boolean(item.customer && serviceId && startTime && !item.booking);
+
+  return (
+    <div className="grid gap-4">
+      <DetailCard icon={Target} title={item.title}>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Info label="Status" value={item.status.replaceAll("_", " ")} />
+          <Info label="Source" value={item.source.replaceAll("_", " ")} />
+          <Info label="Estimated value" value={money(item.estimatedValueCents)} />
+          <Info label="Probability" value={`${item.conversionProbability}%`} />
+          <Info label="Customer" value={item.customer?.name ?? "Not linked"} />
+          <Info label="Follow-up" value={shortDate(item.followUpAt)} />
+        </div>
+        {item.notes ? <p className="mt-3 rounded-[8px] bg-mist p-3 text-sm leading-6 text-steel">{item.notes}</p> : null}
+      </DetailCard>
+
+      {item.booking ? (
+        <DetailCard icon={CalendarDays} title="Converted booking">
+          <Info label="Service" value={item.booking.service.title} />
+          <Info label="Start time" value={shortDate(item.booking.startTime)} />
+          <p className="mt-3 text-sm leading-6 text-steel">
+            This lead is already won and connected to an active booking.
+          </p>
+        </DetailCard>
+      ) : (
+        <DetailCard icon={CalendarDays} title="Convert to booking">
+          {!item.customer ? (
+            <p className="rounded-[8px] bg-coral/10 p-3 text-sm font-medium text-coral">
+              Connect this lead to a customer before converting it to a booking.
+            </p>
+          ) : null}
+          <div className="mt-3 grid gap-3">
+            <SelectField label="Service" value={serviceId} onChange={setServiceId}>
+              <option value="">Choose service</option>
+              {(services.data ?? []).map((service) => (
+                <option key={service.id} value={service.id}>
+                  {service.title} · {money(service.priceCents)}
+                </option>
+              ))}
+            </SelectField>
+            <SelectField label="Staff" value={assignedStaffId} onChange={setAssignedStaffId}>
+              <option value="">Unassigned</option>
+              {(staff.data ?? []).map((member: StaffMember) => (
+                <option key={member.id} value={member.id}>
+                  {member.name} · {member.role}
+                </option>
+              ))}
+            </SelectField>
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-ink">Start time</span>
+              <input
+                type="datetime-local"
+                value={startTime}
+                onChange={(event) => setStartTime(event.target.value)}
+                className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-ink">Booking notes</span>
+              <textarea
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                className="min-h-28 w-full rounded-[8px] border border-ink/10 bg-mist p-3 outline-none focus:border-pine"
+              />
+            </label>
+            {convert.error ? <ErrorText error={convert.error} /> : null}
+            <button
+              onClick={() => convert.mutate()}
+              disabled={!canConvert || convert.isPending}
+              className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 font-semibold text-white disabled:opacity-50"
+            >
+              {convert.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarDays className="h-4 w-4" />}
+              Convert to booking
+            </button>
+          </div>
+        </DetailCard>
+      )}
+
+      {!item.booking && item.status !== "LOST" ? (
+        <DetailCard icon={AlertTriangle} title="Mark lost">
+          <p className="text-sm leading-6 text-steel">
+            Use this when the customer is not moving forward, the price was not a fit, or the job went cold.
+          </p>
+          <InputField label="Lost reason" value={lostReason} onChange={setLostReason} />
+          {markLost.error ? <ErrorText error={markLost.error} /> : null}
+          <button
+            onClick={() => markLost.mutate()}
+            disabled={markLost.isPending}
+            className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-coral px-4 font-semibold text-white disabled:opacity-50"
+          >
+            {markLost.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+            Mark lead lost
+          </button>
+        </DetailCard>
+      ) : null}
+    </div>
+  );
+}
+
+function BookingDetail({ item }: { item: Booking }) {
+  const queryClient = useQueryClient();
+  const customers = useQuery({ queryKey: ["customers"], queryFn: () => api.customers() });
+  const services = useQuery({ queryKey: ["services"], queryFn: api.services });
+  const staff = useQuery({ queryKey: ["staff"], queryFn: api.staff });
+  const [customerId, setCustomerId] = useState(item.customer.id);
+  const [serviceId, setServiceId] = useState(item.service.id);
+  const [assignedStaffId, setAssignedStaffId] = useState(item.assignedStaff?.id ?? "");
+  const [status, setStatus] = useState<BookingStatus>(item.status);
+  const [startTime, setStartTime] = useState(toDateTimeLocal(item.startTime));
+  const [notes, setNotes] = useState(item.notes ?? "");
+
+  const update = useMutation({
+    mutationFn: () =>
+      api.updateBooking(item.id, {
+        customerId,
+        serviceId,
+        assignedStaffId: assignedStaffId || undefined,
+        status,
+        startTime: new Date(startTime).toISOString(),
+        notes: notes || undefined
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries();
+    }
+  });
+
+  const quickStatus = useMutation({
+    mutationFn: (nextStatus: BookingStatus) => api.updateBooking(item.id, { status: nextStatus, serviceId }),
+    onSuccess: (booking) => {
+      setStatus(booking.status);
+      void queryClient.invalidateQueries();
+    }
+  });
+  const createInvoice = useMutation({
+    mutationFn: () => api.createInvoiceFromBooking(item.id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries();
+    }
+  });
+
+  return (
+    <div className="grid gap-4">
+      <DetailCard icon={CalendarDays} title="Booking controls">
+        <div className="grid gap-3">
+          <SelectField label="Customer" value={customerId} onChange={setCustomerId}>
+            {(customers.data ?? [item.customer]).map((customer) => (
+              <option key={customer.id} value={customer.id}>
+                {customer.name} · {customer.phone}
+              </option>
+            ))}
+          </SelectField>
+          <SelectField label="Service" value={serviceId} onChange={setServiceId}>
+            {(services.data ?? [item.service]).map((service) => (
+              <option key={service.id} value={service.id}>
+                {service.title} · {money(service.priceCents)}
+              </option>
+            ))}
+          </SelectField>
+          <SelectField label="Staff" value={assignedStaffId} onChange={setAssignedStaffId}>
+            <option value="">Unassigned</option>
+            {(staff.data ?? []).map((member) => (
+              <option key={member.id} value={member.id}>
+                {member.name} · {member.role}
+              </option>
+            ))}
+          </SelectField>
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-ink">Start time</span>
+            <input
+              type="datetime-local"
+              value={startTime}
+              onChange={(event) => setStartTime(event.target.value)}
+              className="h-11 w-full rounded-[8px] border border-ink/10 bg-white px-3 outline-none focus:border-pine"
+            />
+          </label>
+          <SelectField label="Status" value={status} onChange={(value) => setStatus(value as BookingStatus)}>
+            <option value="REQUESTED">Requested</option>
+            <option value="CONFIRMED">Confirmed</option>
+            <option value="IN_PROGRESS">On the way</option>
+            <option value="COMPLETED">Completed</option>
+            <option value="NO_SHOW">No-show</option>
+            <option value="CANCELLED">Cancelled</option>
+          </SelectField>
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-ink">Notes</span>
+            <textarea
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              className="min-h-24 w-full rounded-[8px] border border-ink/10 bg-white p-3 outline-none focus:border-pine"
+            />
+          </label>
+        </div>
+        {update.error ? <ErrorText error={update.error} /> : null}
+        {quickStatus.error ? <ErrorText error={quickStatus.error} /> : null}
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <button
+            onClick={() => update.mutate()}
+            disabled={update.isPending}
+            className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {update.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Save changes
+          </button>
+          <button
+            onClick={() => quickStatus.mutate("IN_PROGRESS")}
+            disabled={quickStatus.isPending || status !== "CONFIRMED"}
+            className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink disabled:opacity-50"
+          >
+            <Route className="h-4 w-4" />
+            On the way
+          </button>
+          <button
+            onClick={() => quickStatus.mutate("COMPLETED")}
+            disabled={quickStatus.isPending || !["CONFIRMED", "IN_PROGRESS"].includes(status)}
+            className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink disabled:opacity-50"
+          >
+            <CheckCircle2 className="h-4 w-4" />
+            Complete
+          </button>
+          <button
+            onClick={() => quickStatus.mutate("NO_SHOW")}
+            disabled={quickStatus.isPending || status !== "CONFIRMED"}
+            className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-coral/10 px-3 text-sm font-semibold text-coral disabled:opacity-50"
+          >
+            <AlertTriangle className="h-4 w-4" />
+            No-show
+          </button>
+        </div>
+      </DetailCard>
+      <DetailCard icon={ContactRound} title={item.customer.name}>
+        <Info label="Phone" value={item.customer.phone} />
+        <Info label="Email" value={item.customer.email ?? "No email"} />
+        <Info label="Time" value={shortDate(item.startTime)} />
+        <Info label="Staff" value={item.assignedStaff?.name ?? "Unassigned"} />
+        <Info label="Status" value={item.status.replaceAll("_", " ")} />
+        {item.notes ? <Info label="Notes" value={item.notes} /> : null}
+      </DetailCard>
+      {item.invoice ? (
+        <DetailCard icon={FileText} title="Invoice">
+          <Info label="Invoice" value={item.invoice.invoiceNo} />
+          <Info label="Total" value={money(item.invoice.totalCents)} />
+          <Info label="Status" value={item.invoice.status} />
+        </DetailCard>
+      ) : status === "COMPLETED" ? (
+        <button
+          onClick={() => createInvoice.mutate()}
+          disabled={createInvoice.isPending}
+          className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 font-semibold text-white disabled:opacity-50"
+        >
+          {createInvoice.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+          Create invoice
+        </button>
+      ) : null}
+      {createInvoice.error ? <ErrorText error={createInvoice.error} /> : null}
+      {item.fieldJobReport ? (
+        <DetailCard icon={Route} title="Field report">
+          <Info label="Status" value={item.fieldJobReport.status} />
+          <Info label="Started" value={shortDate(item.fieldJobReport.startedAt)} />
+          <Info label="Completed" value={shortDate(item.fieldJobReport.completedAt)} />
+          {item.fieldJobReport.staffNotes ? <Info label="Staff notes" value={item.fieldJobReport.staffNotes} /> : null}
+        </DetailCard>
+      ) : null}
+      <BookingCommunicationPanel booking={item} />
+    </div>
+  );
+}
+
+function FieldJobDetail({ item, onDone }: { item: Booking; onDone: () => void }) {
+  const queryClient = useQueryClient();
+  const report = item.fieldJobReport;
+  const [staffNotes, setStaffNotes] = useState(report?.staffNotes ?? item.notes ?? "");
+  const [photoDraft, setPhotoDraft] = useState((report?.photoUrls ?? []).join("\n"));
+  const [signatureName, setSignatureName] = useState(report?.customerSignatureName ?? item.customer.name);
+  const [checklist, setChecklist] = useState(
+    report?.checklist?.length
+      ? report.checklist
+      : [
+          { label: "Arrived on site", done: false },
+          { label: "Service completed", done: false },
+          { label: "Photos captured", done: false },
+          { label: "Customer notified", done: false },
+          { label: "Invoice ready", done: false }
+        ]
+  );
+
+  const start = useMutation({
+    mutationFn: () => api.startFieldJob(item.id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries();
+    }
+  });
+  const save = useMutation({
+    mutationFn: () =>
+      api.saveFieldNotes(item.id, {
+        staffNotes,
+        photoUrls: parsePhotoUrls(photoDraft)
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries();
+    }
+  });
+  const complete = useMutation({
+    mutationFn: () =>
+      api.completeFieldJob(item.id, {
+        checklist,
+        photoUrls: parsePhotoUrls(photoDraft),
+        staffNotes,
+        customerSignatureName: signatureName,
+        autoInvoice: true
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries();
+      onDone();
+    }
+  });
+
+  const error = start.error ?? save.error ?? complete.error;
+
+  return (
+    <div className="grid gap-4">
+      <DetailCard icon={Route} title={item.service.title}>
+        <Info label="Customer" value={item.customer.name} />
+        <Info label="Phone" value={item.customer.phone} />
+        <Info label="Time" value={shortDate(item.startTime)} />
+        <Info label="Crew" value={item.assignedStaff?.name ?? "Unassigned"} />
+        <Info label="Booking status" value={item.status.replaceAll("_", " ")} />
+      </DetailCard>
+
+      <section className="rounded-[8px] bg-ink p-4 text-white">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-mint">Mobile job packet</p>
+            <h3 className="mt-2 text-xl font-semibold">Crew completion flow</h3>
+            <p className="mt-2 text-sm leading-6 text-white/72">
+              Capture proof, notes, customer sign-off, and trigger invoice follow-up when the job closes.
+            </p>
+          </div>
+          <Status label={report?.status ?? "READY"} />
+        </div>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          <ActionButton label="Start job" icon={Play} onClick={() => start.mutate()} />
+          <ActionButton label="Save draft" icon={Save} onClick={() => save.mutate()} />
+        </div>
+      </section>
+
+      <section className="rounded-[8px] bg-mist p-4">
+        <div className="mb-4 flex items-center gap-2">
+          <div className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-white text-pine">
+            <ClipboardCheck className="h-5 w-5" />
+          </div>
+          <h3 className="text-lg font-semibold text-ink">Checklist</h3>
+        </div>
+        <div className="grid gap-2">
+          {checklist.map((task, index) => (
+            <label
+              key={task.label}
+              className="flex min-h-12 items-center gap-3 rounded-[8px] bg-white px-3 text-sm font-semibold text-ink"
+            >
+              <input
+                type="checkbox"
+                checked={task.done}
+                onChange={(event) =>
+                  setChecklist((items) =>
+                    items.map((item, itemIndex) =>
+                      itemIndex === index ? { ...item, done: event.target.checked } : item
+                    )
+                  )
+                }
+                className="h-5 w-5 accent-pine"
+              />
+              {task.label}
+            </label>
+          ))}
+        </div>
+      </section>
+
+      <label className="block">
+        <span className="mb-2 flex items-center gap-2 text-sm font-medium text-ink">
+          <FileText className="h-4 w-4 text-pine" />
+          Staff notes
+        </span>
+        <textarea
+          value={staffNotes}
+          onChange={(event) => setStaffNotes(event.target.value)}
+          placeholder="Arrival notes, work completed, customer requests..."
+          className="min-h-32 w-full rounded-[8px] border border-ink/10 bg-mist p-3 outline-none focus:border-pine"
+        />
+      </label>
+
+      <label className="block">
+        <span className="mb-2 flex items-center gap-2 text-sm font-medium text-ink">
+          <Camera className="h-4 w-4 text-pine" />
+          Photo URLs
+        </span>
+        <textarea
+          value={photoDraft}
+          onChange={(event) => setPhotoDraft(event.target.value)}
+          placeholder="Paste image links, one per line"
+          className="min-h-24 w-full rounded-[8px] border border-ink/10 bg-mist p-3 outline-none focus:border-pine"
+        />
+      </label>
+
+      <label className="block">
+        <span className="mb-2 flex items-center gap-2 text-sm font-medium text-ink">
+          <UserCheck className="h-4 w-4 text-pine" />
+          Customer signature name
+        </span>
+        <input
+          value={signatureName}
+          onChange={(event) => setSignatureName(event.target.value)}
+          className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
+        />
+      </label>
+
+      <button
+        onClick={() => complete.mutate()}
+        disabled={complete.isPending || item.status === "COMPLETED"}
+        className="flex h-12 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 font-semibold text-white disabled:opacity-50"
+      >
+      {complete.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+        Complete job and trigger invoice
+      </button>
+      {error ? <ErrorText error={error} /> : null}
+      <BookingCommunicationPanel booking={item} />
+    </div>
+  );
+}
+
+function BookingCommunicationPanel({ booking }: { booking: Booking }) {
+  const queryClient = useQueryClient();
+  const [note, setNote] = useState("");
+  const communication = useQuery({
+    queryKey: ["booking-communication", booking.id],
+    queryFn: () => api.bookingCommunication(booking.id)
+  });
+  const send = useMutation({
+    mutationFn: (type: BookingUpdateType) =>
+      api.sendBookingUpdate(booking.id, {
+        type,
+        provider: "WHATSAPP",
+        note: note || undefined
+      }),
+    onSuccess: () => {
+      setNote("");
+      void queryClient.invalidateQueries({ queryKey: ["booking-communication", booking.id] });
+      void queryClient.invalidateQueries({ queryKey: ["communication-health"] });
+    }
+  });
+
+  return (
+    <section className="rounded-[8px] bg-mist p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-steel">Customer updates</p>
+          <h3 className="mt-2 text-lg font-semibold text-ink">Communication center</h3>
+        </div>
+        <Status label={`${communication.data?.timeline.length ?? 0} logs`} />
+      </div>
+
+      <label className="mt-4 block">
+        <span className="mb-2 block text-sm font-medium text-ink">Optional note</span>
+        <input
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+          placeholder="Arrival window, gate code request, delay reason..."
+          className="h-11 w-full rounded-[8px] border border-ink/10 bg-white px-3 outline-none focus:border-pine"
+        />
+      </label>
+
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        {(communication.data?.suggestions ?? []).map((item) => (
+          <button
+            key={item.type}
+            onClick={() => send.mutate(item.type)}
+            disabled={send.isPending}
+            className={cn(
+              "rounded-[8px] p-3 text-left text-sm font-semibold transition disabled:opacity-50",
+              item.sent ? "bg-white text-steel" : "bg-pine text-white"
+            )}
+          >
+            <span className="flex items-center justify-between gap-2">
+              {item.label}
+              {item.sent ? <CheckCircle2 className="h-4 w-4" /> : <Send className="h-4 w-4" />}
+            </span>
+            <span className={cn("mt-2 line-clamp-2 block text-xs leading-5", item.sent ? "text-steel" : "text-white/75")}>
+              {item.preview}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <button
+        onClick={() => send.mutate("RUNNING_LATE")}
+        disabled={send.isPending}
+        className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-[8px] bg-amber px-3 text-sm font-semibold text-ink disabled:opacity-50"
+      >
+        {send.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Clock3 className="h-4 w-4" />}
+        Send running late
+      </button>
+
+      {send.error ? <ErrorText error={send.error} /> : null}
+
+      <div className="mt-4 grid gap-2">
+        {(communication.data?.timeline ?? []).slice(0, 6).map((event) => (
+          <div key={`${event.kind}-${event.id}`} className="rounded-[8px] bg-white p-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="truncate text-sm font-semibold text-ink">{event.title}</p>
+              <Status label={event.status} />
+            </div>
+            {event.content ? <p className="mt-2 line-clamp-2 text-sm leading-6 text-steel">{event.content}</p> : null}
+            {event.error ? <p className="mt-2 text-sm font-semibold text-coral">{event.error}</p> : null}
+          </div>
+        ))}
+        <Empty show={!communication.isLoading && !(communication.data?.timeline.length)} label="No booking updates yet" />
+      </div>
+    </section>
+  );
+}
+
+function ConversationDetail({ item }: { item: Conversation }) {
+  const queryClient = useQueryClient();
+  const full = useQuery({
+    queryKey: ["conversation", item.id],
+    queryFn: () => api.conversation(item.id)
+  });
+  const staff = useQuery({ queryKey: ["staff"], queryFn: api.staff });
+  const services = useQuery({ queryKey: ["services"], queryFn: api.services });
+  const invoices = useQuery({ queryKey: ["invoices"], queryFn: api.invoices });
+  const [reply, setReply] = useState("");
+  const [selectedServiceId, setSelectedServiceId] = useState("");
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState("");
+  const [followUpAt, setFollowUpAt] = useState("");
+  const [startTime, setStartTime] = useState("");
+  const [assignedStaffId, setAssignedStaffId] = useState("");
+  const [bookingNotes, setBookingNotes] = useState("");
+  const [now] = useState(() => Date.now());
+  const conversation = full.data ?? item;
+  const sendReply = useMutation({
+    mutationFn: () => api.replyConversation(item.id, reply),
+    onSuccess: () => {
+      setReply("");
+      void queryClient.invalidateQueries();
+    }
+  });
+  const suggest = useMutation({
+    mutationFn: () => api.suggestReply(item.id),
+    onSuccess: (data) => setReply(data.reply)
+  });
+  const updateConversation = useMutation({
+    mutationFn: (input: { status?: string; assignedToId?: string; followUpAt?: string }) =>
+      api.updateConversation(item.id, input),
+    onSuccess: () => void queryClient.invalidateQueries()
+  });
+  const convertLead = useMutation({
+    mutationFn: () =>
+      api.convertConversationToLead(item.id, {
+        title: `${conversation.customer?.name ?? "Customer"} ${conversation.channel} inquiry`,
+        status: "QUALIFIED",
+        source: conversation.channel === "WHATSAPP" ? "WHATSAPP" : "WEB_CHAT",
+        followUpAt: followUpAt ? new Date(followUpAt).toISOString() : undefined
+      }),
+    onSuccess: () => void queryClient.invalidateQueries()
+  });
+  const sendQuote = useMutation({
+    mutationFn: () => api.sendConversationQuote(item.id, selectedServiceId, bookingNotes || undefined),
+    onSuccess: () => void queryClient.invalidateQueries()
+  });
+  const sendInvoiceLink = useMutation({
+    mutationFn: () => api.sendConversationInvoiceLink(item.id, selectedInvoiceId, "Here is your secure payment link."),
+    onSuccess: () => void queryClient.invalidateQueries()
+  });
+  const customerInvoices = (invoices.data ?? []).filter((invoice) => invoice.customer.id === conversation.customer?.id && invoice.status !== "PAID" && invoice.status !== "VOID");
+  const activeIntent = conversation.bookingIntents?.find((intent) =>
+    ["READY", "COLLECTING"].includes(intent.status)
+  );
+  const activeLead = conversation.leads?.find((lead) => lead.status !== "WON" && lead.status !== "LOST") ?? conversation.leads?.[0];
+  const latestMessage = conversation.messages?.[0];
+  const replyAgeHours = Math.max(0, Math.round((now - new Date(conversation.lastMessageAt).getTime()) / 36_000) / 100);
+  const nextBestAction = activeIntent
+    ? "Book the customer"
+    : customerInvoices.length
+      ? "Send payment link"
+      : activeLead
+        ? "Follow up lead"
+        : "Create lead";
+  const bookIntent = useMutation({
+    mutationFn: () =>
+      api.bookConversationIntent(conversation.id, activeIntent!.id, {
+        startTime: new Date(startTime).toISOString(),
+        assignedStaffId: assignedStaffId || undefined,
+        status: "CONFIRMED",
+        notes: bookingNotes || undefined
+      }),
+    onSuccess: () => {
+      setStartTime("");
+      setAssignedStaffId("");
+      setBookingNotes("");
+      void queryClient.invalidateQueries();
+    }
+  });
+  const canBook = Boolean(activeIntent?.service && conversation.customer && startTime);
+
+  return (
+    <div className="grid gap-4">
+      <DetailCard icon={MessageSquareText} title={conversation.customer?.name ?? "New inquiry"}>
+        <Info label="Channel" value={conversation.channel} />
+        <Info label="Status" value={conversation.status} />
+        <Info label="Last message" value={shortDate(conversation.lastMessageAt)} />
+        <Info label="Next action" value={nextBestAction} />
+        {activeLead ? <Info label="Lead" value={`${activeLead.status} · ${money(activeLead.estimatedValueCents)}`} /> : null}
+        {conversation.customer?.phone ? <Info label="Phone" value={conversation.customer.phone} /> : null}
+      </DetailCard>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <MiniStat label="Reply age" value={`${replyAgeHours}h`} danger={replyAgeHours >= 24} />
+        <MiniStat label="Open invoices" value={customerInvoices.length} danger={customerInvoices.length > 0} />
+        <MiniStat label="Intake status" value={activeIntent?.status ?? "None"} />
+      </div>
+
+      <section className="rounded-[8px] bg-mist p-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-ink">Conversion controls</p>
+            <p className="text-sm text-steel">Turn this chat into booked or paid revenue.</p>
+          </div>
+          <Status label={conversation.assignedToId ? "ASSIGNED" : "UNASSIGNED"} />
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          <select
+            value={assignedStaffId}
+            onChange={(event) => {
+              setAssignedStaffId(event.target.value);
+              if (event.target.value) updateConversation.mutate({ assignedToId: event.target.value });
+            }}
+            className="h-11 rounded-[8px] border border-ink/10 bg-white px-3 text-sm outline-none focus:border-pine"
+          >
+            <option value="">Assign conversation</option>
+            {(staff.data ?? []).map((member) => (
+              <option key={member.id} value={member.id}>{member.name} · {member.role}</option>
+            ))}
+          </select>
+          <input
+            type="datetime-local"
+            value={followUpAt}
+            onChange={(event) => setFollowUpAt(event.target.value)}
+            className="h-11 rounded-[8px] border border-ink/10 bg-white px-3 text-sm outline-none focus:border-pine"
+          />
+          <select
+            value={selectedServiceId}
+            onChange={(event) => setSelectedServiceId(event.target.value)}
+            className="h-11 rounded-[8px] border border-ink/10 bg-white px-3 text-sm outline-none focus:border-pine"
+          >
+            <option value="">Choose service for quote</option>
+            {(services.data ?? []).map((service) => (
+              <option key={service.id} value={service.id}>{service.title} · {money(service.priceCents)}</option>
+            ))}
+          </select>
+          <select
+            value={selectedInvoiceId}
+            onChange={(event) => setSelectedInvoiceId(event.target.value)}
+            className="h-11 rounded-[8px] border border-ink/10 bg-white px-3 text-sm outline-none focus:border-pine"
+          >
+            <option value="">Choose invoice to send</option>
+            {customerInvoices.map((invoice) => (
+              <option key={invoice.id} value={invoice.id}>{invoice.invoiceNo} · {money(invoice.totalCents)}</option>
+            ))}
+          </select>
+        </div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-4">
+          <button
+            onClick={() => convertLead.mutate()}
+            disabled={convertLead.isPending}
+            className="flex h-10 items-center justify-center gap-2 rounded-[8px] bg-white px-3 text-sm font-semibold text-ink disabled:opacity-50"
+          >
+            {convertLead.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Target className="h-4 w-4" />}
+            Lead
+          </button>
+          <button
+            onClick={() => sendQuote.mutate()}
+            disabled={!selectedServiceId || sendQuote.isPending}
+            className="flex h-10 items-center justify-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {sendQuote.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <DollarSign className="h-4 w-4" />}
+            Quote
+          </button>
+          <button
+            onClick={() => sendInvoiceLink.mutate()}
+            disabled={!selectedInvoiceId || sendInvoiceLink.isPending}
+            className="flex h-10 items-center justify-center gap-2 rounded-[8px] bg-ink px-3 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {sendInvoiceLink.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+            Pay link
+          </button>
+          <button
+            onClick={() => updateConversation.mutate({ status: "RESOLVED" })}
+            disabled={updateConversation.isPending}
+            className="flex h-10 items-center justify-center gap-2 rounded-[8px] bg-mint px-3 text-sm font-semibold text-ink disabled:opacity-50"
+          >
+            <CheckCircle2 className="h-4 w-4" />
+            Resolve
+          </button>
+        </div>
+        <div className="mt-2 grid gap-2 sm:grid-cols-3">
+          <button
+            onClick={() => updateConversation.mutate({ followUpAt: followUpAt ? new Date(followUpAt).toISOString() : undefined })}
+            disabled={!followUpAt || updateConversation.isPending}
+            className="flex h-10 items-center justify-center gap-2 rounded-[8px] bg-white px-3 text-sm font-semibold text-ink disabled:opacity-50"
+          >
+            <Clock3 className="h-4 w-4" />
+            Set follow-up
+          </button>
+          <button
+            onClick={() => updateConversation.mutate({ status: "WAITING_ON_CUSTOMER" })}
+            disabled={updateConversation.isPending}
+            className="flex h-10 items-center justify-center gap-2 rounded-[8px] bg-white px-3 text-sm font-semibold text-ink disabled:opacity-50"
+          >
+            <Headphones className="h-4 w-4" />
+            Waiting
+          </button>
+          <button
+            onClick={() => suggest.mutate()}
+            disabled={suggest.isPending}
+            className="flex h-10 items-center justify-center gap-2 rounded-[8px] bg-white px-3 text-sm font-semibold text-ink disabled:opacity-50"
+          >
+            {suggest.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
+            Draft reply
+          </button>
+        </div>
+        {convertLead.error || sendQuote.error || sendInvoiceLink.error || updateConversation.error ? (
+          <ErrorText error={convertLead.error ?? sendQuote.error ?? sendInvoiceLink.error ?? updateConversation.error} />
+        ) : null}
+      </section>
+
+      {activeIntent ? (
+        <section className="rounded-[8px] bg-ink p-4 text-white">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-mint">Revenue intake</p>
+              <h3 className="mt-2 text-xl font-semibold">
+                {activeIntent.service?.title ?? "Service not selected"}
+              </h3>
+              <p className="mt-2 text-sm leading-6 text-white/72">
+                {activeIntent.quotedPriceCents ? `${money(activeIntent.quotedPriceCents)} quote captured` : "Quote pending"} · {activeIntent.preferredWindow ?? "No preferred window"}
+              </p>
+            </div>
+            <Status label={activeIntent.status} />
+          </div>
+          <div className="mt-4 grid gap-3">
+            {activeIntent.missingFields?.length ? (
+              <p className="rounded-[8px] bg-white/10 px-3 py-2 text-sm font-medium text-white">
+                Missing: {activeIntent.missingFields.join(", ")}
+              </p>
+            ) : null}
+            {activeIntent.address ? (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/50">Address</p>
+                <p className="mt-1 text-sm font-medium text-white">{activeIntent.address}</p>
+              </div>
+            ) : null}
+            {activeIntent.notes ? (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/50">Notes</p>
+                <p className="mt-1 text-sm font-medium text-white">{activeIntent.notes}</p>
+              </div>
+            ) : null}
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-white">Confirmed start time</span>
+              <input
+                type="datetime-local"
+                value={startTime}
+                onChange={(event) => setStartTime(event.target.value)}
+                className="h-11 w-full rounded-[8px] border border-white/10 bg-white px-3 text-ink outline-none focus:border-mint"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-white">Assign staff</span>
+              <select
+                value={assignedStaffId}
+                onChange={(event) => setAssignedStaffId(event.target.value)}
+                className="h-11 w-full rounded-[8px] border border-white/10 bg-white px-3 text-ink outline-none focus:border-mint"
+              >
+                <option value="">Unassigned</option>
+                {(staff.data ?? []).map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.name} · {member.role}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <textarea
+              value={bookingNotes}
+              onChange={(event) => setBookingNotes(event.target.value)}
+              placeholder="Booking notes for crew..."
+              className="min-h-20 w-full rounded-[8px] border border-white/10 bg-white p-3 text-ink outline-none focus:border-mint"
+            />
+            <button
+              onClick={() => bookIntent.mutate()}
+              disabled={!canBook || bookIntent.isPending}
+              className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-mint px-4 font-semibold text-ink disabled:opacity-50"
+            >
+              {bookIntent.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarDays className="h-4 w-4" />}
+              Book this lead
+            </button>
+            {bookIntent.error ? <ErrorText error={bookIntent.error} /> : null}
+          </div>
+        </section>
+      ) : null}
+
+      <div className="grid gap-2">
+        {latestMessage ? (
+          <div className="rounded-[8px] border border-pine/20 bg-mint/20 p-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-pine">Latest customer context</p>
+            <p className="mt-2 line-clamp-3 text-sm leading-6 text-ink">{latestMessage.content}</p>
+          </div>
+        ) : null}
+        {(conversation.messages ?? []).map((message) => (
+          <div
+            key={message.id ?? `${message.createdAt}-${message.role}`}
+            className={cn(
+              "rounded-[8px] p-3 text-sm",
+              message.role === "CUSTOMER" ? "bg-mist text-ink" : "bg-pine text-white"
+            )}
+          >
+            <p className="mb-1 text-xs font-semibold opacity-70">{message.role}</p>
+            {message.content}
+          </div>
+        ))}
+      </div>
+      <div className="rounded-[8px] bg-mist p-3">
+        <textarea
+          value={reply}
+          onChange={(event) => setReply(event.target.value)}
+          placeholder="Write a reply..."
+          className="min-h-28 w-full rounded-[8px] border border-ink/10 bg-white p-3 outline-none focus:border-pine"
+        />
+        <div className="mt-3 flex gap-2">
+          <button
+            onClick={() => suggest.mutate()}
+            disabled={suggest.isPending}
+            className="flex h-10 items-center gap-2 rounded-[8px] bg-white px-3 text-sm font-semibold text-ink"
+          >
+            {suggest.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
+            Suggest
+          </button>
+          <button
+            onClick={() => sendReply.mutate()}
+            disabled={!reply || sendReply.isPending}
+            className="flex h-10 items-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {sendReply.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            Send
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CustomerDetail({ item }: { item: Customer }) {
+  const timeline = useQuery({
+    queryKey: ["customer-timeline", item.id],
+    queryFn: () => api.customerTimeline(item.id)
+  });
+  const summary = timeline.data?.summary;
+
+  return (
+    <div className="grid gap-4">
+      <DetailCard icon={ContactRound} title={item.name}>
+        <Info label="Phone" value={item.phone} />
+        <Info label="Email" value={item.email ?? "Not captured"} />
+        {item.notes ? <Info label="Notes" value={item.notes} /> : null}
+      </DetailCard>
+
+      {summary ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-[8px] bg-mist p-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-steel">Paid revenue</p>
+            <p className="mt-2 text-2xl font-semibold text-ink">{money(summary.paidTotalCents)}</p>
+          </div>
+          <div className="rounded-[8px] bg-coral/10 p-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-coral">Open invoices</p>
+            <p className="mt-2 text-2xl font-semibold text-ink">{money(summary.openInvoiceCents)}</p>
+          </div>
+          <div className="rounded-[8px] bg-mist p-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-steel">Last booking</p>
+            <p className="mt-2 text-sm font-semibold text-ink">
+              {summary.lastBooking ? `${summary.lastBooking.service.title} · ${shortDate(summary.lastBooking.startTime)}` : "None yet"}
+            </p>
+          </div>
+          <div className="rounded-[8px] bg-mint/40 p-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-steel">Next booking</p>
+            <p className="mt-2 text-sm font-semibold text-ink">
+              {summary.nextBooking ? `${summary.nextBooking.service.title} · ${shortDate(summary.nextBooking.startTime)}` : "Not scheduled"}
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      <DetailCard icon={Clock3} title="Timeline">
+        {timeline.isLoading ? (
+          <div className="flex min-h-24 items-center justify-center">
+            <Loader2 className="h-5 w-5 animate-spin text-pine" />
+          </div>
+        ) : null}
+        {(timeline.data?.items ?? []).slice(0, 12).map((event, index) => (
+          <div key={`${event.type}-${event.occurredAt}-${index}`} className="rounded-[8px] bg-white p-3">
+            <p className="text-sm font-semibold text-ink">{event.type.replaceAll("_", " ")}</p>
+            <p className="mt-1 text-xs text-steel">{shortDate(event.occurredAt)}</p>
+          </div>
+        ))}
+        <Empty show={!timeline.isLoading && !(timeline.data?.items.length)} label="No customer activity yet" />
+      </DetailCard>
+    </div>
+  );
+}
+
+function parseCustomerCsv(value: string) {
+  const lines = value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const hasHeader = lines[0]?.toLowerCase().includes("name") && lines[0]?.toLowerCase().includes("phone");
+  const rows = hasHeader ? lines.slice(1) : lines;
+
+  return rows
+    .map((line) => {
+      const [name = "", phone = "", email = "", notes = "", avatarUrl = ""] = parseCsvLine(line);
+      return { name, phone, email, notes, avatarUrl };
+    })
+    .filter((row) => row.name && row.phone);
+}
+
+function parseCsvLine(line: string) {
+  const cells: string[] = [];
+  let current = "";
+  let quoted = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    const next = line[index + 1];
+
+    if (character === '"' && quoted && next === '"') {
+      current += '"';
+      index += 1;
+      continue;
+    }
+
+    if (character === '"') {
+      quoted = !quoted;
+      continue;
+    }
+
+    if (character === "," && !quoted) {
+      cells.push(current.trim());
+      current = "";
+      continue;
+    }
+
+    current += character;
+  }
+
+  cells.push(current.trim());
+  return cells;
+}
+
+async function readCustomerImportFile(file: File) {
+  const extension = file.name.split(".").pop()?.toLowerCase();
+  if (extension === "xlsx" || extension === "xls") {
+    const buffer = await file.arrayBuffer();
+    const workbook = XLSX.read(buffer, { type: "array" });
+    const sheetName = workbook.SheetNames[0];
+    if (!sheetName) throw new Error("Excel file has no sheets");
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[sheetName], {
+      defval: ""
+    });
+    return rows
+      .map((row) => normalizeCustomerImportRow(row))
+      .filter((row) => row.name && row.phone);
+  }
+
+  const text = await file.text();
+  return parseCustomerCsv(text);
+}
+
+function normalizeCustomerImportRow(row: Record<string, unknown>) {
+  const normalized = Object.fromEntries(
+    Object.entries(row).map(([key, value]) => [key.trim().toLowerCase().replace(/\s+/g, "_"), String(value ?? "").trim()])
+  );
+
+  return {
+    name: normalized.name || normalized.customer || normalized.customer_name || normalized.full_name || "",
+    phone: normalized.phone || normalized.mobile || normalized.whatsapp || normalized.phone_number || "",
+    email: normalized.email || normalized.email_address || "",
+    notes: normalized.notes || normalized.note || normalized.address || normalized.last_service_date || "",
+    avatarUrl: normalized.avatar_url || normalized.image_url || normalized.photo_url || normalized.profile_image || ""
+  };
+}
+
+function toCustomerCsv(rows: CustomerInput[]) {
+  const header = "name,phone,email,notes,avatarUrl";
+  const body = rows.map((row) =>
+    [row.name, row.phone, row.email ?? "", row.notes ?? "", row.avatarUrl ?? ""].map(escapeCsvCell).join(",")
+  );
+  return [header, ...body].join("\n");
+}
+
+function escapeCsvCell(value: string) {
+  return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
+async function uploadMedia(file: File, folder: string) {
+  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+  const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+  const baseFolder = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_FOLDER ?? "crewflow";
+
+  if (!cloudName || !uploadPreset) {
+    throw new Error("Cloudinary upload env is not configured");
+  }
+
+  const form = new FormData();
+  form.append("file", file);
+  form.append("upload_preset", uploadPreset);
+  form.append("folder", `${baseFolder}/${folder}`.replace(/\/+/g, "/"));
+
+  const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+    method: "POST",
+    body: form
+  });
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+
+  const payload = (await response.json()) as { secure_url?: string };
+  if (!payload.secure_url) throw new Error("Cloudinary did not return an image URL");
+  return payload.secure_url;
+}
+
+function InvoiceDetail({ item }: { item: Invoice }) {
+  const queryClient = useQueryClient();
+  const [current, setCurrent] = useState(item);
+  const [collectionNote, setCollectionNote] = useState("");
+  const [promiseDate, setPromiseDate] = useState("");
+  const collectionTimeline = useQuery({
+    queryKey: ["collection-timeline", current.id],
+    queryFn: () => api.collectionTimeline(current.id)
+  });
+  const paymentLink = useMutation({
+    mutationFn: () => api.createPaymentLink(current.id),
+    onSuccess: (result) => {
+      setCurrent(result.invoice);
+      void queryClient.invalidateQueries();
+    }
+  });
+  const collectionAction = useMutation({
+    mutationFn: (input: CollectionActionInput) => api.runCollectionAction(current.id, input),
+    onSuccess: (result) => {
+      setCurrent(result.invoice);
+      setCollectionNote("");
+      void queryClient.invalidateQueries();
+    }
+  });
+  const updateStatus = useMutation({
+    mutationFn: (status: InvoiceStatus) => api.updateInvoiceStatus(current.id, status),
+    onSuccess: (invoice) => {
+      setCurrent(invoice);
+      void queryClient.invalidateQueries();
+    }
+  });
+
+  return (
+    <div className="grid gap-4">
+      <DetailCard icon={CreditCard} title={current.invoiceNo}>
+        <Info label="Customer" value={current.customer.name} />
+        {current.booking?.service ? <Info label="Booking" value={current.booking.service.title} /> : null}
+        <Info label="Due" value={shortDate(current.dueDate)} />
+        <Info label="Subtotal" value={money(current.subtotalCents ?? current.totalCents)} />
+        <Info label="Tax" value={money(current.taxCents ?? 0)} />
+        <Info label="Total" value={money(current.totalCents)} />
+        <Info label="Status" value={current.status} />
+        {current.paymentUrl ? <Info label="Payment link" value="Ready" /> : null}
+      </DetailCard>
+
+      {current.lineItems?.length ? (
+        <DetailCard icon={FileText} title="Line items">
+          {current.lineItems.map((line) => (
+            <div key={line.id} className="flex items-center justify-between rounded-[8px] bg-white p-3">
+              <div>
+                <p className="font-semibold text-ink">{line.description}</p>
+                <p className="text-sm text-steel">
+                  {line.quantity} × {money(line.unitCents)}
+                </p>
+              </div>
+              <p className="font-semibold text-ink">{money(line.totalCents)}</p>
+            </div>
+          ))}
+        </DetailCard>
+      ) : null}
+
+      <DetailCard icon={DollarSign} title="Collection controls">
+        <div className="grid gap-3">
+          <textarea
+            value={collectionNote}
+            onChange={(event) => setCollectionNote(event.target.value)}
+            rows={3}
+            placeholder="Optional note for the customer or internal collection context"
+            className="min-h-[90px] rounded-[8px] border border-black/10 bg-white p-3 text-sm outline-none focus:border-pine"
+          />
+          <div className="grid gap-2 sm:grid-cols-2">
+            <button
+              onClick={() =>
+                collectionAction.mutate({
+                  type: "SEND_PAYMENT_LINK",
+                  provider: "WHATSAPP",
+                  note: collectionNote || undefined
+                })
+              }
+              disabled={collectionAction.isPending || current.status === "PAID" || current.status === "VOID"}
+              className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-3 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {collectionAction.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              Send pay link
+            </button>
+            <button
+              onClick={() =>
+                collectionAction.mutate({
+                  type: "SEND_REMINDER",
+                  provider: "WHATSAPP",
+                  note: collectionNote || undefined
+                })
+              }
+              disabled={collectionAction.isPending || current.status === "PAID" || current.status === "VOID"}
+              className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-amber px-3 text-sm font-semibold text-ink disabled:opacity-50"
+            >
+              <MessageSquareText className="h-4 w-4" />
+              Send reminder
+            </button>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+            <input
+              type="datetime-local"
+              value={promiseDate}
+              onChange={(event) => setPromiseDate(event.target.value)}
+              className="h-11 rounded-[8px] border border-black/10 bg-white px-3 text-sm outline-none focus:border-pine"
+            />
+            <button
+              onClick={() =>
+                collectionAction.mutate({
+                  type: "PROMISE_TO_PAY",
+                  promiseDate: promiseDate ? new Date(promiseDate).toISOString() : undefined,
+                  note: collectionNote || undefined
+                })
+              }
+              disabled={collectionAction.isPending || !promiseDate}
+              className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink disabled:opacity-50"
+            >
+              <Clock3 className="h-4 w-4" />
+              Promise to pay
+            </button>
+          </div>
+        </div>
+      </DetailCard>
+
+      <button
+        onClick={() => paymentLink.mutate()}
+        disabled={paymentLink.isPending || current.status === "PAID" || current.status === "VOID"}
+        className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-pine px-4 font-semibold text-white disabled:opacity-50"
+      >
+        {paymentLink.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+        Create payment link
+      </button>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <button
+          onClick={() => updateStatus.mutate("SENT")}
+          disabled={updateStatus.isPending || current.status !== "DRAFT"}
+          className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink disabled:opacity-50"
+        >
+          <Send className="h-4 w-4" />
+          Mark sent
+        </button>
+        <button
+          onClick={() => updateStatus.mutate("PAID")}
+          disabled={updateStatus.isPending || !["SENT", "OVERDUE"].includes(current.status)}
+          className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-mint px-3 text-sm font-semibold text-ink disabled:opacity-50"
+        >
+          <CheckCircle2 className="h-4 w-4" />
+          Mark paid
+        </button>
+        <button
+          onClick={() => updateStatus.mutate("OVERDUE")}
+          disabled={updateStatus.isPending || current.status !== "SENT"}
+          className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-coral/10 px-3 text-sm font-semibold text-coral disabled:opacity-50"
+        >
+          <AlertTriangle className="h-4 w-4" />
+          Mark overdue
+        </button>
+        <button
+          onClick={() => updateStatus.mutate("VOID")}
+          disabled={updateStatus.isPending || !["DRAFT", "SENT", "OVERDUE"].includes(current.status)}
+          className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink disabled:opacity-50"
+        >
+          <X className="h-4 w-4" />
+          Void
+        </button>
+      </div>
+      {current.paymentUrl ? (
+        <a
+          href={current.paymentUrl}
+          target="_blank"
+          className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-mist px-4 font-semibold text-ink"
+        >
+          <ExternalLink className="h-4 w-4" />
+          Open payment page
+        </a>
+      ) : null}
+      {paymentLink.error ? <ErrorText error={paymentLink.error} /> : null}
+      {updateStatus.error ? <ErrorText error={updateStatus.error} /> : null}
+      {collectionAction.error ? <ErrorText error={collectionAction.error} /> : null}
+
+      <DetailCard icon={FileText} title="Payment communication timeline">
+        <div className="grid gap-3">
+          {collectionTimeline.isLoading ? (
+            <div className="flex items-center gap-2 text-sm text-steel">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading timeline
+            </div>
+          ) : null}
+          {(collectionTimeline.data?.events ?? []).map((event) => (
+            <div key={`${event.type}-${event.id}`} className="rounded-[8px] bg-white p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="font-semibold text-ink">{event.label}</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-steel">{shortDate(event.createdAt)}</p>
+              </div>
+              <p className="mt-2 line-clamp-3 text-sm leading-6 text-steel">{event.detail}</p>
+            </div>
+          ))}
+          <Empty
+            show={!collectionTimeline.isLoading && !collectionTimeline.data?.events.length}
+            label="No collection activity yet"
+          />
+        </div>
+      </DetailCard>
+    </div>
+  );
+}
+
+function ActionDetail({ item, onDone }: { item: OperationalAction; onDone: () => void }) {
+  const queryClient = useQueryClient();
+  const update = useMutation({
+    mutationFn: (status: "IN_PROGRESS" | "COMPLETED" | "DISMISSED") =>
+      api.updateAction(item.id, status),
+    onSuccess: () => {
+      void queryClient.invalidateQueries();
+      onDone();
+    }
+  });
+
+  return (
+    <div className="grid gap-4">
+      <DetailCard icon={ClipboardCheck} title={item.title}>
+        <Info label="Priority" value={item.priority} />
+        <Info label="Status" value={item.status} />
+        <Info label="Customer" value={item.customer?.name ?? "Not linked"} />
+        <Info label="Due" value={shortDate(item.dueAt)} />
+        {item.description ? <Info label="Details" value={item.description} /> : null}
+      </DetailCard>
+      <div className="grid gap-2 sm:grid-cols-3">
+        <ActionButton label="Start" icon={Play} onClick={() => update.mutate("IN_PROGRESS")} />
+        <ActionButton label="Complete" icon={CheckCircle2} onClick={() => update.mutate("COMPLETED")} />
+        <ActionButton label="Dismiss" icon={X} onClick={() => update.mutate("DISMISSED")} />
+      </div>
+      {update.error ? <ErrorText error={update.error} /> : null}
+    </div>
+  );
+}
+
+function DetailCard({
+  icon: Icon,
+  title,
+  children
+}: {
+  icon: typeof Inbox;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-[8px] bg-mist p-4">
+      <div className="mb-4 flex items-center gap-2">
+        <div className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-white text-pine">
+          <Icon className="h-5 w-5" />
+        </div>
+        <h3 className="text-lg font-semibold text-ink">{title}</h3>
+      </div>
+      <div className="grid gap-3">{children}</div>
+    </section>
+  );
+}
+
+function Info({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-steel">{label}</p>
+      <p className="mt-1 text-sm font-medium text-ink">{value}</p>
+    </div>
+  );
+}
+
+function SelectField({
+  label,
+  value,
+  onChange,
+  children
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-sm font-medium text-ink">{label}</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-11 w-full rounded-[8px] border border-ink/10 bg-mist px-3 outline-none focus:border-pine"
+      >
+        {children}
+      </select>
+    </label>
+  );
+}
+
+function ActionButton({
+  label,
+  icon: Icon,
+  onClick
+}: {
+  label: string;
+  icon: typeof Inbox;
+  onClick: () => void;
+}) {
+  return (
+    <button onClick={onClick} className="flex h-11 items-center justify-center gap-2 rounded-[8px] bg-mist px-3 text-sm font-semibold text-ink">
+      <Icon className="h-4 w-4" />
+      {label}
+    </button>
+  );
+}
+
+function ErrorText({ error }: { error: unknown }) {
+  return (
+    <p className="rounded-[8px] bg-coral/10 px-3 py-2 text-sm font-medium text-coral">
+      {error instanceof Error ? error.message : "Something went wrong"}
+    </p>
+  );
+}
+
+function drawerTitle(state: NonNullable<DrawerState>) {
+  if (state.type === "new-booking") return "New booking";
+  if (state.type === "booking") return "Booking details";
+  if (state.type === "field-job") return "Field job";
+  if (state.type === "lead") return "Lead details";
+  if (state.type === "conversation") return "Conversation";
+  if (state.type === "customer") return "Customer profile";
+  if (state.type === "invoice") return "Invoice";
+  return "Action";
+}
+
+function parsePhotoUrls(value: string) {
+  return value
+    .split(/[\n,]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function Logo() {
+  return (
+    <div className="relative h-11 w-11 overflow-hidden rounded-[8px] bg-ink shadow-soft">
+      <Image src={logoMark} alt="CrewFlow" fill sizes="44px" className="object-cover" />
+    </div>
+  );
+}
+
+function titleFor(view: View) {
+  return {
+    overview: "Operations overview",
+    inbox: "Customer inbox",
+    leads: "Lead pipeline CRM",
+    retention: "Customer retention",
+    customers: "Customer manager",
+    bookings: "Booking board",
+    field: "Field operations",
+    money: "Invoices and payments",
+    actions: "Manager action queue",
+    settings: "Tenant settings"
+  }[view];
+}
